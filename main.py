@@ -5,6 +5,8 @@ from utils import display_message_with_spoiler, dict_to_markdown_table
 from config import SYSTEM_INSTRUCTION
 import json
 
+
+SHOW_TECHNICAL_SPOILER = False
 # Configuração da página
 st.set_page_config(page_title="Consultas de Vendas de Veículos", layout="wide")
 st.title("Consultas de Vendas de Veículos por Linguagem Natural")
@@ -28,10 +30,9 @@ with st.expander("⚠️ Limitações e Regras do Assistente (clique para ver)",
 if "chat_history" not in st.session_state or len(st.session_state.chat_history) == 0:
     st.write("Faça perguntas sobre vendas de veículos. Exemplos:")
     st.code("""- Qual o total vendido em 2024?
-- Compare as vendas entre 2022 e 2023
-- Quais os modelos mais vendidos por UF em 2023?
-- Vendas por mês em 2023 agrupadas por modelo
-- Mostre as vendas de 2023 e 2024 com porcentagens e totais""")
+- Compare as vendas entre os meses existentes de 2023 e 2024. 
+- Demonstre os modelos vendidos no ceara em 2023?
+""")
 
 # Inicialização do modelo e estado da sessão
 if "model" not in st.session_state:
@@ -54,7 +55,8 @@ for msg in st.session_state.chat_history:
     display_message_with_spoiler(
         msg["role"],
         msg["content"],
-        msg.get("tech_details")
+        msg.get("tech_details"),
+        SHOW_TECHNICAL_SPOILER
     )
 
 # Captura novo input

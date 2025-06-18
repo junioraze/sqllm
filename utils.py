@@ -43,11 +43,11 @@ def create_tech_details_spoiler(tech_details: dict) -> str:
     
     return content
 
-def display_message_with_spoiler(role: str, content: str, tech_details: dict = None):
+def display_message_with_spoiler(role: str, content: str, tech_details: dict = None, tech_flag: bool = False):
     """Exibe uma mensagem no chat com spoiler para detalhes técnicos."""
     with st.chat_message(role):
         st.markdown(content)
         
-        if tech_details:
+        if tech_details and tech_flag:
             with st.expander("🔍 Detalhes Técnicos"):
                 st.markdown(create_tech_details_spoiler(tech_details))
