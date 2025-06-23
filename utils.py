@@ -37,6 +37,20 @@ def serialize_params(params):
             serializable[k] = str(v)
     return serializable
 
+def display_message_with_spoiler(role: str, content: str, tech_details: dict = None, tech_flag: bool = False):
+    """Exibe uma mensagem no chat com spoiler para detalhes técnicos."""
+    with st.chat_message(role):
+        st.markdown(content)
+        
+        # Exibe gráfico se existir
+        if tech_details and tech_details.get("chart_info") and tech_details["chart_info"]["img"]:
+            st.image(tech_details["chart_info"]["img"], 
+                    caption=f"Gráfico de {tech_details['chart_info']['type']}: {tech_details['chart_info']['x']} vs {tech_details['chart_info']['y']}")
+        
+        if tech_details and tech_flag:
+            with st.expander("🔍 Detalhes Técnicos"):
+                st.markdown(create_tech_details_spoiler(tech_details))
+
 def create_tech_details_spoiler(tech_details: dict) -> str:
     """Cria o conteúdo do spoiler com detalhes técnicos."""
     if not tech_details:
@@ -59,13 +73,10 @@ def create_tech_details_spoiler(tech_details: dict) -> str:
         content += "**Dados Brutos Recebidos:**\n"
         content += dict_to_markdown_table(tech_details["raw_data"])
     
+    if tech_details.get("chart_info"):
+        content += "**Informações do Gráfico:**\n"
+        content += f"- Tipo: {tech_details['chart_info']['type']}\n"
+        content += f"- Eixo X: {tech_details['chart_info']['x']}\n"
+        content += f"- Eixo Y: {tech_details['chart_info']['y']}\n"
+    
     return content
-
-def display_message_with_spoiler(role: str, content: str, tech_details: dict = None, tech_flag: bool = False):
-    """Exibe uma mensagem no chat com spoiler para detalhes técnicos."""
-    with st.chat_message(role):
-        st.markdown(content)
-        
-        if tech_details and tech_flag:
-            with st.expander("🔍 Detalhes Técnicos"):
-                st.markdown(create_tech_details_spoiler(tech_details))

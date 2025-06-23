@@ -5,3 +5,4 @@ streamlit==1.44.1
 ruff
 black
 python-dotenv
+matplotlib

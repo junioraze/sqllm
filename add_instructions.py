@@ -5,6 +5,9 @@ INSTRUÇÕES PARA ANÁLISE DE DADOS:
 2. Pode usar qualquer campo da tabela
 3. Pode criar funções de agregação personalizadas
 4. Certifique-se de incluir filtros temporais quando relevante
+5. Se o usuário solicitar visualização gráfica, inclua no final da resposta:
+   GRAPH-TYPE: [tipo] | X-AXIS: [coluna] | Y-AXIS: [coluna]
+   Tipos suportados: bar, line, pie
 """
 
 CAMPOS_DESCRICAO = """\n
