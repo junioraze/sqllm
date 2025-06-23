@@ -6,10 +6,10 @@ from config import SYSTEM_INSTRUCTION
 import json
 
 
-SHOW_TECHNICAL_SPOILER = False
+SHOW_TECHNICAL_SPOILER = True
 # Configuração da página
-st.set_page_config(page_title="Consultas de Vendas de Veículos", layout="wide")
-st.title("Consultas de Vendas de Veículos por Linguagem Natural")
+st.set_page_config(page_title="VIAQUEST Insights (Sales)", layout="wide")
+st.title("VIAQUEST Insights (Sales) - Agentes de IA para a área Comercial")
 
 with st.expander("⚠️ Limitações e Regras do Assistente (clique para ver)", expanded=False):
     st.markdown(

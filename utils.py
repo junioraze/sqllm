@@ -6,7 +6,7 @@ def dict_to_markdown_table(data: list) -> str:
     if not data or not isinstance(data, list):
         return "Nenhum dado disponível"
     
-    if isinstance(data, dict):  # Se for um único dict (erro, por exemplo)
+    if isinstance(data, dict):
         return "\n".join(f"**{k}**: {v}" for k, v in data.items())
     
     colunas = data[0].keys()
@@ -20,6 +20,23 @@ def dict_to_markdown_table(data: list) -> str:
     
     return tabela
 
+def serialize_params(params):
+    """Serializa parâmetros para JSON, lidando com tipos complexos."""
+    if params is None:
+        return None
+    
+    if hasattr(params, '_values'):  # Protobuf format
+        params = {k: v for k, v in params.items()}
+    
+    serializable = {}
+    for k, v in params.items():
+        try:
+            json.dumps(v)
+            serializable[k] = v
+        except (TypeError, ValueError):
+            serializable[k] = str(v)
+    return serializable
+
 def create_tech_details_spoiler(tech_details: dict) -> str:
     """Cria o conteúdo do spoiler com detalhes técnicos."""
     if not tech_details:
@@ -29,7 +46,8 @@ def create_tech_details_spoiler(tech_details: dict) -> str:
     
     if tech_details.get("function_params"):
         content += "**Parâmetros da Função:**\n```json\n"
-        content += json.dumps(tech_details["function_params"], indent=2)
+        serialized_params = serialize_params(tech_details["function_params"])
+        content += json.dumps(serialized_params, indent=2, default=str)
         content += "\n```\n\n"
     
     if tech_details.get("query"):

@@ -1,3 +1,4 @@
+# gemini_handler.py
 import google.generativeai as genai
 from google.generativeai.types import Tool, FunctionDeclaration
 from config import MODEL_NAME, SYSTEM_INSTRUCTION
@@ -5,23 +6,81 @@ import json
 import add_instructions
 
 def initialize_model():
-    """Inicializa o modelo Gemini com as configurações necessárias."""
+    """Inicializa o modelo Gemini com configurações mais flexíveis."""
     veiculos_vendas_func = FunctionDeclaration(
-        name="consultar_vendas_veiculos",
-        description=f"Consulta a tabela {add_instructions.CAMPOS_DESCRICAO} para obter dados brutos.",
+        name="query_vehicle_sales",
+        description="""Consulta vendas de veículos. 
+    DETALHES TECNICOS:
+    - As consultas são realizadas no banco BigQuery da Google Cloud
+    - Todas as sintaxes de funções devem levar em condsideração as regras do BigQuery (STANRDARD SQL)
+    - Exemplo de consulta válida:
+    - EXEMPLO INVALIDO:
+                    SELECT STRFTIME("%Y-%m", dta_venda) AS mes, AVG(QTE) AS media_vendas_dia
+                    FROM `glinhares.delivery.drvy_VeiculosVendas`
+                    WHERE dta_venda BETWEEN "2025-01-01" AND "2025-12-31"
+                    GROUP BY mes
+                    ORDER BY mes
+    - EXEMPLO VALIDO:
+                    SELECT EXTRACT(MONTH FROM dta_venda) AS mes, AVG(QTE) AS media_vendas_dia
+                    FROM `glinhares.delivery.drvy_VeiculosVendas`   
+                    WHERE dta_venda BETWEEN "2025-01-01" AND "2025-12-31"
+                    GROUP BY mes
+                    ORDER BY mes
+                
+    REGRAS ESTRITAS:
+    1. GROUP BY: 
+       - Deve conter APENAS nomes de colunas SEM funções de agregação
+       - Exemplo válido: ["uf", "modelo"]
+       - Exemplo inválido: ["SUM(val_total)"]
+    2. ORDER BY: 
+        - Deve conter APENAS nomes de colunas SEM funções de agregação
+       - Exemplo válido: ["uf asc", "modelo desc"]
+       - Exemplo inválido: ["SUM(val_total) desc", "COUNT(modelo) asc"]
+    3. LIMIT: 
+       - Sempre um número inteiro (ex: 10)
+       - Exemplo válido: ["10"]
+       - Exemplo inválido: ["10.0"]
+    4. WHERE: 
+       - Condições em SQL puro (ex: "dta_venda BETWEEN '2025-01-01' AND '2025-12-31'")""",
         parameters={
             "type": "object",
             "properties": {
-                "tipo_insight": {"type": "string", "enum": ["total", "por modelo", "por UF", "por revenda", "por período", "quantidade", "multidimensional", "comparacao"]},
-                "periodo": {"type": "string"},
-                "periodo_comparacao": {"type": "string"},
-                "modelo": {"type": "string"},
-                "uf": {"type": "string"},
-                "revenda": {"type": "string"},
-                "agrupar_por": {"type": "array", "items": {"type": "string"}},
-                "nivel_agregacao_temporal": {"type": "string", "enum": ["ano", "mes"]}
+                "query_type": {
+                    "type": "string",
+                    "description": "Tipo de consulta (aggregation, comparison, raw_data)",
+                    "enum": ["aggregation", "comparison", "raw_data"]
+                },
+                "select": {
+                    "type": "array",
+                    "description": "Campos a selecionar ou funções de agregação",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "where": {
+                    "type": "string",
+                    "description": "Condições WHERE em SQL puro"
+                },
+                "group_by": {
+                    "type": "array",
+                    "description": "Campos para agrupamento",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "order_by": {
+                    "type": "array",
+                    "description": "Campos para ordenação",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Limite de registros"
+                }
             },
-            "required": ["tipo_insight"],
+            "required": ["select"]
         },
     )
     
@@ -35,38 +94,29 @@ def initialize_model():
 
 def refine_with_gemini(prompt: str, data: list, function_params: dict = None, query: str = None):
     """Envia os dados para o Gemini fazer o refinamento."""
-    # Converte os dados para string para evitar problemas de serialização
-    data_str = json.dumps(data, indent=2, default=str)
-    params_str = json.dumps(function_params, indent=2, default=str) if function_params else "Nenhum"
+    if function_params is not None:
+        if hasattr(function_params, '_values'):
+            function_params = {k: v for k, v in function_params.items()}
+        elif not isinstance(function_params, dict):
+            function_params = dict(function_params)
     
     instruction = f"""
-    INSTRUÇÕES ESTRITAS:
-    1. Trabalhe APENAS com os dados fornecidos
-    2. Não solicite novas consultas
-    3. Se os dados não forem suficientes, explique isso claramente
-    4. Faça todos os cálculos necessários seguindo estas regras:
-    {add_instructions.COMPARACAO_INSTRUCOES}
+    INSTRUÇÕES:
+    1. Analise os dados fornecidos e responda à pergunta do usuário
+    2. Os dados já estão filtrados conforme a consulta SQL
+    3. Se necessário, calcule métricas adicionais com base nos dados brutos
+    4. Formate a resposta de forma clara e analítica
     
-    Dados disponíveis:
-    {data_str}
+    DADOS DISPONÍVEIS:
+    {json.dumps(data, indent=2, default=str)}
     
-    Parâmetros usados na consulta: 
-    {params_str}
-    
-    Responda à seguinte pergunta:
+    PERGUNTA DO USUÁRIO:
     "{prompt}"
-    
-    Inclua análises e cálculos conforme necessário, seguindo as instruções de comparação fornecidas.
     """
     
-    model = genai.GenerativeModel(
-        MODEL_NAME,
-        system_instruction="Você é um analista de dados especializado em processar e interpretar resultados de consultas."
-    )
-    
+    model = genai.GenerativeModel(MODEL_NAME)
     response = model.generate_content(instruction)
     
-    # Prepara os detalhes técnicos para o spoiler
     tech_details = {
         "function_params": function_params,
         "query": query,

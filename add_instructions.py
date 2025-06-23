@@ -1,11 +1,45 @@
+# add_instructions.py
 COMPARACAO_INSTRUCOES = """\n
-DETALHE: As comparações necessitam de um totalizador, seja ele uma subtração, soma, média, etc. Você deve usar
-a tabela de resultado para realizar esses detalhes, por exemplo se você recebe o totalizador de 2023 e 2024, 
-você deve comparar esses anos da forma que for solicitada, inclusive com porcentegens,média, etc.
-""" 
+INSTRUÇÕES PARA ANÁLISE DE DADOS:
+1. Você tem liberdade para criar consultas SQL completas
+2. Pode usar qualquer campo da tabela
+3. Pode criar funções de agregação personalizadas
+4. Certifique-se de incluir filtros temporais quando relevante
+"""
 
 CAMPOS_DESCRICAO = """\n
-A tabela glinhares.delivery.drvy_VeiculosVendas possui os seguintes campos:
+EXEMPLOS DE PARÂMETROS VÁLIDOS:
+- select: ["modelo", "SUM(QTE) as total_vendido"]
+- where: "dta_venda BETWEEN '2025-01-01' AND '2025-12-31'"
+- group_by: ["modelo", "uf"]  # NUNCA inclua funções aqui!
+- order_by: ["total_vendido DESC"] # NUNCA inclua funções aqui!
+- limit: 10 #ESTE CAMPO DEVE SER UM NÚMERO INTEIRO
+
+CAMPOS CHAVES PARA CONSULTA:
+- Temporais:
+  • dta_venda (DATE): Data da venda (campo principal)
+  • dta_operacao (DATE): Data da operação
+
+- Dimensões:
+  • modelo (STRING): Modelo do veículo
+  • uf (STRING): Estado da loja
+  • Loja (STRING): Entidade que realizou a venda
+  • novo_usado (STRING): se o veículo é 'NOVO' ou 'USADO'
+  • cidade (STRING): Cidade da loja
+  • nome_vend (STRING): Vendedor
+  • nome_cli (STRING): Cliente da venda
+  
+- Métricas:
+  • val_total (FLOAT): Valor da venda
+  • val_ipi (FLOAT): Valor do IPI
+  • val_opcionais (FLOAT): Valor dos opcionais
+  • QTE (INT): usado para somar sempre que for solicitado a quantidade de veículos vendidos
+
+- Filtros adicionais:
+  • des_situacao (STRING): Situação da venda
+  • tipo_pagto (STRING): Tipo de pagamento
+  
+A tabela glinhares.delivery.drvy_VeiculosVendas possui os seguintes campos em sua totalidade:
 - dta_operacao: Data da operação de venda.
 - des_situacao: Situação da venda.
 - razao_social: Razão social do cliente.
