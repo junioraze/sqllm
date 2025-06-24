@@ -7,7 +7,7 @@ INSTRUÇÕES PARA ANÁLISE DE DADOS:
 4. Certifique-se de incluir filtros temporais quando relevante
 5. Se o usuário solicitar visualização gráfica, inclua no final da resposta:
    GRAPH-TYPE: [tipo] | X-AXIS: [coluna] | Y-AXIS: [coluna]
-   Tipos suportados: bar, line, pie
+   Tipos suportados: bar, line
 """
 
 CAMPOS_DESCRICAO = """\n

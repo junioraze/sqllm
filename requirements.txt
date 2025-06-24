@@ -6,3 +6,4 @@ ruff
 black
 python-dotenv
 matplotlib
+plotly

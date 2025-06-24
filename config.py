@@ -4,19 +4,19 @@ import add_instructions
 
 load_dotenv(".env")
 
-# Configurações do projeto
+# Projeto e tabela
 PROJECT_ID = os.getenv("PROJECT_ID")
 DATASET_ID = os.getenv("DATASET_ID")
 TABLE_ID = os.getenv("TABLE_ID")
 MODEL_NAME = os.getenv("MODEL_NAME")
 FULL_TABLE_ID = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}"
 
-# Configurações de autenticação
+# Autenticação
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
-# Instruções para o modelo com base no add_instructions.py
+# Instruções do sistema para o modelo Gemini
 SYSTEM_INSTRUCTION = f"""
-Você é um assistente de dados especializado em vendas de veículos. 
+Você é um assistente de dados especializado em vendas de veículos.
 SEMPRE use a função query_vehicle_sales para consultar dados da tabela {FULL_TABLE_ID}.
 NUNCA mostre a consulta SQL diretamente ao usuário.
 Após obter os dados brutos, faça todos os cálculos necessários e gere gráficos quando solicitado.
