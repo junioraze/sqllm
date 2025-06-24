@@ -1,5 +1,12 @@
 import json
 import streamlit as st
+from datetime import datetime
+import uuid
+
+def _generate_key():
+    timestamp = datetime.now().strftime("%Y%m%d")
+    unique_id = uuid.uuid4().hex[:6]  # Pega os primeiros 6 caracteres do UUID
+    return f"graph_{timestamp}_{unique_id}"  # Ex: "graph_20231025_a3f5b2"
 
 def dict_to_markdown_table(data: list) -> str:
     """
@@ -17,13 +24,14 @@ def dict_to_markdown_table(data: list) -> str:
         tabela += "| " + " | ".join(str(v) for v in linha) + " |\n"
     return tabela
 
+
 def serialize_params(params):
     """
     Serializa parâmetros para JSON, lidando com tipos complexos.
     """
     if params is None:
         return None
-    if hasattr(params, '_values'):
+    if hasattr(params, "_values"):
         params = {k: v for k, v in params.items()}
     serializable = {}
     for k, v in params.items():
@@ -34,17 +42,26 @@ def serialize_params(params):
             serializable[k] = str(v)
     return serializable
 
-def display_message_with_spoiler(role: str, content: str, tech_details: dict = None, tech_flag: bool = False):
+
+def display_message_with_spoiler(
+    role: str, content: str, tech_details: dict = None, tech_flag: bool = False
+):
     with st.chat_message(role):
         st.markdown(content)
-        if tech_details and tech_details.get("chart_info") and tech_details["chart_info"]["fig"]:
+        if (
+            tech_details
+            and tech_details.get("chart_info")
+            and tech_details["chart_info"]["fig"]
+        ):
             st.plotly_chart(
                 tech_details["chart_info"]["fig"],
-                use_container_width=True
+                use_container_width=True,
+                key=_generate_key(),
             )
         if tech_details and tech_flag:
             with st.expander("🔍 Detalhes Técnicos"):
                 st.markdown(create_tech_details_spoiler(tech_details))
+
 
 def create_tech_details_spoiler(tech_details: dict) -> str:
     """

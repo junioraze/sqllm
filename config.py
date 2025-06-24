@@ -12,7 +12,9 @@ MODEL_NAME = os.getenv("MODEL_NAME")
 FULL_TABLE_ID = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}"
 
 # Autenticação
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv(
+    "GOOGLE_APPLICATION_CREDENTIALS"
+)
 
 # Instruções do sistema para o modelo Gemini
 SYSTEM_INSTRUCTION = f"""

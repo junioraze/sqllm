@@ -2,11 +2,10 @@ import google.generativeai as genai
 from google.generativeai.types import Tool, FunctionDeclaration
 from config import MODEL_NAME, SYSTEM_INSTRUCTION
 import re
-import io
 import json
 import pandas as pd
-import matplotlib.pyplot as plt
 import plotly.express as px
+
 
 def initialize_model():
     """
@@ -35,49 +34,50 @@ def initialize_model():
                 "select": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Campos para SELECT (DEVE incluir todos do PARTITION BY)"
+                    "description": "Campos para SELECT (DEVE incluir todos do PARTITION BY)",
                 },
                 "where": {
                     "type": "string",
-                    "description": "Condições WHERE (SQL puro)"
+                    "description": "Condições WHERE (SQL puro)",
                 },
                 "group_by": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Campos para GROUP BY (DEVEM estar no SELECT)"
+                    "description": "Campos para GROUP BY (DEVEM estar no SELECT)",
                 },
                 "order_by": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Campos para ORDER BY"
+                    "description": "Campos para ORDER BY",
                 },
                 "qualify": {
                     "type": "string",
-                    "description": "CONDIÇÃO OBRIGATÓRIA para TOP N: ROW_NUMBER() OVER (PARTITION BY...) <= N"
+                    "description": "CONDIÇÃO OBRIGATÓRIA para TOP N: ROW_NUMBER() OVER (PARTITION BY...) <= N",
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "USO PROIBIDO para consultas agrupadas - apenas para consultas simples"
-                }
+                    "description": "USO PROIBIDO para consultas agrupadas - apenas para consultas simples",
+                },
             },
-            "required": ["select"]
-        }
+            "required": ["select"],
+        },
     )
-    
+
     veiculos_tool = Tool(function_declarations=[veiculos_vendas_func])
-    
+
     # Configuração mais rígida do modelo
     generation_config = {
         "temperature": 0.5,  # Reduz criatividade para seguir regras
         "max_output_tokens": 2000,
     }
-    
+
     return genai.GenerativeModel(
         MODEL_NAME,
         tools=[veiculos_tool],
         system_instruction=SYSTEM_INSTRUCTION,
-        generation_config=generation_config
+        generation_config=generation_config,
     )
+
 
 def generate_chart(data, chart_type, x_axis, y_axis, color=None):
     """Gera gráfico com tratamento para múltiplas dimensões"""
@@ -86,44 +86,48 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
 
     try:
         df = pd.DataFrame.from_records(data)
-        
+
         # Verificação de colunas com tratamento para múltiplas dimensões
         required_columns = {x_axis, y_axis}
         if color:  # Terceira dimensão
             required_columns.add(color)
             if color not in df.columns:
                 color = None  # Degrada para 2D
-                
+
         # Conversão segura de tipos para eixos
-        df[y_axis] = pd.to_numeric(df[y_axis], errors='coerce')
-        
+        df[y_axis] = pd.to_numeric(df[y_axis], errors="coerce")
+
         # Paleta de cores para múltiplas categorias
         palette = px.colors.qualitative.Plotly
-        
+
         if chart_type == "bar":
             fig = px.bar(
-                df, x=x_axis, y=y_axis, color=color,
-                barmode='group',  # Essencial para múltiplas dimensões
-                color_discrete_sequence=palette
+                df,
+                x=x_axis,
+                y=y_axis,
+                color=color,
+                barmode="group",  # Essencial para múltiplas dimensões
+                color_discrete_sequence=palette,
             )
         elif chart_type == "line":
             fig = px.line(
-                df, x=x_axis, y=y_axis, color=color,
+                df,
+                x=x_axis,
+                y=y_axis,
+                color=color,
                 markers=True,
-                color_discrete_sequence=palette
+                color_discrete_sequence=palette,
             )
         else:
             return None
 
-        fig.update_layout(
-            hovermode='x unified',
-            plot_bgcolor='rgba(0,0,0,0)'
-        )
+        fig.update_layout(hovermode="x unified", plot_bgcolor="rgba(0,0,0,0)")
         return fig
 
     except Exception as e:
         print(f"Erro ao gerar gráfico (multi-dimensão): {str(e)}")
         return None
+
 
 def refine_with_gemini(
     prompt: str, data: list, function_params: dict = None, query: str = None
@@ -182,16 +186,16 @@ def refine_with_gemini(
             color = None
             if "COLOR:" in graph_part:
                 color = graph_part.split("COLOR:")[1].strip()
-            
+
             fig = generate_chart(data, graph_type, x_axis, y_axis, color)
             print("DEBUG generate_chart:", fig)
             if fig:
                 chart_info = {
-                    "type": graph_type, 
-                    "x": x_axis, 
-                    "y": y_axis, 
+                    "type": graph_type,
+                    "x": x_axis,
+                    "y": y_axis,
                     "color": color,
-                    "fig": fig
+                    "fig": fig,
                 }
                 print("DEBUG chart_info criado:", chart_info)
             else:
@@ -205,7 +209,7 @@ def refine_with_gemini(
                     "Y:",
                     y_axis,
                     "Color:",
-                    color
+                    color,
                 )
                 response_text = response_text.split("GRAPH-TYPE:")[0].strip()
         except Exception as e:
