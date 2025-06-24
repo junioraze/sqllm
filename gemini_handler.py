@@ -8,111 +8,122 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import plotly.express as px
 
-
 def initialize_model():
     """
-    Inicializa o modelo Gemini com a função query_vehicle_sales.
+    Inicializa o modelo Gemini com instruções mais rígidas para múltiplas dimensões
     """
     veiculos_vendas_func = FunctionDeclaration(
         name="query_vehicle_sales",
         description=(
-            "Consulta vendas de veículos no BigQuery. "
-            "Siga as regras de SQL do BigQuery Standard, nunca o Legacy, nunca utilize strftime para datas. "
-            "GROUP BY e ORDER BY devem conter apenas nomes de colunas, sem funções de agregação. "
-            "LIMIT deve ser inteiro. WHERE deve ser SQL puro."
+            "Consulta vendas de veículos no BigQuery. REGRAS ABSOLUTAS:\n"
+            "1. Para TOP N por grupo (ex: top 3 por estado) USE QUALIFY com PARTITION BY\n"
+            "2. NUNCA use LIMIT para consultas agrupadas\n"
+            "3. Para múltiplas dimensões inclua TODOS os campos do PARTITION BY no SELECT\n"
+            "4. Campos no GROUP BY DEVEM estar no SELECT\n\n"
+            "Exemplo CORRETO para top 3 modelos por estado:\n"
+            "{\n"
+            '  "select": ["modelo", "uf", "SUM(QTE) AS total"],\n'
+            '  "where": "EXTRACT(YEAR FROM dta_venda) = 2024",\n'
+            '  "group_by": ["modelo", "uf"],\n'
+            '  "order_by": ["uf", "total DESC"],\n'
+            '  "qualify": "ROW_NUMBER() OVER (PARTITION BY uf ORDER BY total DESC) <= 3"\n'
+            "}"
         ),
         parameters={
             "type": "object",
             "properties": {
-                "query_type": {
-                    "type": "string",
-                    "description": "Tipo de consulta (aggregation, comparison, raw_data)",
-                    "enum": ["aggregation", "comparison", "raw_data"],
-                },
                 "select": {
                     "type": "array",
-                    "description": "Campos a selecionar ou funções de agregação",
                     "items": {"type": "string"},
+                    "description": "Campos para SELECT (DEVE incluir todos do PARTITION BY)"
                 },
                 "where": {
                     "type": "string",
-                    "description": "Condições WHERE em SQL puro",
+                    "description": "Condições WHERE (SQL puro)"
                 },
                 "group_by": {
                     "type": "array",
-                    "description": "Campos para agrupamento",
                     "items": {"type": "string"},
+                    "description": "Campos para GROUP BY (DEVEM estar no SELECT)"
                 },
                 "order_by": {
                     "type": "array",
-                    "description": "Campos para ordenação",
                     "items": {"type": "string"},
+                    "description": "Campos para ORDER BY"
                 },
-                "limit": {"type": "integer", "description": "Limite de registros"},
+                "qualify": {
+                    "type": "string",
+                    "description": "CONDIÇÃO OBRIGATÓRIA para TOP N: ROW_NUMBER() OVER (PARTITION BY...) <= N"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "USO PROIBIDO para consultas agrupadas - apenas para consultas simples"
+                }
             },
-            "required": ["select"],
-        },
+            "required": ["select"]
+        }
     )
+    
     veiculos_tool = Tool(function_declarations=[veiculos_vendas_func])
+    
+    # Configuração mais rígida do modelo
+    generation_config = {
+        "temperature": 0.5,  # Reduz criatividade para seguir regras
+        "max_output_tokens": 2000,
+    }
+    
     return genai.GenerativeModel(
-        MODEL_NAME, tools=[veiculos_tool], system_instruction=SYSTEM_INSTRUCTION
+        MODEL_NAME,
+        tools=[veiculos_tool],
+        system_instruction=SYSTEM_INSTRUCTION,
+        generation_config=generation_config
     )
 
-
-def generate_chart(data, chart_type, x_axis, y_axis, title=""):
-    """
-    Gera um gráfico Plotly moderno e elegante para dashboards executivos.
-    """
+def generate_chart(data, chart_type, x_axis, y_axis, color=None):
+    """Gera gráfico com tratamento para múltiplas dimensões"""
     if not data or not x_axis or not y_axis:
         return None
-    df = pd.DataFrame(data)
-    fig = None
 
-    # Paleta executiva: azul, cinza, verde, laranja
-    palette = ["#1565C0", "#43A047", "#F9A825", "#546E7A", "#00838F"]
+    try:
+        df = pd.DataFrame.from_records(data)
+        
+        # Verificação de colunas com tratamento para múltiplas dimensões
+        required_columns = {x_axis, y_axis}
+        if color:  # Terceira dimensão
+            required_columns.add(color)
+            if color not in df.columns:
+                color = None  # Degrada para 2D
+                
+        # Conversão segura de tipos para eixos
+        df[y_axis] = pd.to_numeric(df[y_axis], errors='coerce')
+        
+        # Paleta de cores para múltiplas categorias
+        palette = px.colors.qualitative.Plotly
+        
+        if chart_type == "bar":
+            fig = px.bar(
+                df, x=x_axis, y=y_axis, color=color,
+                barmode='group',  # Essencial para múltiplas dimensões
+                color_discrete_sequence=palette
+            )
+        elif chart_type == "line":
+            fig = px.line(
+                df, x=x_axis, y=y_axis, color=color,
+                markers=True,
+                color_discrete_sequence=palette
+            )
+        else:
+            return None
 
-    if chart_type == "bar":
-        fig = px.bar(
-            df, x=x_axis, y=y_axis,
-            template="plotly_white",
-            color_discrete_sequence=palette,
-            title=title or f"{y_axis} por {x_axis}"
+        fig.update_layout(
+            hovermode='x unified',
+            plot_bgcolor='rgba(0,0,0,0)'
         )
-        fig.update_traces(
-            marker=dict(line=dict(width=1, color="#222")),
-            hovertemplate=f"<b>%{{x}}</b><br>{y_axis}: <b>%{{y}}</b><extra></extra>",
-        )
-    elif chart_type == "line":
-        fig = px.line(
-            df, x=x_axis, y=y_axis, markers=True,
-            template="plotly_white",
-            color_discrete_sequence=palette,
-            title=title or f"{y_axis} por {x_axis}"
-        )
-        fig.update_traces(
-            marker=dict(size=9, line=dict(width=2, color="#222")),
-            hovertemplate=f"<b>%{{x}}</b><br>{y_axis}: <b>%{{y}}</b><extra></extra>",
-        )
-    elif chart_type == "pie":
-        fig = px.pie(
-            df, names=x_axis, values=y_axis,
-            template="plotly_white",
-            color_discrete_sequence=palette,
-            title=title or f"{y_axis} por {x_axis}"
-        )
-    else:
+        return fig
+
+    except Exception as e:
+        print(f"Erro ao gerar gráfico (multi-dimensão): {str(e)}")
         return None
-
-    fig.update_layout(
-        font=dict(family="Segoe UI, Arial", size=16, color="#222"),
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=20, r=20, t=50, b=20),
-        title_font=dict(size=20, family="Segoe UI, Arial", color="#1565C0"),
-        xaxis_title=x_axis,
-        yaxis_title=y_axis,
-    )
-    return fig
 
 def refine_with_gemini(
     prompt: str, data: list, function_params: dict = None, query: str = None
@@ -150,8 +161,10 @@ def refine_with_gemini(
     [Tabela ou resumo dos dados quando relevante]
 
     [Sugestão de gráfico se aplicável, no formato:]
-    GRAPH-TYPE: [tipo] | X-AXIS: [coluna] | Y-AXIS: [coluna]
-    - O tipo pode ser "bar" ou "line", nunca gere "pie". As colunas devem existir nos dados fornecidos.
+    GRAPH-TYPE: [tipo] | X-AXIS: [coluna] | Y-AXIS: [coluna] | COLOR: [coluna]
+    - O tipo pode ser "bar" ou "line", nunca gere "pie". 
+    - COLOR é opcional e deve ser usado para representar a terceira dimensão.
+    - As colunas devem existir nos dados fornecidos.
     """
 
     model = genai.GenerativeModel(MODEL_NAME)
@@ -165,11 +178,21 @@ def refine_with_gemini(
             graph_part = response_text.split("GRAPH-TYPE:")[1].strip()
             graph_type = graph_part.split("|")[0].strip()
             x_axis = graph_part.split("X-AXIS:")[1].split("|")[0].strip()
-            y_axis = graph_part.split("Y-AXIS:")[1].strip()
-            fig = generate_chart(data, graph_type, x_axis, y_axis)
+            y_axis = graph_part.split("Y-AXIS:")[1].split("|")[0].strip()
+            color = None
+            if "COLOR:" in graph_part:
+                color = graph_part.split("COLOR:")[1].strip()
+            
+            fig = generate_chart(data, graph_type, x_axis, y_axis, color)
             print("DEBUG generate_chart:", fig)
             if fig:
-                chart_info = {"type": graph_type, "x": x_axis, "y": y_axis, "fig": fig}
+                chart_info = {
+                    "type": graph_type, 
+                    "x": x_axis, 
+                    "y": y_axis, 
+                    "color": color,
+                    "fig": fig
+                }
                 print("DEBUG chart_info criado:", chart_info)
             else:
                 print(
@@ -181,6 +204,8 @@ def refine_with_gemini(
                     x_axis,
                     "Y:",
                     y_axis,
+                    "Color:",
+                    color
                 )
                 response_text = response_text.split("GRAPH-TYPE:")[0].strip()
         except Exception as e:

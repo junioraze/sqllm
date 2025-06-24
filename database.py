@@ -4,10 +4,7 @@ from config import FULL_TABLE_ID
 client = bigquery.Client()
 
 def execute_query(query: str):
-    """
-    Executa uma query SQL no BigQuery e retorna os resultados como lista de dicionários.
-    Em caso de erro, retorna um dicionário com a chave 'error'.
-    """
+    """Executa uma query SQL no BigQuery."""
     try:
         job_config = bigquery.QueryJobConfig(maximum_bytes_billed=100_000_000)
         query_job = client.query(query, job_config=job_config)
@@ -17,25 +14,33 @@ def execute_query(query: str):
 
 def build_query(params: dict) -> str:
     """
-    Constrói uma query SQL a partir dos parâmetros fornecidos pelo modelo.
-    Espera os campos: select, where, group_by, order_by, limit.
+    Constrói a query exatamente conforme os parâmetros recebidos
+    sem manipulações automáticas
     """
-    select = ", ".join(params.get("select", ["*"]))
-    where = f" WHERE {params['where']}" if "where" in params and params["where"] else ""
-    group_by = f" GROUP BY {', '.join(params['group_by'])}" if "group_by" in params and params["group_by"] else ""
-    order_by = f" ORDER BY {', '.join(params['order_by'])}" if "order_by" in params and params["order_by"] else ""
-    limit = ""
-    if "limit" in params and params["limit"]:
-        try:
-            limit = f" LIMIT {int(params['limit'])}"
-        except (ValueError, TypeError):
-            pass
+    # Validação robusta do parâmetro 'select'
+    select = params.get("select", ["*"])
+    if isinstance(select, str):
+        if select.startswith("[") and select.endswith("]"):
+            select = [item.strip().strip('"').strip("'") for item in select[1:-1].split(",")]
+        else:
+            select = [select.strip()]
+    
+    # Validação QUALIFY vs LIMIT
+    if params.get("qualify") and params.get("limit"):
+        raise ValueError("NUNCA use LIMIT com QUALIFY - use QUALIFY para múltiplas dimensões")
+
+    where = f" WHERE {params['where']}" if params.get("where") else ""
+    group_by = f" GROUP BY {', '.join(params['group_by'])}" if params.get("group_by") else ""
+    order_by = f" ORDER BY {', '.join(params['order_by'])}" if params.get("order_by") else ""
+    qualify = f" QUALIFY {params['qualify']}" if params.get("qualify") else ""
+    limit = f" LIMIT {int(params['limit'])}" if params.get("limit") else ""
 
     query = f"""
-        SELECT {select}
+        SELECT {', '.join(select)}
         FROM `{FULL_TABLE_ID}`
         {where}
         {group_by}
+        {qualify}
         {order_by}
         {limit}
     """

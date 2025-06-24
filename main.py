@@ -117,13 +117,20 @@ if prompt:
                 function_call = response.candidates[0].content.parts[0].function_call
                 params = function_call.args
                 
-                # Converte os parâmetros para dict serializável
-                serializable_params = {
-                    k: v for k, v in params.items() 
-                    if not k.startswith('_') and not callable(v)
-                }
+                # Serialização dos parâmetros
+                serializable_params = {}
+                for key, value in params.items():
+                    if key == "select" and isinstance(value, str):
+                        try:
+                            # Remove colchetes e aspas extras, depois divide
+                            cleaned = value.strip("[]").replace("'", "").replace('"', "")
+                            serializable_params[key] = [item.strip() for item in cleaned.split(",")]
+                        except:
+                            serializable_params[key] = [value]
+                    else:
+                        serializable_params[key] = value
                 
-                # Constrói e executa a query
+                # constrói a query
                 query = build_query(serializable_params)
                 raw_data = execute_query(query)
                 
@@ -133,7 +140,7 @@ if prompt:
                         "content": f"Erro na consulta:\n{raw_data['error']}\n\nQuery:\n```sql\n{raw_data['query']}\n```"
                     })
                 else:
-                    # Converte os dados para um formato serializável
+                    # Converte os dados de retorno para um formato serializável
                     serializable_data = [
                         {k: str(v) if not isinstance(v, (str, int, float, bool)) else v 
                          for k, v in item.items()}

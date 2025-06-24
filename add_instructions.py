@@ -1,27 +1,37 @@
-# add_instructions.py
 COMPARACAO_INSTRUCOES = """\n
 INSTRUÇÕES PARA ANÁLISE DE DADOS:
 1. Você tem liberdade para criar consultas SQL completas
 2. Pode usar qualquer campo da tabela
 3. Pode criar funções de agregação personalizadas
 4. Certifique-se de incluir filtros temporais quando relevante
-5. Se o usuário solicitar visualização gráfica, inclua no final da resposta:
-   GRAPH-TYPE: [tipo] | X-AXIS: [coluna] | Y-AXIS: [coluna]
+5. Para análises com múltiplas dimensões (ex: top N por grupo), use QUALIFY ROW_NUMBER() OVER (PARTITION BY ...)
+6. Se o usuário solicitar visualização gráfica, inclua no final da resposta:
+   GRAPH-TYPE: [tipo] | X-AXIS: [coluna] | Y-AXIS: [coluna] | COLOR: [coluna]
    Tipos suportados: bar, line
+7. Para consultas com múltiplas dimensões (3+), sempre use PARTITION BY no QUALIFY
 """
 
 CAMPOS_DESCRICAO = """\n
-EXEMPLOS DE PARÂMETROS VÁLIDOS:
-- select: ["modelo", "SUM(QTE) as total_vendido"]
-- where: "dta_venda BETWEEN '2025-01-01' AND '2025-12-31'"
-- group_by: ["modelo", "uf"]  # NUNCA inclua funções aqui!
-- order_by: ["total_vendido DESC"] # NUNCA inclua funções aqui!
-- limit: 10 #ESTE CAMPO DEVE SER UM NÚMERO INTEIRO
+EXEMPLOS DE PARÂMETROS VÁLIDOS PARA MÚLTIPLAS DIMENSÕES:
+- select: ["EXTRACT(MONTH FROM dta_venda) AS mes", "uf", "modelo", "SUM(QTE) AS total_vendido"]
+- where: "EXTRACT(YEAR FROM dta_venda) = 2024"
+- group_by: ["mes", "uf", "modelo"]
+- order_by: ["mes", "uf", "total_vendido DESC"]
+- qualify: "ROW_NUMBER() OVER (PARTITION BY mes, uf ORDER BY total_vendido DESC) <= 3"
+
+REGRAS PARA MÚLTIPLAS DIMENSÕES:
+1. SEMPRE inclua todos os campos do PARTITION BY no SELECT
+2. NUNCA use LIMIT em consultas com PARTITION BY
+3. Para gráficos com 3+ dimensões, use COLOR para representar a terceira dimensão
+4. Campos no GROUP BY devem estar no SELECT
+5. Campos no QUALIFY devem estar no SELECT
 
 CAMPOS CHAVES PARA CONSULTA:
 - Temporais:
   • dta_venda (DATE): Data da venda (campo principal)
   • dta_operacao (DATE): Data da operação
+  • EXTRACT(MONTH FROM dta_venda) as mes: Mês da venda (para agrupamentos)
+  • EXTRACT(YEAR FROM dta_venda) as ano: Ano da venda (para agrupamentos)
 
 - Dimensões:
   • modelo (STRING): Modelo do veículo
@@ -92,4 +102,23 @@ A tabela glinhares.delivery.drvy_VeiculosVendas possui os seguintes campos em su
 - revenda: Código da revenda.
 - empresa_origem: Código da empresa de origem.
 - revenda_origem: Código da revenda de origem.
+
+EXEMPLOS DE CONSULTA COM MÚLTIPLAS DIMENSÕES:
+
+1. Top 5 vendedores por mês (2 dimensões):
+{
+  "select": ["EXTRACT(MONTH FROM dta_venda) AS mes", "nome_vend", "SUM(QTE) AS total"],
+  "where": "EXTRACT(YEAR FROM dta_venda) = 2025",
+  "group_by": ["mes", "nome_vend"],
+  "order_by": ["mes", "total DESC"],
+  "qualify": "ROW_NUMBER() OVER (PARTITION BY mes ORDER BY total DESC) <= 5"
+}
+
+2. Top 3 modelos por estado e mês (3 dimensões):
+{
+  "select": ["EXTRACT(MONTH FROM dta_venda) AS mes", "uf", "modelo", "SUM(QTE) AS total"],
+  "group_by": ["mes", "uf", "modelo"],
+  "order_by": ["mes", "uf", "total DESC"],
+  "qualify": "ROW_NUMBER() OVER (PARTITION BY mes, uf ORDER BY total DESC) <= 3"
+}
 """
