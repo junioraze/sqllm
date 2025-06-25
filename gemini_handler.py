@@ -149,7 +149,7 @@ def refine_with_gemini(
        - Introdução contextual
        - Principais insights
        - Dados em formato tabular (quando aplicável)
-       - Gráfico se solicitado (usando formato GRAPH-TYPE)
+       - Só gere gráficos se e somente se for solicitado a gerar (usando formato GRAPH-TYPE)
        - Atenção à formatação para evitar erros de markdown.
 
     PERGUNTA DO USUÁRIO: "{prompt}"
