@@ -48,7 +48,7 @@ with st.container():
         st.write("Faça perguntas sobre vendas de veículos. Exemplos:")
         st.code(
             """- Qual o total vendido em 2024?
-- Compare as vendas entre os meses existentes de 2023 e 2024. 
+- Compare as vendas entre os meses existentes de 2023 e 2024. '
 - Demonstre os modelos vendidos no ceara em 2023?
 """
         )

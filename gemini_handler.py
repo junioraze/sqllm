@@ -169,6 +169,15 @@ def refine_with_gemini(
     - O tipo pode ser "bar" ou "line", nunca gere "pie". 
     - COLOR é opcional e deve ser usado para representar a terceira dimensão.
     - As colunas devem existir nos dados fornecidos.
+    
+    ATENÇÃO: 
+    Só gere visualização gráfica se o usuário solicitar explicitamente um gráfico, visualização, plot, curva, barra, linha ou termos semelhantes.
+   - Nunca gere gráfico por padrão, nem sugira gráfico se não for solicitado.
+        Exemplo: 
+        Usuário: "Quais as vendas das lojas de limoeiro em janeiro/2025?"
+        Resposta: [NÃO incluir gráfico]
+        Usuário: "Me mostre um gráfico das vendas das lojas de limoeiro em janeiro/2025"
+        Resposta: [Incluir gráfico conforme instrução]
     """
 
     model = genai.GenerativeModel(MODEL_NAME)

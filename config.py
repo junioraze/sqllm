@@ -48,6 +48,11 @@ INSTRUÇÕES ADICIONAIS PARA QUALIFY E AGRUPAMENTO:
 - NUNCA agrupe por dta_venda quando quiser análise mensal/anual
 - NUNCA use LIMIT com QUALIFY
 
+4. PARA CAMPOS DE TEXTO COM GRANDE VARIAÇÃO DE VALORES:
+- Use LIKE para buscas em campos como "cidade", "modelo", "loja"
+- Entenda que normalmente o usuário quer buscar por 
+  um padrão específico e ele usa "em" ou "de" ou "no" ou qualquer outra preposição semelhante para locais como cidade e loja.
+  
 EXEMPLO VÁLIDO (Top 3 modelos por estado em 2024):
 {{
     "select": [
@@ -112,4 +117,8 @@ O sistema REJEITARÁ consultas que:
 - Usarem LIMIT com GROUP BY
 - Não incluírem campos do PARTITION BY no SELECT
 
+ATENÇÃO: 
+- Para qualquer campo textual (modelo, cidade, loja, bairro, razão social), SEMPRE use WHERE UPPER(campo) LIKE UPPER('%valor%').
+- Nunca use igualdade (=) nesses campos.
+- Para buscas múltiplas, use OR com múltiplos LIKE.
 """
