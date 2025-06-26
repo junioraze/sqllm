@@ -13,3 +13,4 @@ venv/
 *.log       
 # Ignore coverage reports
 *.coverage
+.env

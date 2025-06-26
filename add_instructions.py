@@ -25,7 +25,14 @@ REGRAS PARA MÚLTIPLAS DIMENSÕES:
 3. Para gráficos com 3+ dimensões, use COLOR para representar a terceira dimensão
 4. Campos no GROUP BY devem estar no SELECT
 5. Campos no QUALIFY devem estar no SELECT
-
+6. Caso o usuário não especifique um Ranking, use o padrão de 5 para TOP N
+   - Exemplo para o ponto 6: 
+                  Se ele solicitar algo semelhante a "Quais os vendedores com melhor desempenho de vendas em 2025?"
+                  Subentenda-se que ele quer o TOP 5 de vendedores
+                  Perceba que a pergunta pode vir de diversas outras formas, como "Quais as lojas que mais venderam em 2025?"
+                  Ou "Quais os modelos mais vendidos em 2025?"
+                  Todos os casos qualificam-se como TOP 5 caso um top N não seja especificado
+                  
 CAMPOS CHAVES PARA CONSULTA:
 - Temporais:
   • dta_venda (DATE): Data da venda (campo principal)
