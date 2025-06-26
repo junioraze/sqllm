@@ -80,7 +80,7 @@ CAMPOS CHAVES PARA CONSULTA:
   • modelo (STRING): Modelo do veículo, aqui aplica-se a regra do LIKE para buscas especificas dentro do WHERE
   • uf (STRING): Estado da loja
   • Loja (STRING): Entidade que realizou a venda, aqui aplica-se a regra do LIKE para buscas especificas dentro do WHERE
-  • novo_usado (STRING): se o veículo é 'NOVO' ou 'USADO'
+  • novo_usado_cc (STRING): se o veículo é 'NOVO' ou 'USADO'
   • cidade (STRING): Cidade da loja, aqui aplica-se a regra do LIKE para buscas especificas dentro do WHERE
   • nome_vend (STRING): Vendedor
   • nome_cli (STRING): Cliente da venda
@@ -147,6 +147,7 @@ A tabela glinhares.delivery.drvy_VeiculosVendas possui os seguintes campos em su
 - revenda_origem: Código da revenda de origem.
 - cidade: Cidade da loja
 - negocio_CC: Tipo de negócio (2R para motos, 4R para carros)
+- novo_usado_cc: Indica se o veículo é novo ou usado
 EXEMPLOS DE CONSULTA COM MÚLTIPLAS DIMENSÕES:
 
 1. Top 5 vendedores por mês (2 dimensões):
