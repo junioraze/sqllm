@@ -14,7 +14,7 @@ from gemini_handler import initialize_model, refine_with_gemini
 from database import build_query, execute_query
 from utils import display_message_with_spoiler
 from rate_limit import RateLimiter
-
+from logger import log_interaction
 # Configuração do rate limit (100 requisições por dia)
 rate_limiter = RateLimiter(max_requests_per_day=MAX_RATE_LIMIT)
 
@@ -239,9 +239,39 @@ if prompt:
                     )
 
             # Força atualização da tela
+            log_interaction(
+                user_input=prompt,
+                function_params=serializable_params,
+                query=query if query else None,
+                raw_data=serializable_data if serializable_data else None,
+                raw_response=response.text if not serializable_data else None,
+                refined_response=refined_response,
+                first_ten_table_lines=serializable_data[:10] if serializable_data else None,
+                graph_data=tech_details.get("chart_info") if tech_details and tech_details.get("chart_info") else None,
+                export_data=None,  # Preencha se houver exportação de dados
+                status="OK",
+                status_msg=f"Consulta processada com sucesso.",
+                client_request_count=rate_limiter.state["count"],
+                custom_fields=None,  # Use se quiser logar algo extra
+            )
             st.rerun()
 
         except Exception as e:
+            log_interaction(
+                user_input=prompt,
+                function_params=serializable_params if serializable_params else None,
+                query=query if query else None,
+                raw_data=serializable_data if serializable_data else None,
+                raw_response=response.text if not serializable_data else None,
+                refined_response=refined_response if refined_response else None,
+                first_ten_table_lines=None,
+                graph_data=tech_details.get("chart_info") if tech_details and tech_details.get("chart_info") else None,
+                export_data=None,
+                status="ERROR",
+                status_msg=str(e),
+                client_request_count=rate_limiter.state["count"],
+                custom_fields=None,
+            )
             st.session_state.chat_history.append(
                 {"role": "assistant", "content": f"Ocorreu um erro: {str(e)}"}
             )

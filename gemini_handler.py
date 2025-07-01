@@ -197,7 +197,7 @@ def refine_with_gemini(
                 color = graph_part.split("COLOR:")[1].strip()
 
             fig = generate_chart(data, graph_type, x_axis, y_axis, color)
-            print("DEBUG generate_chart:", fig)
+            #print("DEBUG generate_chart:", fig)
             if fig:
                 chart_info = {
                     "type": graph_type,
@@ -206,7 +206,7 @@ def refine_with_gemini(
                     "color": color,
                     "fig": fig,
                 }
-                print("DEBUG chart_info criado:", chart_info)
+
             else:
                 print(
                     "DEBUG gráfico não gerado. Dados:",
@@ -230,5 +230,5 @@ def refine_with_gemini(
         "raw_data": data,
         "chart_info": chart_info,
     }
-    response_text = re.sub(r"GRAPH-TYPE:.*", "", response_text).strip()
+    #response_text = re.sub(r"GRAPH-TYPE:.*", "", response_text).strip()
     return response_text, tech_details

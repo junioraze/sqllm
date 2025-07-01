@@ -7,8 +7,10 @@ load_dotenv(".env")
 # Projeto e tabela
 PROJECT_ID = os.getenv("PROJECT_ID")
 DATASET_ID = os.getenv("DATASET_ID")
+DATASET_LOG_ID = os.getenv("DATASET_LOG_ID")
 TABLE_ID = os.getenv("TABLE_ID")
 MODEL_NAME = os.getenv("MODEL_NAME")
+CLIENTE_NAME = os.getenv("CLIENTE_NAME")
 FULL_TABLE_ID = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}"
 MAX_RATE_LIMIT = int(os.getenv("MAX_REQUEST_DAY"))
 # Autenticação
