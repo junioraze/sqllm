@@ -5,7 +5,8 @@ import re
 import json
 import pandas as pd
 import plotly.express as px
-
+from utils import create_styled_download_button, generate_excel_bytes, generate_csv_bytes
+from datetime import datetime
 
 def initialize_model():
     """
@@ -150,6 +151,7 @@ def refine_with_gemini(
        - Principais insights
        - Dados em formato tabular (quando aplicável)
        - Só gere gráficos se e somente se for solicitado a gerar (usando formato GRAPH-TYPE)
+       - Só gere arquivos excel/xlsx ou csv se o usuário solicitar explicitamente (usando palavras como exportar, baixar, excel, planilha, csv).
        - Atenção à formatação para evitar erros de markdown.
 
     PERGUNTA DO USUÁRIO: "{prompt}"
@@ -169,6 +171,10 @@ def refine_with_gemini(
     - O tipo pode ser "bar" ou "line", nunca gere "pie". 
     - COLOR é opcional e deve ser usado para representar a terceira dimensão.
     - As colunas devem existir nos dados fornecidos.
+
+    [Exportação de dados se solicitado, no formato:]
+    EXPORT-INFO: FORMATO: [excel/csv] 
+    - Aqui você só precisa fornecer essa linha de EXPORT-INFO, não fornecer nenhuma informação a mais sobre o arquivo.
     
     ATENÇÃO: 
     Só gere visualização gráfica se o usuário solicitar explicitamente um gráfico, visualização, plot, curva, barra, linha ou termos semelhantes.
@@ -178,6 +184,9 @@ def refine_with_gemini(
         Resposta: [NÃO incluir gráfico]
         Usuário: "Me mostre um gráfico das vendas das lojas de limoeiro em janeiro/2025"
         Resposta: [Incluir gráfico conforme instrução]
+        
+    Se o usuário solicitar exportação, gere links para download dos dados em Excel e CSV. 
+    - Nunca gere se não houver dados ou se não for explicitamente solicitado.
     """
 
     model = genai.GenerativeModel(MODEL_NAME)
@@ -224,11 +233,38 @@ def refine_with_gemini(
         except Exception as e:
             print(f"Erro ao processar instrução de gráfico: {e}")
 
+    # Verificar se o usuário solicitou exportação
+    export_requested = any(keyword in prompt.lower() for keyword in 
+                          ['exportar', 'excel', 'planilha', 'csv', 'baixar']) or "EXPORT:" in response_text
+    
+    # Gerar links de exportação se solicitado
+    export_links = []
+    export_info = {}
+    
+    if export_requested:
+        # Gerar Excel
+        excel_bytes = generate_excel_bytes(data)
+        if excel_bytes:
+            excel_filename = f"dados_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+            excel_link = create_styled_download_button(excel_bytes, excel_filename, "Excel")
+            export_links.append(excel_link)
+            export_info['excel'] = excel_filename
+        
+        # Gerar CSV
+        csv_bytes = generate_csv_bytes(data)
+        if csv_bytes:
+            csv_filename = f"dados_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+            csv_link = create_styled_download_button(csv_bytes, csv_filename, "CSV")
+            export_links.append(csv_link)
+            export_info['csv'] = csv_filename
+
     tech_details = {
         "function_params": function_params,
         "query": query,
         "raw_data": data,
         "chart_info": chart_info,
+        "export_links": export_links,
+        "export_info": export_info,
     }
     #response_text = re.sub(r"GRAPH-TYPE:.*", "", response_text).strip()
     return response_text, tech_details
