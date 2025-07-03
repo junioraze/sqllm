@@ -35,6 +35,30 @@ INSTRUÇÕES PARA ANÁLISE DE DADOS:
       Usuário: "Me mostre um gráfico das vendas das lojas de limoeiro em janeiro/2025"
       Resposta: [Incluir gráfico conforme instrução]
 7. Para consultas com múltiplas dimensões (3+), sempre use PARTITION BY no QUALIFY
+8. PARA CÁLCULOS PERCENTUAIS:
+- SEMPRE verifique se o denominador é diferente de zero antes de dividir
+- Para produtos sem vendas no período anterior (denominador zero):
+  - Ou retorne NULL e filtre depois
+- Use CASE WHEN para tratamento seguro:
+  CASE WHEN vendas_anterior > 0 THEN (vendas_atual - vendas_anterior)/vendas_anterior ELSE NULL END
+- Para rankings de crescimento, sempre inclua HAVING crescimento IS NOT NULL
+
+EXEMPLO CORRETO (Top 10 crescimento percentual):
+{
+    "select": [
+        "modelo",
+        "SUM(CASE WHEN mes = 6 THEN QTE ELSE 0 END) AS vendas_junho",
+        "SUM(CASE WHEN mes = 5 THEN QTE ELSE 0 END) AS vendas_maio",
+        "CASE WHEN SUM(CASE WHEN mes = 5 THEN QTE ELSE 0 END) > 0 ",
+        "THEN (SUM(CASE WHEN mes = 6 THEN QTE ELSE 0 END) - SUM(CASE WHEN mes = 5 THEN QTE ELSE 0 END)) / ",
+        "SUM(CASE WHEN mes = 5 THEN QTE ELSE 0 END) ELSE NULL END AS crescimento"
+    ],
+    "where": "ano = 2025 AND mes IN (5, 6)",
+    "group_by": ["modelo"],
+    "having": "SUM(CASE WHEN mes = 6 THEN QTE ELSE 0 END) > 0 AND crescimento IS NOT NULL",
+    "order_by": ["crescimento DESC"],
+    "limit": 10
+}
 """
 
 # Construir a parte das tabelas para a instrução do sistema

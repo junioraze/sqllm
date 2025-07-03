@@ -21,6 +21,7 @@ rate_limiter = RateLimiter(max_requests_per_day=MAX_RATE_LIMIT)
 #Inicializa variáveis para armazenar os dados
 refined_response = None
 serializable_params = None
+serializable_data = None
 tech_details = None
 query = None
 # Variável para controlar a exibição de detalhes técnicos
