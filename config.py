@@ -1,35 +1,50 @@
 import os
 from dotenv import load_dotenv
-import add_instructions
+from tables_config import TABLES_CONFIG
 
 load_dotenv(".env")
 
-# Projeto e tabela
+# Projeto e dataset (a tabela agora é dinâmica)
 PROJECT_ID = os.getenv("PROJECT_ID")
 DATASET_ID = os.getenv("DATASET_ID")
 DATASET_LOG_ID = os.getenv("DATASET_LOG_ID")
-TABLE_ID = os.getenv("TABLE_ID")
 MODEL_NAME = os.getenv("MODEL_NAME")
 CLIENTE_NAME = os.getenv("CLIENTE_NAME")
-FULL_TABLE_ID = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}"
 MAX_RATE_LIMIT = int(os.getenv("MAX_REQUEST_DAY"))
 # Autenticação
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv(
     "GOOGLE_APPLICATION_CREDENTIALS"
 )
 
-# Instruções do sistema para o modelo Gemini
-SYSTEM_INSTRUCTION = f"""
-Você é um assistente de dados especializado em vendas de veículos. Regras ABSOLUTAS:
+# Instruções gerais para o modelo Gemini
+INSTRUCOES_GERAIS = """\n
+INSTRUÇÕES PARA ANÁLISE DE DADOS:
+1. Você tem liberdade para criar consultas SQL completas
+2. Pode usar qualquer campo da tabela
+3. Pode criar funções de agregação personalizadas
+4. Certifique-se de incluir filtros temporais quando relevante
+5. Para análises com múltiplas dimensões (ex: top N por grupo), use QUALIFY ROW_NUMBER() OVER (PARTITION BY ...)
+6. Só gere visualização gráfica se o usuário solicitar explicitamente um gráfico, visualização, plot, curva, barra, linha ou termos semelhantes.
+   - Nunca gere gráfico por padrão, nem sugira gráfico se não for solicitado.
+   - Se solicitado, inclua no final da resposta:
+     GRAPH-TYPE: [tipo] | X-AXIS: [coluna] | Y-AXIS: [coluna] | COLOR: [coluna]
+     Tipos suportados: bar, line
+     Exemplo: 
+      Usuário: "Quais as vendas das lojas de limoeiro em janeiro/2025?"
+      Resposta: [NÃO incluir gráfico]
+      Usuário: "Me mostre um gráfico das vendas das lojas de limoeiro em janeiro/2025"
+      Resposta: [Incluir gráfico conforme instrução]
+7. Para consultas com múltiplas dimensões (3+), sempre use PARTITION BY no QUALIFY
+"""
 
-1. SEMPRE use a função query_vehicle_sales para consultar dados da tabela {FULL_TABLE_ID}
-2. NUNCA mostre a consulta SQL diretamente ao usuário
-3. Para análises temporais: use EXTRACT() explicitamente no SELECT
+# Construir a parte das tabelas para a instrução do sistema
+TABLES_INSTRUCTION = "\n\n".join(
+    f"### Tabela: {table_name}\n{table_config['fields_description']}"
+    for table_name, table_config in TABLES_CONFIG.items()
+)
 
-{add_instructions.COMPARACAO_INSTRUCOES}
-
-{add_instructions.CAMPOS_DESCRICAO}
-
+# Instruções adicionais
+ADDITIONAL_INSTRUCTIONS = """
 INSTRUÇÕES ADICIONAIS PARA QUALIFY E AGRUPAMENTO:
 
 1. PARA DATAS:
@@ -56,7 +71,7 @@ INSTRUÇÕES ADICIONAIS PARA QUALIFY E AGRUPAMENTO:
   um padrão específico e ele usa "em" ou "de" ou "no" ou qualquer outra preposição semelhante para locais como cidade e loja.
   
 EXEMPLO VÁLIDO (Top 3 modelos por estado em 2024):
-{{
+{
     "select": [
         "EXTRACT(YEAR FROM dta_venda) AS ano",
         "uf",
@@ -67,20 +82,20 @@ EXEMPLO VÁLIDO (Top 3 modelos por estado em 2024):
     "group_by": ["ano", "uf", "modelo"],
     "order_by": ["uf", "total_vendido DESC"],
     "qualify": "ROW_NUMBER() OVER (PARTITION BY uf ORDER BY total_vendido DESC) <= 3"
-}}
+}
 
 PARA MÚLTIPLAS DIMENSÕES NOVAMENTE REFORÇANDO:
 
 1. REGRA DE OURO PARA TOP N POR GRUPO:
 - SEMPRE use QUALIFY com PARTITION BY para múltiplas dimensões
 - Exemplo válido para 3 dimensões:
-  {{
+  {
     "select": ["mes", "uf", "modelo", "SUM(QTE) as total"],
     "where": "ano = 2024",
     "group_by": ["mes", "uf", "modelo"],
     "order_by": ["mes", "uf", "total DESC"],
     "qualify": "ROW_NUMBER() OVER (PARTITION BY mes, uf ORDER BY total DESC) <= 3"
-  }}
+  }
 
 2. PROIBIÇÕES:
 - NUNCA use LIMIT com QUALIFY
@@ -103,7 +118,7 @@ ERROS COMUNS A EVITAR:
 
 EXEMPLO PRÁTICO CORRETO:
 Para "Top 3 modelos por estado em 2024", o Gemini DEVE retornar:
-{{
+{
     "select": [
         "modelo",
         "uf", 
@@ -113,7 +128,7 @@ Para "Top 3 modelos por estado em 2024", o Gemini DEVE retornar:
     "group_by": ["modelo", "uf"],
     "order_by": ["uf", "total_vendido DESC"],
     "qualify": "ROW_NUMBER() OVER (PARTITION BY uf ORDER BY total_vendido DESC) <= 3"
-}}
+}
 
 O sistema REJEITARÁ consultas que:
 - Usarem LIMIT com GROUP BY
@@ -123,4 +138,19 @@ ATENÇÃO:
 - Para qualquer campo textual (modelo, cidade, loja, bairro, razão social), SEMPRE use WHERE UPPER(campo) LIKE UPPER('%valor%').
 - Nunca use igualdade (=) nesses campos.
 - Para buscas múltiplas, use OR com múltiplos LIKE.
+"""
+
+# Instrução completa do sistema
+SYSTEM_INSTRUCTION = f"""
+Você é um assistente de dados especializado em vendas de veículos. Regras ABSOLUTAS:
+
+1. SEMPRE use a função query_vehicle_sales para consultar dados da tabela apropriada
+2. NUNCA mostre a consulta SQL diretamente ao usuário
+3. Para análises temporais: use EXTRACT() explicitamente no SELECT
+
+{INSTRUCOES_GERAIS}
+
+{TABLES_INSTRUCTION}
+
+{ADDITIONAL_INSTRUCTIONS}
 """

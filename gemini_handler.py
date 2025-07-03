@@ -1,6 +1,6 @@
 import google.generativeai as genai
 from google.generativeai.types import Tool, FunctionDeclaration
-from config import MODEL_NAME, SYSTEM_INSTRUCTION
+from config import MODEL_NAME, SYSTEM_INSTRUCTION, TABLES_CONFIG
 import re
 import json
 import pandas as pd
@@ -22,6 +22,7 @@ def initialize_model():
             "4. Campos no GROUP BY DEVEM estar no SELECT\n\n"
             "Exemplo CORRETO para top 3 modelos por estado:\n"
             "{\n"
+            '  "table_name": "drvy_VeiculosVendas",\n'
             '  "select": ["modelo", "uf", "SUM(QTE) AS total"],\n'
             '  "where": "EXTRACT(YEAR FROM dta_venda) = 2024",\n'
             '  "group_by": ["modelo", "uf"],\n'
@@ -32,6 +33,11 @@ def initialize_model():
         parameters={
             "type": "object",
             "properties": {
+                "table_name": {
+                    "type": "string",
+                    "description": "Nome da tabela no BigQuery que contém os dados.",
+                    "enum": list(TABLES_CONFIG.keys())
+                },
                 "select": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -60,15 +66,14 @@ def initialize_model():
                     "description": "USO PROIBIDO para consultas agrupadas - apenas para consultas simples",
                 },
             },
-            "required": ["select"],
+            "required": ["table_name", "select"],
         },
     )
 
     veiculos_tool = Tool(function_declarations=[veiculos_vendas_func])
 
-    # Configuração mais rígida do modelo
     generation_config = {
-        "temperature": 0.5,  # Reduz criatividade para seguir regras
+        "temperature": 0.5,
         "max_output_tokens": 2000,
     }
 

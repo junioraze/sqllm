@@ -1,8 +1,7 @@
 from google.cloud import bigquery
-from config import FULL_TABLE_ID
+from config import PROJECT_ID, DATASET_ID
 
 client = bigquery.Client()
-
 
 def execute_query(query: str):
     """Executa uma query SQL no BigQuery."""
@@ -13,13 +12,10 @@ def execute_query(query: str):
     except Exception as e:
         return {"error": str(e), "query": query}
 
-
-def build_query(params: dict) -> str:
+def build_query(full_table_id: str, params: dict) -> str:
     """
     Constrói a query exatamente conforme os parâmetros recebidos
-    sem manipulações automáticas
     """
-    # Validação robusta do parâmetro 'select'
     select = params.get("select", ["*"])
     if isinstance(select, str):
         if select.startswith("[") and select.endswith("]"):
@@ -29,25 +25,20 @@ def build_query(params: dict) -> str:
         else:
             select = [select.strip()]
 
-    # Validação QUALIFY vs LIMIT
     if params.get("qualify") and params.get("limit"):
         raise ValueError(
             "NUNCA use LIMIT com QUALIFY - use QUALIFY para múltiplas dimensões"
         )
 
     where = f" WHERE {params['where']}" if params.get("where") else ""
-    group_by = (
-        f" GROUP BY {', '.join(params['group_by'])}" if params.get("group_by") else ""
-    )
-    order_by = (
-        f" ORDER BY {', '.join(params['order_by'])}" if params.get("order_by") else ""
-    )
+    group_by = f" GROUP BY {', '.join(params['group_by'])}" if params.get("group_by") else ""
+    order_by = f" ORDER BY {', '.join(params['order_by'])}" if params.get("order_by") else ""
     qualify = f" QUALIFY {params['qualify']}" if params.get("qualify") else ""
     limit = f" LIMIT {int(params['limit'])}" if params.get("limit") else ""
 
     query = f"""
         SELECT {', '.join(select)}
-        FROM `{FULL_TABLE_ID}`
+        FROM `{full_table_id}`
         {where}
         {group_by}
         {qualify}

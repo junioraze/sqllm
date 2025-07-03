@@ -8,13 +8,14 @@ st.set_page_config(
 )
 
 # Agora importe os outros módulos
-from config import MAX_RATE_LIMIT  # Importa a configuração do assistente
+from config import MAX_RATE_LIMIT, DATASET_ID, PROJECT_ID  # Importa a configuração do assistente
 from style import MOBILE_IFRAME_BASE  # Importa o módulo de estilos
 from gemini_handler import initialize_model, refine_with_gemini
 from database import build_query, execute_query
 from utils import display_message_with_spoiler, slugfy_response
 from rate_limit import RateLimiter
 from logger import log_interaction
+from tables_config import TABLES_CONFIG
 # Configuração do rate limit (100 requisições por dia)
 rate_limiter = RateLimiter(max_requests_per_day=MAX_RATE_LIMIT)
 #Inicializa variáveis para armazenar os dados
@@ -180,20 +181,23 @@ if prompt:
                     for key, value in params.items():
                         if key == "select" and isinstance(value, str):
                             try:
-                                # Remove colchetes e aspas extras, depois divide
-                                cleaned = (
-                                    value.strip("[]").replace("'", "").replace('"', "")
-                                )
-                                serializable_params[key] = [
-                                    item.strip() for item in cleaned.split(",")
-                                ]
+                                cleaned = value.strip("[]").replace("'", "").replace('"', "")
+                                serializable_params[key] = [item.strip() for item in cleaned.split(",")]
                             except AttributeError:
                                 serializable_params[key] = [value]
                         else:
                             serializable_params[key] = value
 
-                    # constrói a query
-                    query = build_query(serializable_params)
+                    # Obter nome da tabela e construir full_table_id
+                    table_name = serializable_params.get("table_name")
+                    if table_name not in TABLES_CONFIG.keys():
+                        st.error(f"Tabela {table_name} não configurada")
+                        st.stop()
+                        
+                    full_table_id = f"{PROJECT_ID}.{DATASET_ID}.{table_name}"
+                    
+                    # Construir e executar query
+                    query = build_query(full_table_id, serializable_params)
                     raw_data = execute_query(query)
 
                     if "error" in raw_data:
@@ -251,6 +255,11 @@ if prompt:
                     st.session_state.chat_history.append(
                         {"role": "assistant", "content": response.text}
                     )
+            #regra para a estranha manipulação de response por parte do gemini
+            try:
+                raw_response = response.text
+            except (AttributeError, ValueError):
+                raw_response = None
 
             # Força atualização da tela
             log_interaction(
@@ -258,7 +267,7 @@ if prompt:
                 function_params=serializable_params,
                 query=query if query else None,
                 raw_data=serializable_data if serializable_data else None,
-                raw_response=response.text if not serializable_data else None,
+                raw_response=raw_response,
                 refined_response=refined_response,
                 first_ten_table_lines=serializable_data[:10] if serializable_data else None,
                 graph_data=tech_details.get("chart_info")  if tech_details and tech_details.get("chart_info") else None,
@@ -276,7 +285,7 @@ if prompt:
                 function_params=serializable_params,
                 query=query if query else None,
                 raw_data=serializable_data if serializable_data else None,
-                raw_response=response.text if not serializable_data else None,
+                raw_response=raw_response,
                 refined_response=refined_response if refined_response else None,
                 first_ten_table_lines=None,
                 graph_data=tech_details.get("chart_info") if tech_details and tech_details.get("chart_info") else None,
