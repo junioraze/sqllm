@@ -8,6 +8,8 @@ st.set_page_config(
 )
 
 # Agora importe os outros módulos
+import json
+import os
 from config import MAX_RATE_LIMIT, DATASET_ID, PROJECT_ID  # Importa a configuração do assistente
 from style import MOBILE_IFRAME_BASE  # Importa o módulo de estilos
 from gemini_handler import initialize_model, refine_with_gemini
@@ -39,6 +41,25 @@ if "last_data" not in st.session_state:
         "prompt": None,
         "df": None  # Novo: DataFrame para exportação
     }
+
+# Carrega as credenciais do arquivo
+with open(os.path.join(os.path.dirname(__file__), "credentials.json"), "r") as f:
+    creds = json.load(f)
+
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.title("Login VIAQUEST Insights")
+    login = st.text_input("E-mail", value="", key="login_input")
+    password = st.text_input("Senha", type="password", key="password_input")
+    if st.button("Entrar"):
+        if login == creds["login"] and password == creds["password"]:
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("Usuário ou senha inválidos.")
+    st.stop()
 
 # Container principal para todo o conteúdo
 with st.container():

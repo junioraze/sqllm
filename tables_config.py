@@ -172,7 +172,7 @@ CAMPOS CHAVES PARA CONSULTA:
   • Proxima_Assembleia (STRING): Data da próxima assembleia (converter para DATE)
 
 - Dimensões:
-  • Vendedor (STRING): Nome do vendedor (aplica regra LIKE)
+  • Vendedor (STRING): Nome do vendedor (aplica regra LIKE) da cota.
   • Modelo (STRING): Modelo do bem (aplica regra LIKE)
   • UF (STRING): Unidade Federativa, caso busque o estado aqui ele é abreviado, exemplo: Ceará vira CE
   • Municipio (STRING): Município (aplica regra LIKE)
@@ -189,6 +189,8 @@ CAMPOS CHAVES PARA CONSULTA:
   • Grupo (INTEGER): Número do grupo
   • Cota (INTEGER): Número da cota
   • Seguro_Vida (STRING): Status do seguro
+  • Percentual_amortizacao (FLOAT): Percentual de amortização, está em string, mas pode ser convertido para FLOAT64
+                                    Esse percentual é usado como faixa, normalmente se quer saber quantos contratos estão dentro de uma faixa de percentual de amortização
 
 EXEMPLOS DE CONSULTA:
 1. Top 5 vendedores por quantidade de contratos:
@@ -268,18 +270,18 @@ REGRAS PARA CONSULTAS:
 
 CAMPOS CHAVES PARA CONSULTA:
 - Temporais:
-  • ANO (INTEGER): Ano do lançamento
-  • MES (INTEGER): Mês do lançamento
+  • ANO (INTEGER): Ano do lançamento, pode ser usado para filtrar por ano no lugar de campos de data. Valor numérico.
+  • MES (INTEGER): Mês do lançamento, pode ser usado para filtrar por mês no lugar de campos de data. Valor numérico.
 
 - Dimensões:
   • NOME_CONTA (STRING): Nome da conta contábil (aplica regra LIKE)
   • NOME_CENTROCUSTO (STRING): Centro de custo (aplica regra LIKE)
-  • NOME_UNIDADE (STRING): Unidade organizacional
+  • NOME_UNIDADE (STRING): Unidade organizacional, pode ser interpretado como nome da loja, filial, etc. (aplica regra LIKE)
   • NOME_PROJETO (STRING): Nome do projeto (aplica regra LIKE)
 
 - Métricas:
-  • VALOR_ORCADO (FLOAT): Valor planejado
-  • VALOR_REALIZADO (FLOAT): Valor executado
+  • VALOR_ORCADO (FLOAT): Valor planejado, aqui o que foi orçado para a conta.
+  • VALOR_REALIZADO (FLOAT): Valor executado, aqui o que de fato foi gasto.
   • (VALOR_ORCADO - VALOR_REALIZADO) AS variacao
 
 - Filtros adicionais:
