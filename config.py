@@ -1,16 +1,31 @@
 import os
+import json
 from dotenv import load_dotenv
-from tables_config import TABLES_CONFIG
 
 load_dotenv(".env")
 
-# Projeto e dataset (a tabela agora é dinâmica)
+def load_tables_config():
+    """Carrega a configuração das tabelas do arquivo JSON"""
+    try:
+        with open("tables_config.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print("Arquivo tables_config.json não encontrado")
+        return {}
+    except json.JSONDecodeError as e:
+        print(f"Erro ao decodificar tables_config.json: {e}")
+        return {}
+
+TABLES_CONFIG = load_tables_config()
+
+# Projeto e dataset
 PROJECT_ID = os.getenv("PROJECT_ID")
 DATASET_ID = os.getenv("DATASET_ID")
 DATASET_LOG_ID = os.getenv("DATASET_LOG_ID")
 MODEL_NAME = os.getenv("MODEL_NAME")
 CLIENTE_NAME = os.getenv("CLIENTE_NAME")
 MAX_RATE_LIMIT = int(os.getenv("MAX_REQUEST_DAY"))
+
 # Autenticação
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv(
     "GOOGLE_APPLICATION_CREDENTIALS"
@@ -42,30 +57,30 @@ INSTRUÇÕES PARA ANÁLISE DE DADOS:
 - Use CASE WHEN para tratamento seguro:
   CASE WHEN vendas_anterior > 0 THEN (vendas_atual - vendas_anterior)/vendas_anterior ELSE NULL END
 - Para rankings de crescimento, sempre inclua HAVING crescimento IS NOT NULL
-
-EXEMPLO CORRETO (Top 10 crescimento percentual):
-{
-    "select": [
-        "modelo",
-        "SUM(CASE WHEN mes = 6 THEN QTE ELSE 0 END) AS vendas_junho",
-        "SUM(CASE WHEN mes = 5 THEN QTE ELSE 0 END) AS vendas_maio",
-        "CASE WHEN SUM(CASE WHEN mes = 5 THEN QTE ELSE 0 END) > 0 ",
-        "THEN (SUM(CASE WHEN mes = 6 THEN QTE ELSE 0 END) - SUM(CASE WHEN mes = 5 THEN QTE ELSE 0 END)) / ",
-        "SUM(CASE WHEN mes = 5 THEN QTE ELSE 0 END) ELSE NULL END AS crescimento"
-    ],
-    "where": "ano = 2025 AND mes IN (5, 6)",
-    "group_by": ["modelo"],
-    "having": "SUM(CASE WHEN mes = 6 THEN QTE ELSE 0 END) > 0 AND crescimento IS NOT NULL",
-    "order_by": ["crescimento DESC"],
-    "limit": 10
-}
+9. TABELAS DISPONÍVEIS - USE APENAS ESTAS TABELAS:
 """
 
+def build_tables_instruction():
+    """Constrói a instrução das tabelas dinamicamente do JSON"""
+    if not TABLES_CONFIG:
+        return "Nenhuma tabela configurada."
+    
+    tables_instruction = ""
+    for table_name, table_config in TABLES_CONFIG.items():
+        tables_instruction += f"\n### Tabela: {table_name}\n"
+        tables_instruction += f"Descrição: {table_config['description']}\n"
+        
+        # Lidar com fields_description como array ou string
+        fields_desc = table_config['fields_description']
+        if isinstance(fields_desc, list):
+            tables_instruction += "\n".join(fields_desc) + "\n"
+        else:
+            tables_instruction += f"{fields_desc}\n"
+    
+    return tables_instruction
+
 # Construir a parte das tabelas para a instrução do sistema
-TABLES_INSTRUCTION = "\n\n".join(
-    f"### Tabela: {table_name}\n{table_config['fields_description']}"
-    for table_name, table_config in TABLES_CONFIG.items()
-)
+TABLES_INSTRUCTION = build_tables_instruction()
 
 # Instruções adicionais
 ADDITIONAL_INSTRUCTIONS = """
@@ -93,84 +108,25 @@ INSTRUÇÕES ADICIONAIS PARA QUALIFY E AGRUPAMENTO:
 - Use LIKE para buscas em campos como "cidade", "modelo", "loja"
 - Entenda que normalmente o usuário quer buscar por 
   um padrão específico e ele usa "em" ou "de" ou "no" ou qualquer outra preposição semelhante para locais como cidade e loja.
-  
-EXEMPLO VÁLIDO (Top 3 modelos por estado em 2024):
-{
-    "select": [
-        "EXTRACT(YEAR FROM dta_venda) AS ano",
-        "uf",
-        "modelo",
-        "SUM(QTE) AS total_vendido"
-    ],
-    "where": "EXTRACT(YEAR FROM dta_venda) = 2024",
-    "group_by": ["ano", "uf", "modelo"],
-    "order_by": ["uf", "total_vendido DESC"],
-    "qualify": "ROW_NUMBER() OVER (PARTITION BY uf ORDER BY total_vendido DESC) <= 3"
-}
 
-PARA MÚLTIPLAS DIMENSÕES NOVAMENTE REFORÇANDO:
-
-1. REGRA DE OURO PARA TOP N POR GRUPO:
-- SEMPRE use QUALIFY com PARTITION BY para múltiplas dimensões
-- Exemplo válido para 3 dimensões:
-  {
-    "select": ["mes", "uf", "modelo", "SUM(QTE) as total"],
-    "where": "ano = 2024",
-    "group_by": ["mes", "uf", "modelo"],
-    "order_by": ["mes", "uf", "total DESC"],
-    "qualify": "ROW_NUMBER() OVER (PARTITION BY mes, uf ORDER BY total DESC) <= 3"
-  }
-
-2. PROIBIÇÕES:
-- NUNCA use LIMIT com QUALIFY
-- NUNCA agrupe por campos não incluídos no SELECT
-- NUNCA use PARTITION BY sem incluir os campos no SELECT
-
-3. FORMATO DE PARÂMETROS:
-- O campo 'select' DEVE ser uma lista, mesmo com um único item
-  Correto: ["modelo"]
-  Incorreto: "modelo"
-  
-ERROS COMUNS A EVITAR:
-1. USAR LIMIT EM CONSULTAS AGRUPADAS:
-   ❌ INCORRETO: GROUP BY + LIMIT
-   ✅ CORRETO: GROUP BY + QUALIFY (PARTITION BY)
-
-2. ESQUECER CAMPOS DO PARTITION BY NO SELECT:
-   ❌ INCORRETO: QUALIFY com campos não presentes no SELECT
-   ✅ CORRETO: Todos os campos do PARTITION BY DEVEM estar no SELECT
-
-EXEMPLO PRÁTICO CORRETO:
-Para "Top 3 modelos por estado em 2024", o Gemini DEVE retornar:
-{
-    "select": [
-        "modelo",
-        "uf", 
-        "SUM(QTE) AS total_vendido"
-    ],
-    "where": "EXTRACT(YEAR FROM dta_venda) = 2024",
-    "group_by": ["modelo", "uf"],
-    "order_by": ["uf", "total_vendido DESC"],
-    "qualify": "ROW_NUMBER() OVER (PARTITION BY uf ORDER BY total_vendido DESC) <= 3"
-}
-
-O sistema REJEITARÁ consultas que:
-- Usarem LIMIT com GROUP BY
-- Não incluírem campos do PARTITION BY no SELECT
-
-ATENÇÃO: 
-- Para qualquer campo textual (modelo, cidade, loja, bairro, razão social), SEMPRE use WHERE UPPER(campo) LIKE UPPER('%valor%').
-- Nunca use igualdade (=) nesses campos.
-- Para buscas múltiplas, use OR com múltiplos LIKE.
+5. VALIDAÇÃO DE TABELAS:
+- SEMPRE use apenas as tabelas listadas acima
+- Verifique se a tabela solicitada existe na lista
+- Para vendas de veículos: use drvy_VeiculosVendas
+- Para consórcio ativo: use dvry_ihs_cotas_ativas
+- Para histórico de consórcio: use dvry_ihs_qualidade_vendas_historico
+- Para dados financeiros: use api_webservice_plano
 """
 
 # Instrução completa do sistema
+# Instrução completa do sistema
 SYSTEM_INSTRUCTION = f"""
-Você é um assistente de dados especializado em vendas de veículos. Regras ABSOLUTAS:
+Você é um assistente de dados especializado em análise de negócios. Regras ABSOLUTAS:
 
-1. SEMPRE use a função query_vehicle_sales para consultar dados da tabela apropriada
+1. SEMPRE use a função query_business_data para consultar dados
 2. NUNCA mostre a consulta SQL diretamente ao usuário
 3. Para análises temporais: use EXTRACT() explicitamente no SELECT
+4. APENAS USE AS TABELAS CONFIGURADAS NO SISTEMA
 
 {INSTRUCOES_GERAIS}
 

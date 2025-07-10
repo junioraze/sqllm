@@ -10,32 +10,41 @@ from datetime import datetime
 
 def initialize_model():
     """
-    Inicializa o modelo Gemini com instruções mais rígidas para múltiplas dimensões
+    Inicializa o modelo Gemini com instruções dinâmicas baseadas nas tabelas configuradas
     """
-    veiculos_vendas_func = FunctionDeclaration(
-        name="query_vehicle_sales",
-        description=(
-            "Consulta vendas de veículos no BigQuery. REGRAS ABSOLUTAS:\n"
-            "1. Para TOP N por grupo (ex: top 3 por estado) USE QUALIFY com PARTITION BY\n"
-            "2. NUNCA use LIMIT para consultas agrupadas\n"
-            "3. Para múltiplas dimensões inclua TODOS os campos do PARTITION BY no SELECT\n"
-            "4. Campos no GROUP BY DEVEM estar no SELECT\n\n"
-            "Exemplo CORRETO para top 3 modelos por estado:\n"
-            "{\n"
-            '  "table_name": "drvy_VeiculosVendas",\n'
-            '  "select": ["modelo", "uf", "SUM(QTE) AS total"],\n'
-            '  "where": "EXTRACT(YEAR FROM dta_venda) = 2024",\n'
-            '  "group_by": ["modelo", "uf"],\n'
-            '  "order_by": ["uf", "total DESC"],\n'
-            '  "qualify": "ROW_NUMBER() OVER (PARTITION BY uf ORDER BY total DESC) <= 3"\n'
-            "}"
-        ),
+    
+    # Constrói a descrição dinamicamente baseada nas tabelas disponíveis
+    tables_description = "Consulta dados no BigQuery. Tabelas disponíveis:\n"
+    for table_name, config in TABLES_CONFIG.items():
+        tables_description += f"- {table_name}: {config['description']}\n"
+    
+    tables_description += (
+        "\nREGRAS ABSOLUTAS:\n"
+        "1. Para TOP N por grupo (ex: top 3 por estado) USE QUALIFY com PARTITION BY\n"
+        "2. NUNCA use LIMIT para consultas agrupadas\n"
+        "3. Para múltiplas dimensões inclua TODOS os campos do PARTITION BY no SELECT\n"
+        "4. Campos no GROUP BY DEVEM estar no SELECT\n"
+        "5. SEMPRE use a tabela correta baseada na pergunta do usuário\n\n"
+        "Exemplo CORRETO para top 3 modelos por estado:\n"
+        "{\n"
+        '  "table_name": "drvy_VeiculosVendas",\n'
+        '  "select": ["modelo", "uf", "SUM(QTE) AS total"],\n'
+        '  "where": "EXTRACT(YEAR FROM dta_venda) = 2024",\n'
+        '  "group_by": ["modelo", "uf"],\n'
+        '  "order_by": ["uf", "total DESC"],\n'
+        '  "qualify": "ROW_NUMBER() OVER (PARTITION BY uf ORDER BY total DESC) <= 3"\n'
+        "}"
+    )
+    
+    query_func = FunctionDeclaration(
+        name="query_business_data",
+        description=tables_description,
         parameters={
             "type": "object",
             "properties": {
                 "table_name": {
                     "type": "string",
-                    "description": "Nome da tabela no BigQuery que contém os dados.",
+                    "description": f"Nome da tabela no BigQuery. Opções: {', '.join(TABLES_CONFIG.keys())}",
                     "enum": list(TABLES_CONFIG.keys())
                 },
                 "select": {
@@ -70,7 +79,7 @@ def initialize_model():
         },
     )
 
-    veiculos_tool = Tool(function_declarations=[veiculos_vendas_func])
+    business_tool = Tool(function_declarations=[query_func])
 
     generation_config = {
         "temperature": 0.5,
@@ -79,7 +88,7 @@ def initialize_model():
 
     return genai.GenerativeModel(
         MODEL_NAME,
-        tools=[veiculos_tool],
+        tools=[business_tool],
         system_instruction=SYSTEM_INSTRUCTION,
         generation_config=generation_config,
     )
@@ -158,6 +167,10 @@ def refine_with_gemini(
        - Só gere gráficos se e somente se for solicitado a gerar (usando formato GRAPH-TYPE)
        - Só gere arquivos excel/xlsx ou csv se o usuário solicitar explicitamente (usando palavras como exportar, baixar, excel, planilha, csv).
        - Atenção à formatação para evitar erros de markdown.
+
+    IMPORTANTE: Os dados fornecidos são FINAIS e COMPLETOS. NÃO tente solicitar dados adicionais, 
+    fazer comparações com períodos não presentes nos dados, ou sugerir que faltam informações 
+    se a pergunta pode ser respondida com os dados disponíveis.
 
     PERGUNTA DO USUÁRIO: "{prompt}"
 
@@ -273,3 +286,82 @@ def refine_with_gemini(
     }
     #response_text = re.sub(r"GRAPH-TYPE:.*", "", response_text).strip()
     return response_text, tech_details
+
+
+def should_reuse_data(model, current_prompt: str, last_data: dict, user_history: list = None) -> dict:
+    """
+    Pergunta ao Gemini se deve reutilizar os dados da última consulta
+    considerando o histórico do usuário
+    Retorna um dict com 'should_reuse': bool e 'reason': str
+    """
+    if not last_data.get("raw_data") or not last_data.get("prompt"):
+        return {"should_reuse": False, "reason": "Nenhum dado anterior disponível"}
+    
+    # Constrói contexto do histórico recente (últimas 5 interações)
+    history_context = ""
+    if user_history:
+        recent_history = user_history[-5:]  # Últimas 5 interações
+        history_items = []
+        for interaction in recent_history:
+            history_items.append(f"- {interaction.get('user_prompt', 'N/A')}")
+        if history_items:
+            history_context = f"\nHISTÓRICO RECENTE:\n" + "\n".join(history_items) + "\n"
+    
+    context_prompt = f"""
+Analise se a nova pergunta pode ser respondida REUTILIZANDO os dados da consulta anterior:
+{history_context}
+PERGUNTA ANTERIOR: "{last_data.get('prompt', '')}"
+NOVA PERGUNTA: "{current_prompt}"
+
+DADOS DISPONÍVEIS: {len(last_data.get('raw_data', []))} registros da última consulta
+
+Considere que deve REUTILIZAR APENAS quando:
+- Solicita exportação (Excel, CSV) dos MESMOS dados já consultados
+- Pede análise textual adicional dos MESMOS dados (resumo, insights, interpretação)
+- Quer visualização (gráfico) dos MESMOS dados já consultados
+- Reformulação da resposta sobre os MESMOS dados
+- Pergunta complementar que NÃO requer novos dados ou filtros
+
+NÃO deve reutilizar quando:
+- Pede dados de período diferente (ex: 2023 vs 2024)
+- Solicita filtros diferentes (ex: estado diferente, produto diferente)
+- Quer comparar com outros dados (ex: "compare com 2024")
+- Agregação ou manipulação de dados (ex: "some com", "compare", "adicione")
+- Pergunta que requer nova consulta SQL
+- Mudança de escopo ou contexto
+- Qualquer solicitação que envolva NOVOS dados ou DIFERENTES critérios
+
+REGRA CRÍTICA: Em caso de DÚVIDA, sempre escolha NÃO REUTILIZAR. É melhor fazer nova consulta do que tentar manipular dados existentes, pois isso aumenta a complexidade e pode gerar resultados incorretos.
+
+IMPORTANTE: Considere o histórico para entender se a nova pergunta é continuação simples (reutilizar) ou nova necessidade de dados (nova consulta).
+
+Responda APENAS no formato JSON válido:
+{{"should_reuse": true, "reason": "explicação clara"}}
+ou
+{{"should_reuse": false, "reason": "explicação clara"}}
+"""
+
+    try:
+        # Usa um modelo simples só para avaliação, sem tools
+        evaluation_model = genai.GenerativeModel(
+            MODEL_NAME,
+            generation_config={"temperature": 0.1, "max_output_tokens": 100}
+        )
+        
+        response = evaluation_model.generate_content(context_prompt)
+        response_text = response.text.strip()
+        
+        # Tenta extrair JSON da resposta
+        if "{" in response_text and "}" in response_text:
+            json_start = response_text.find("{")
+            json_end = response_text.rfind("}") + 1
+            json_str = response_text[json_start:json_end]
+            result = json.loads(json_str)
+            return result
+        else:
+            return {"should_reuse": False, "reason": "Resposta inválida do modelo"}
+            
+    except Exception as e:
+        print(f"Erro na avaliação de reutilização: {str(e)}")
+        # Em caso de erro, não reutiliza por segurança
+        return {"should_reuse": False, "reason": f"Erro na avaliação: {str(e)}"}

@@ -157,6 +157,16 @@ def create_tech_details_spoiler(tech_details: dict) -> str:
         return ""
     content = "### Detalhes Técnicos\n\n"
     
+    # Informações sobre reutilização de dados
+    if tech_details.get("reuse_info"):
+        reuse_info = tech_details["reuse_info"]
+        if reuse_info.get("reused"):
+            content += "**🔄 Dados Reutilizados:**\n"
+            content += f"- Motivo: {reuse_info.get('reason', 'N/A')}\n"
+            content += f"- Consulta original: {reuse_info.get('original_prompt', 'N/A')}\n\n"
+        else:
+            content += "**🆕 Nova Consulta Realizada**\n\n"
+    
     if tech_details.get("function_params"):
         content += "**Parâmetros da Função:**\n```json\n"
         serialized_params = serialize_params(tech_details["function_params"])
