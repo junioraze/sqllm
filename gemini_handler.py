@@ -24,7 +24,15 @@ def initialize_model():
         "2. NUNCA use LIMIT para consultas agrupadas\n"
         "3. Para múltiplas dimensões inclua TODOS os campos do PARTITION BY no SELECT\n"
         "4. Campos no GROUP BY DEVEM estar no SELECT\n"
-        "5. SEMPRE use a tabela correta baseada na pergunta do usuário\n\n"
+        "5. SEMPRE use a tabela correta baseada na pergunta do usuário\n"
+        "6. 🔴 GRÁFICOS TEMPORAIS - REGRA CRÍTICA:\n"
+        "   Para análises temporais (vendas por mês/ano, evolução temporal), SEMPRE crie uma coluna de data contínua:\n"
+        "   - NUNCA use EXTRACT(MONTH FROM data) - quebra continuidade temporal\n"
+        "   - USE: CONCAT(EXTRACT(YEAR FROM data), '-', LPAD(EXTRACT(MONTH FROM data), 2, '0')) AS periodo_mes\n"
+        "   - OU: FORMAT_DATE('%Y-%m', data) AS periodo_mes\n"
+        "   - OU: FORMAT_DATE('%Y-%m-%d', data) AS periodo_dia (para dados diários)\n"
+        "   - OU: EXTRACT(YEAR FROM data) AS ano (apenas para dados anuais)\n"
+        "   Isso garante visualização correta em gráficos de linha temporal!\n\n"
         "Exemplo CORRETO para top 3 modelos por estado:\n"
         "{\n"
         '  "table_name": "drvy_VeiculosVendas",\n'
@@ -33,6 +41,14 @@ def initialize_model():
         '  "group_by": ["modelo", "uf"],\n'
         '  "order_by": ["uf", "total DESC"],\n'
         '  "qualify": "ROW_NUMBER() OVER (PARTITION BY uf ORDER BY total DESC) <= 3"\n'
+        "}\n\n"
+        "Exemplo CORRETO para vendas mensais (gráfico temporal):\n"
+        "{\n"
+        '  "table_name": "drvy_VeiculosVendas",\n'
+        '  "select": ["FORMAT_DATE(\'%Y-%m\', dta_venda) AS periodo_mes", "SUM(QTE) AS total_vendas"],\n'
+        '  "where": "EXTRACT(YEAR FROM dta_venda) = 2024",\n'
+        '  "group_by": ["FORMAT_DATE(\'%Y-%m\', dta_venda)"],\n'
+        '  "order_by": ["periodo_mes"]\n'
         "}"
     )
     

@@ -119,6 +119,39 @@ INSTRUÇÕES ADICIONAIS PARA QUALIFY E AGRUPAMENTO:
 - Para agrupar por ano: inclua "EXTRACT(YEAR FROM dta_venda) AS ano" no SELECT
 - Referencie esses campos no GROUP BY como "mes" ou "ano"
 
+⚠️ INSTRUÇÕES ESPECIAIS PARA GRÁFICOS TEMPORAIS:
+Quando o usuário solicitar gráficos que abrangem múltiplos anos (ex: 2024 e 2025):
+🔴 REGRA CRÍTICA - SEMPRE crie coluna de data contínua:
+- NUNCA use apenas EXTRACT(MONTH FROM dta_venda) - quebra continuidade temporal no gráfico
+- SEMPRE use: FORMAT_DATE('%Y-%m', dta_venda) AS periodo_mes
+- OU: CONCAT(EXTRACT(YEAR FROM dta_venda), '-', LPAD(EXTRACT(MONTH FROM dta_venda), 2, '0')) AS periodo_mes
+- Para dados diários: FORMAT_DATE('%Y-%m-%d', dta_venda) AS periodo_dia
+- Para dados anuais apenas: EXTRACT(YEAR FROM dta_venda) AS ano
+
+EXEMPLO CORRETO para vendas mensais (gráfico de linha temporal):
+{
+  "select": [
+    "FORMAT_DATE('%Y-%m', dta_venda) AS periodo_mes",
+    "SUM(QTE) AS vendas_totais"
+  ],
+  "group_by": ["FORMAT_DATE('%Y-%m', dta_venda)"],
+  "order_by": ["periodo_mes"]
+}
+
+EXEMPLO CORRETO para vendas mensais por cidade (3 dimensões):
+{
+  "select": [
+    "FORMAT_DATE('%Y-%m', dta_venda) AS periodo_mes",
+    "cidade",
+    "SUM(QTE) AS vendas"
+  ],
+  "group_by": ["FORMAT_DATE('%Y-%m', dta_venda)", "cidade"],
+  "order_by": ["periodo_mes", "cidade"]
+}
+
+Para gráfico: X-AXIS: periodo_mes | Y-AXIS: vendas_totais | COLOR: cidade (se 3+ dimensões)
+Isso garante linha temporal contínua nos gráficos!
+
 2. PARA TOP N POR GRUPO:
 - Use "qualify" com: "ROW_NUMBER() OVER (PARTITION BY [grupo] ORDER BY [métrica] DESC) <= N"
 - Para múltiplas dimensões: PARTITION BY deve incluir todas as dimensões de agrupamento
