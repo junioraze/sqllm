@@ -365,7 +365,7 @@ ou
         # Usa um modelo simples só para avaliação, sem tools
         evaluation_model = genai.GenerativeModel(
             MODEL_NAME,
-            generation_config={"temperature": 0.0, "max_output_tokens": 200}  # Mais tokens para processar instruções complexas
+            generation_config={"temperature": 0.5, "max_output_tokens": 200}  # Mais tokens para processar instruções complexas
         )
         
         response = evaluation_model.generate_content(context_prompt)
