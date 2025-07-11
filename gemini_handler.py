@@ -315,25 +315,45 @@ NOVA PERGUNTA: "{current_prompt}"
 
 DADOS DISPONÍVEIS: {len(last_data.get('raw_data', []))} registros da última consulta
 
-Considere que deve REUTILIZAR APENAS quando:
-- Solicita exportação (Excel, CSV) dos MESMOS dados já consultados
-- Pede análise textual adicional dos MESMOS dados (resumo, insights, interpretação)
-- Quer visualização (gráfico) dos MESMOS dados já consultados
-- Reformulação da resposta sobre os MESMOS dados
-- Pergunta complementar que NÃO requer novos dados ou filtros
+🔴 REGRA FUNDAMENTAL: SEJA EXTREMAMENTE CONSERVADOR na reutilização!
 
-NÃO deve reutilizar quando:
-- Pede dados de período diferente (ex: 2023 vs 2024)
-- Solicita filtros diferentes (ex: estado diferente, produto diferente)
-- Quer comparar com outros dados (ex: "compare com 2024")
-- Agregação ou manipulação de dados (ex: "some com", "compare", "adicione")
-- Pergunta que requer nova consulta SQL
-- Mudança de escopo ou contexto
-- Qualquer solicitação que envolva NOVOS dados ou DIFERENTES critérios
+✅ REUTILIZAR APENAS nos casos ÓBVIOS de exportação/visualização:
+- "gerar excel", "exportar csv", "baixar planilha" dos MESMOS dados EXATOS
+- "criar gráfico", "fazer visualização" dos MESMOS dados EXATOS
+- "mostrar em tabela", "formatar em HTML" dos MESMOS dados EXATOS
+- Reformulação simples da mesma resposta (sem mudança de dados)
 
-REGRA CRÍTICA: Em caso de DÚVIDA, sempre escolha NÃO REUTILIZAR. É melhor fazer nova consulta do que tentar manipular dados existentes, pois isso aumenta a complexidade e pode gerar resultados incorretos.
+❌ NUNCA REUTILIZAR quando houver QUALQUER tipo de:
+- CONTAGEM: "conte", "contar", "quantos", "contagem" → SQL COUNT()
+- AGREGAÇÃO: "some", "total", "média", "máximo", "mínimo" → SQL SUM(), AVG(), MAX(), MIN()
+- AGRUPAMENTO: "por modelo", "por categoria", "por ano" → SQL GROUP BY
+- ORDENAÇÃO diferente: "mais vendidos", "ranking" → SQL ORDER BY
+- CÁLCULOS: "porcentagem", "percentual", "proporção" → SQL com cálculos
+- FILTROS adicionais: "apenas Honda", "só 2024" → SQL WHERE
+- COMPARAÇÕES: "compare", "versus", "diferença" → SQL JOINS/UNION
+- PERÍODOS diferentes: qualquer ano/mês/data diferente
+- LOCAIS diferentes: qualquer estado/cidade/região diferente
+- PRODUTOS/MODELOS diferentes ou específicos
+- Palavras como: "também", "além disso", "inclua", "mostre mais"
+- Qualquer palavra que indica TRANSFORMAÇÃO dos dados
 
-IMPORTANTE: Considere o histórico para entender se a nova pergunta é continuação simples (reutilizar) ou nova necessidade de dados (nova consulta).
+🚨 CASOS CRÍTICOS QUE SEMPRE REQUEREM NOVA CONSULTA:
+- "conte os modelos" → SQL: SELECT modelo, COUNT(*) ... GROUP BY modelo
+- "quantos por estado" → SQL: SELECT estado, COUNT(*) ... GROUP BY estado  
+- "total de vendas" → SQL: SELECT SUM(quantidade) ...
+- "modelos mais vendidos" → SQL: ... ORDER BY vendas DESC
+- "apenas Honda" → SQL: ... WHERE marca = 'Honda'
+- "dados de 2024" → SQL: ... WHERE ano = 2024
+
+LEMBRE-SE: O BigQuery é MUITO mais eficiente para agregações/contagens/filtros 
+do que tentar fazer isso localmente com os dados já retornados!
+
+EXEMPLOS PRÁTICOS:
+✅ "gere um excel desses dados" → REUTILIZAR (exportação)
+❌ "conte os modelos" → NOVA CONSULTA (COUNT + GROUP BY)
+❌ "quantos Honda?" → NOVA CONSULTA (COUNT + WHERE)
+❌ "mais vendidos primeiro" → NOVA CONSULTA (ORDER BY)
+❌ "total geral" → NOVA CONSULTA (SUM)
 
 Responda APENAS no formato JSON válido:
 {{"should_reuse": true, "reason": "explicação clara"}}
@@ -345,7 +365,7 @@ ou
         # Usa um modelo simples só para avaliação, sem tools
         evaluation_model = genai.GenerativeModel(
             MODEL_NAME,
-            generation_config={"temperature": 0.1, "max_output_tokens": 100}
+            generation_config={"temperature": 0.0, "max_output_tokens": 200}  # Mais tokens para processar instruções complexas
         )
         
         response = evaluation_model.generate_content(context_prompt)

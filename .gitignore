@@ -14,3 +14,7 @@ venv/
 # Ignore coverage reports
 *.coverage
 .env
+cache.db
+# Ignore DuckDB files   
+*.duckdb
+# Ignore SQL files      

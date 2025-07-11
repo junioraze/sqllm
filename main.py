@@ -63,34 +63,30 @@ def safe_serialize_data(data):
     return data
 
 # ====================================================================
-# REUTILIZAÇÃO INTELIGENTE DE DADOS
+# REUTILIZAÇÃO ULTRA-CONSERVADORA DE DADOS
 # ====================================================================
 # 
-# DECISÃO BASEADA EM IA (Gemini) 🧠:
-# O próprio Gemini analisa o contexto completo da conversa e decide
-# se a nova pergunta pode ser respondida com os dados já consultados
-# ou se precisa de uma nova consulta SQL.
+# DECISÃO BASEADA EM IA (Gemini) 🧠 - MODO CONSERVADOR:
+# O Gemini analisa o contexto e decide se pode reutilizar dados, mas
+# com uma abordagem EXTREMAMENTE conservadora para evitar problemas.
 #
-# REUTILIZAR ✅ (exemplos que o Gemini identifica):
-# - User: "Demonstre os modelos vendidos no ceará em 2023" 
-# - User: "Gere um Excel desses dados" → REUTILIZA (análise: exportação dos mesmos dados)
-# - User: "Qual modelo teve mais vendas?" → REUTILIZA (análise: pergunta sobre dados existentes)
-# - User: "Crie um gráfico desses dados" → REUTILIZA (análise: visualização dos dados existentes)
-# - User: "Me dê mais detalhes sobre esses resultados" → REUTILIZA (análise: elaboração sobre dados existentes)
+# ✅ REUTILIZAR APENAS (casos óbvios de exportação/visualização):
+# - "gere um Excel desses dados" → REUTILIZA (exportação simples)
+# - "criar gráfico desses dados" → REUTILIZA (visualização simples)  
+# - "mostrar em tabela HTML" → REUTILIZA (formatação simples)
+# - "mais detalhes sobre esses resultados" → REUTILIZA (elaboração simples)
 #
-# NOVA CONSULTA ❌ (exemplos que o Gemini identifica):
-# - User: "Demonstre os modelos vendidos no ceará em 2023"
-# - User: "Compare com as vendas de 2024" → NOVA CONSULTA (análise: precisa de dados de 2024)
-# - User: "Some com os dados de SP" → NOVA CONSULTA (análise: precisa de dados de SP)
-# - User: "Mostre só os modelos Honda" → NOVA CONSULTA (análise: filtro diferente)
-# - User: "Qual foi o total de vendas em 2022?" → NOVA CONSULTA (análise: período diferente)
+# ❌ NOVA CONSULTA SEMPRE (casos que requerem SQL):
+# - "compare com 2024" → NOVA CONSULTA (dados diferentes)
+# - "mostre também SP" → NOVA CONSULTA (filtro adicional)
+# - "calcule a porcentagem" → NOVA CONSULTA (deixa SQL calcular)
+# - "qual modelo vendeu mais?" → NOVA CONSULTA (pode não estar nos dados)
+# - "some com janeiro" → NOVA CONSULTA (agregação)
+# - Qualquer manipulação, agregação, comparação, filtro adicional
 #
-# VANTAGENS DESTA ABORDAGEM:
-# - Decisão contextual inteligente sem regras hardcoded
-# - Compreensão natural da linguagem do usuário
-# - Flexibilidade para casos não previstos
-# - Evita complexidade de manipulação de dados no frontend
-# - Garante que comparações e agregações sejam feitas com SQL otimizado
+# 🔴 FILOSOFIA: EM CASO DE DÚVIDA, SEMPRE NOVA CONSULTA!
+# Melhor fazer SQL otimizado do que manipular dados localmente.
+# Isso garante precisão e evita complexidade desnecessária.
 # ====================================================================
 
 # Configuração do rate limit (100 requisições por dia)
