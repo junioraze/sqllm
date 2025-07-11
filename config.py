@@ -16,7 +16,35 @@ def load_tables_config():
         print(f"Erro ao decodificar tables_config.json: {e}")
         return {}
 
+def load_client_config():
+    """Carrega a configuração específica do cliente do arquivo JSON"""
+    try:
+        with open("client_config.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print("Arquivo client_config.json não encontrado, usando configuração padrão")
+        return {
+            "app_title": "Sistema de Análise de Dados",
+            "app_subtitle": "Assistente de IA para análise de dados",
+            "business_domain": "dados",
+            "data_source": "tabelas configuradas",
+            "rate_limit_description": "requisições",
+            "examples": ["- Exemplo de pergunta"],
+            "limitations": {
+                "data_access": "Este assistente só pode consultar as tabelas configuradas no sistema.",
+                "cross_reference": "Não é possível acessar ou cruzar dados de outras tabelas ou fontes externas.",
+                "single_query": "Apenas uma consulta por vez é permitida.",
+                "temporal_comparisons": "Para comparações temporais, utilize perguntas claras.",
+                "model_understanding": "O modelo pode não compreender perguntas muito vagas.",
+                "data_freshness": "Resultados são baseados nos dados mais recentes disponíveis."
+            }
+        }
+    except json.JSONDecodeError as e:
+        print(f"Erro ao decodificar client_config.json: {e}")
+        return {}
+
 TABLES_CONFIG = load_tables_config()
+CLIENT_CONFIG = load_client_config()
 
 # Projeto e dataset
 PROJECT_ID = os.getenv("PROJECT_ID")

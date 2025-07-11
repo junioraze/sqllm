@@ -1,103 +1,164 @@
-# SQL Talk Extended Conjecto: Natural Language to BigQuery with Gemini's Function Calling
+# 🚀 Sistema de Análise de Dados com IA - Configuração para Clientes
 
-|           |                                                     |
-| --------- | --------------------------------------------------- |
-| Author(s) | [Kristopher Overholt](https://github.com/koverholt) |
-| Extender | [Helmiton Junior](https://github.com/junioraze)
+Este sistema é completamente desacoplado e reutilizável para diferentes clientes. Siga as instruções abaixo para configurar para um novo cliente.
 
-# Consultas Inteligentes de Vendas de Veículos
+## 📋 Arquivos de Configuração
 
-Este projeto é uma aplicação Streamlit que permite ao usuário consultar, comparar e analisar dados de vendas de veículos utilizando linguagem natural. O sistema utiliza o modelo Gemini (Google Generative AI) com function calling para interpretar perguntas, gerar queries SQL dinâmicas para BigQuery e retornar respostas analíticas e explicativas, inclusive para comparações temporais e agrupamentos.
-
-## Principais Funcionalidades
-
-- **Consultas por linguagem natural:** Pergunte em português sobre vendas, modelos, regiões, períodos, etc.
-- **Comparações temporais:** Compare períodos, anos, meses, UFs, modelos ou lojas facilmente.
-- **Agrupamentos dinâmicos:** Agrupe resultados por ano, mês, UF, modelo ou loja.
-- **Respostas analíticas:** O modelo Gemini refina e explica os resultados, entregando insights claros e estruturados.
-- **Interface amigável:** Visualização de perguntas e respostas em formato de chat, com histórico.
-
-## Como Funciona
-
-1. O usuário faz uma pergunta sobre vendas de veículos na interface Streamlit.
-2. O Gemini interpreta a pergunta e, se necessário, solicita uma consulta SQL via function calling.
-3. O backend executa a query no BigQuery e retorna os dados.
-4. O resultado é enviado de volta ao Gemini, junto com a pergunta e as instruções do sistema, para que ele gere uma resposta analítica, comparativa e didática.
-5. A resposta final é exibida ao usuário, junto com a tabela de dados.
-
-## Requisitos
-
-- Python 3.9+
-- Conta Google Cloud com acesso ao BigQuery
-- Credenciais de serviço do Google Cloud (JSON)
-- Dependências Python (veja abaixo)
-
-## Instalação
-
-1. Clone este repositório:
-    ```bash
-    git clone https://github.com/seu-usuario/seu-repo.git
-    cd seu-repo/python/sqllm
-    ```
-
-2. Instale as dependências:
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-3. Configure as variáveis de ambiente:
-    - Crie um arquivo `.env` na raiz do projeto.  
-      **O arquivo `.env` já está configurado para não expor nenhuma informação sensível.**  
-      Exemplo de conteúdo:
-      ```
-      GOOGLE_APPLICATION_CREDENTIALS=/caminho/para/seu/arquivo-credencial.json
-      ```
-
-4. Ajuste o arquivo `add_instructions.py` conforme necessário para refletir as regras e descrições dos campos da sua tabela.
-
-## Como Executar
-
-```bash
-streamlit run app.py
+### 1. `client_config.json` - Configuração Visual e Textual
+```json
+{
+  "app_title": "Nome do Sistema do Cliente",
+  "app_subtitle": "Subtítulo para a tela de login", 
+  "business_domain": "domínio de negócio (ex: vendas, financeiro)",
+  "data_source": "descrição da fonte de dados",
+  "rate_limit_description": "tipo de requisições",
+  "examples": [
+    "- Exemplo de pergunta 1",
+    "- Exemplo de pergunta 2", 
+    "- Exemplo de pergunta 3"
+  ],
+  "limitations": {
+    "data_access": "Texto sobre acesso aos dados",
+    "cross_reference": "Texto sobre limitações de cruzamento",
+    "single_query": "Texto sobre consultas simultâneas",
+    "temporal_comparisons": "Texto sobre comparações temporais",
+    "model_understanding": "Texto sobre compreensão do modelo", 
+    "data_freshness": "Texto sobre atualização dos dados"
+  }
+}
 ```
 
-Acesse a interface no navegador pelo endereço exibido no terminal (geralmente http://localhost:8501).
+### 2. `tables_config.json` - Configuração das Tabelas
+```json
+{
+  "nome_da_tabela": {
+    "description": "Descrição da tabela para o Gemini",
+    "instructions": "Instruções específicas da tabela",
+    "examples": [
+      "Exemplo de uso 1",
+      "Exemplo de uso 2"
+    ]
+  }
+}
+```
 
-## Exemplos de Perguntas
+### 3. `credentials.json` - Credenciais de Acesso
+```json
+{
+  "login": "email@cliente.com",
+  "password": "senha_cliente"
+}
+```
 
-- `Qual o total vendido em 2024?`
-- `Quais os modelos mais vendidos por UF?`
-- `Total vendido por UF e mês em 2023`
-- `Total vendido por modelo em janeiro de 2024 na loja 5`
-- `Compare as vendas de 2023 e 2024 por mês`
+### 4. `.env` - Variáveis de Ambiente
+```
+PROJECT_ID=projeto-bigquery
+DATASET_ID=dataset_cliente
+DATASET_LOG_ID=logs_cliente
+MODEL_NAME=gemini-1.5-pro
+CLIENTE_NAME=NomeCliente
+MAX_REQUEST_DAY=100
+GOOGLE_APPLICATION_CREDENTIALS=caminho/para/service-account.json
+```
 
-## Estrutura do Projeto
+## 🔧 Configuração para Novo Cliente
 
-📂 sqllm/
-├── 📄 __init__.py
-├── 📄 add_instructions.py # Instruções extras
-├── 📄 main.py             # Ponto de entrada principal
-├── 📄 database.py         # Funções de banco de dados
-├── 📄 gemini_handler.py   # Lógica de interação com o Gemini
-├── 📄 utils.py            # Funções utilitárias
-└── 📄 config.py           # Configurações e constantes
+### Passo 1: Copie o Template
+```bash
+cp client_config_template.json client_config.json
+```
 
-## Observações Técnicas
+### Passo 2: Personalize client_config.json
+- Altere `app_title` para o nome do sistema do cliente
+- Ajuste `business_domain` para o domínio específico (vendas, estoque, etc.)
+- Modifique `examples` com perguntas relevantes aos dados do cliente
+- Personalize todas as `limitations` conforme necessário
 
-- O modelo Gemini é utilizado com function calling para garantir precisão na geração de queries SQL.
-- O sistema só permite agrupamentos e filtros por ano, mês, UF, modelo e loja, conforme regras de negócio.
-- O resultado das queries é enviado de volta ao Gemini para refino e explicação, garantindo respostas analíticas e didáticas.
-- O histórico do chat é mantido para melhor experiência do usuário.
-- O arquivo `.env` está preparado para não expor dados sensíveis.
+### Passo 3: Configure as Tabelas
+- Edite `tables_config.json` com as tabelas específicas do cliente
+- Adicione descrições detalhadas e instruções para cada tabela
+- Inclua exemplos de uso relevantes
 
-## Contribuição
+### Passo 4: Configure Credenciais e Ambiente
+- Atualize `credentials.json` com login/senha do cliente
+- Configure `.env` com projeto BigQuery e dataset do cliente
+- Configure service account do Google Cloud
 
-Contribuições são bem-vindas! Abra uma issue ou envie um pull request.
+### Passo 5: Teste a Configuração
+```bash
+python main.py
+```
 
-## Licença
+## 📁 Estrutura de Arquivos para Cliente
 
-Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](../LICENSE) para mais detalhes.
+```
+sqllm/
+├── main.py                     # Código principal (não modificar)
+├── config.py                   # Carregamento de configs (não modificar)
+├── client_config.json          # ✏️ PERSONALIZAR POR CLIENTE
+├── tables_config.json          # ✏️ PERSONALIZAR POR CLIENTE  
+├── credentials.json            # ✏️ PERSONALIZAR POR CLIENTE
+├── .env                        # ✏️ PERSONALIZAR POR CLIENTE
+├── gemini_handler.py           # Código IA (não modificar)
+├── database.py                 # Código SQL (não modificar)
+├── cache_db.py                 # Código cache (não modificar)
+├── utils.py                    # Utilitários (não modificar)
+├── style.py                    # Estilos (não modificar)
+├── rate_limit.py               # Rate limit (não modificar)
+└── logger.py                   # Logs (não modificar)
+```
 
----
+## ✅ Vantagens do Desacoplamento
 
-Se tiver dúvidas ou sugestões, fique à vontade para abrir uma issue ou entrar em contato.
+1. **Reutilização Total**: O mesmo código serve para qualquer cliente
+2. **Facilidade de Deploy**: Apenas troque os arquivos de configuração  
+3. **Manutenção Simples**: Updates no core beneficiam todos os clientes
+4. **Personalização Completa**: Cada cliente tem sua identidade visual/textual
+5. **Versionamento Limpo**: Sem código específico de cliente no repositório
+
+## 🎯 Exemplos de Configuração por Indústria
+
+### E-commerce
+```json
+{
+  "business_domain": "vendas online e produtos",
+  "examples": [
+    "- Quais produtos mais vendidos em 2024?",
+    "- Compare vendas por categoria mensalmente",
+    "- Demonstre o faturamento por região"
+  ]
+}
+```
+
+### Financeiro
+```json
+{
+  "business_domain": "transações financeiras",
+  "examples": [
+    "- Qual o volume de transações por mês?",
+    "- Compare receitas vs despesas em 2024",
+    "- Demonstre o fluxo de caixa por categoria"
+  ]
+}
+```
+
+### RH
+```json
+{
+  "business_domain": "recursos humanos e colaboradores", 
+  "examples": [
+    "- Quantos colaboradores por departamento?",
+    "- Compare turnover entre 2023 e 2024",
+    "- Demonstre a distribuição salarial por cargo"
+  ]
+}
+```
+
+## 🚀 Deploy Rápido
+
+Para cada novo cliente, apenas:
+1. Clone o repositório
+2. Configure os 4 arquivos personalizáveis
+3. Execute o sistema
+
+**Tempo estimado de configuração: 15-30 minutos** ⚡

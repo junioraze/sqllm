@@ -1,17 +1,18 @@
 import streamlit as st
 
-# DEVE SER O PRIMEIRO COMANDO STREAMLIT
-st.set_page_config(
-    page_title="VIAQUEST Insights (Sales)", 
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
-
 # Agora importe os outros módulos
 import json
 import os
 from cache_db import save_interaction, log_error, get_user_history
-from config import MAX_RATE_LIMIT, DATASET_ID, PROJECT_ID, TABLES_CONFIG  # Importa a configuração do assistente
+from config import MAX_RATE_LIMIT, DATASET_ID, PROJECT_ID, TABLES_CONFIG, CLIENT_CONFIG  # Importa a configuração do assistente
+
+# DEVE SER O PRIMEIRO COMANDO STREAMLIT (após importações)
+st.set_page_config(
+    page_title=CLIENT_CONFIG.get("app_title", "Sistema de Análise de Dados"), 
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
 from style import MOBILE_IFRAME_BASE  # Importa o módulo de estilos
 from gemini_handler import initialize_model, refine_with_gemini, should_reuse_data
 from database import build_query, execute_query
@@ -121,7 +122,7 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.title("Login VIAQUEST Insights")
+    st.title(f"Login {CLIENT_CONFIG.get('app_subtitle', 'Sistema de Análise')}")
     login = st.text_input("E-mail", value="", key="login_input")
     password = st.text_input("Senha", type="password", key="password_input")
     if st.button("Entrar"):
@@ -135,31 +136,31 @@ if not st.session_state.authenticated:
 # Container principal para todo o conteúdo
 with st.container():
     
-    st.title("VIAQUEST Insights (Sales) - Agentes de IA para a área Comercial")
+    st.title(CLIENT_CONFIG.get("app_title", "Sistema de Análise de Dados"))
 
     with st.expander("⚠️ Limitações e Regras do Assistente (clique para ver)", expanded=False):
+        limitations = CLIENT_CONFIG.get("limitations", {})
         st.markdown(
             f"""
-            - Este assistente **só pode consultar a tabela de vendas de veículos** configurada no sistema.
-            - **Não é possível acessar ou cruzar dados de outras tabelas** ou fontes externas.
-            - **Apenas uma consulta por vez** é permitida. Não é possível realizar múltiplas buscas simultâneas.
-            - Para comparações temporais, utilize perguntas claras (ex: "Compare as vendas de 2023 e 2024 por mês").
-            - O modelo pode não compreender perguntas muito vagas ou fora do escopo dos dados disponíveis.
-            - Resultados são sempre baseados nos dados mais recentes disponíveis na tabela.
-            - **Limite diário de requisições: {MAX_RATE_LIMIT}**. Se atingido, você receberá uma mensagem de aviso.
+            - {limitations.get("data_access", "Este assistente só pode consultar as tabelas configuradas no sistema.")}
+            - {limitations.get("cross_reference", "Não é possível acessar ou cruzar dados de outras tabelas ou fontes externas.")}
+            - {limitations.get("single_query", "Apenas uma consulta por vez é permitida.")}
+            - {limitations.get("temporal_comparisons", "Para comparações temporais, utilize perguntas claras.")}
+            - {limitations.get("model_understanding", "O modelo pode não compreender perguntas muito vagas.")}
+            - {limitations.get("data_freshness", "Resultados são baseados nos dados mais recentes disponíveis.")}
+            - **Limite diário de {CLIENT_CONFIG.get('rate_limit_description', 'requisições')}: {MAX_RATE_LIMIT}**. Se atingido, você receberá uma mensagem de aviso.
             > Para detalhes técnicos, consulte a documentação ou o spoiler abaixo.
             """
         )
 
-    # Exemplos de perguntas (restaurado)
+    # Exemplos de perguntas (configuráveis)
     if "chat_history" not in st.session_state or len(st.session_state.chat_history) == 0:
-        st.write("Faça perguntas sobre vendas de veículos. Exemplos:")
-        st.code(
-            """- Qual o total vendido em 2024?
-- Compare as vendas entre os meses existentes de 2023 e 2024. 
-- Demonstre os modelos vendidos no ceara em 2023?
-"""
-        )
+        business_domain = CLIENT_CONFIG.get("business_domain", "dados")
+        st.write(f"Faça perguntas sobre {business_domain}. Exemplos:")
+        
+        examples = CLIENT_CONFIG.get("examples", ["- Exemplo de pergunta"])
+        examples_text = "\n".join(examples)
+        st.code(examples_text)
 
     # Inicialização do modelo e estado da sessão
     if "model" not in st.session_state:
