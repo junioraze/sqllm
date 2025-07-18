@@ -37,7 +37,8 @@ def load_client_config():
                 "temporal_comparisons": "Para comparações temporais, utilize perguntas claras.",
                 "model_understanding": "O modelo pode não compreender perguntas muito vagas.",
                 "data_freshness": "Resultados são baseados nos dados mais recentes disponíveis."
-            }
+            },
+            "error_message": "Não foi possível processar sua solicitação no momento. Nossa equipe técnica foi notificada e está analisando a situação. Tente reformular sua pergunta ou entre em contato conosco."
         }
     except json.JSONDecodeError as e:
         print(f"Erro ao decodificar client_config.json: {e}")
@@ -85,7 +86,9 @@ INSTRUÇÕES PARA ANÁLISE DE DADOS:
 - Use CASE WHEN para tratamento seguro:
   CASE WHEN vendas_anterior > 0 THEN (vendas_atual - vendas_anterior)/vendas_anterior ELSE NULL END
 - Para rankings de crescimento, sempre inclua HAVING crescimento IS NOT NULL
-9. TABELAS DISPONÍVEIS - USE APENAS ESTAS TABELAS:
+9. Sempre, de forma Imprescindível inclua os nomes das tabelas na instrução sql no formato: {PROJECT_ID}.{DATASET_ID}.nome_da_tabela
+   Exemplo: {PROJECT_ID}.{DATASET_ID}.algum_nome_de_tabela_especificado_abaixo
+10. TABELAS DISPONÍVEIS - USE APENAS ESTAS TABELAS:
 """
 
 def build_tables_instruction():

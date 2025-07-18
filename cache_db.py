@@ -93,7 +93,7 @@ def save_interaction(
     return interaction_id
 
 def get_user_history(user_id: str, limit: int = 15) -> List[Dict]:
-    """Recupera o histórico do usuário"""
+    """Recupera o histórico do usuário com amostra dos dados para eficiência"""
     with get_connection() as conn:
         result = conn.execute("""
             SELECT id, timestamp, question, function_params, query_sql, 
@@ -106,6 +106,10 @@ def get_user_history(user_id: str, limit: int = 15) -> List[Dict]:
         
         history = []
         for row in result:
+            # Otimização: para o histórico, inclui apenas amostra dos dados (primeiras 5 linhas)
+            raw_data = json.loads(row[5]) if row[5] else None
+            sample_data = raw_data[:5] if raw_data and isinstance(raw_data, list) else raw_data
+            
             history.append({
                 'id': row[0],
                 'timestamp': row[1],
@@ -113,13 +117,26 @@ def get_user_history(user_id: str, limit: int = 15) -> List[Dict]:
                 'user_prompt': row[2],  # Adiciona o campo user_prompt para compatibilidade
                 'function_params': json.loads(row[3]) if row[3] else None,
                 'query_sql': row[4],
-                'raw_data': json.loads(row[5]) if row[5] else None,
+                'raw_data_sample': sample_data,  # Apenas amostra para análise
+                'raw_data_count': len(raw_data) if raw_data and isinstance(raw_data, list) else 0,
                 'refined_response': row[6],
                 'tech_details': json.loads(row[7]) if row[7] else None,
                 'reused_from': row[8]
             })
         
         return history
+
+def get_interaction_full_data(interaction_id: str) -> Optional[List]:
+    """Recupera os dados completos de uma interação específica"""
+    with get_connection() as conn:
+        result = conn.execute("""
+            SELECT raw_data FROM user_interactions 
+            WHERE id = ? AND status = 'OK'
+        """, (interaction_id,)).fetchone()
+        
+        if result and result[0]:
+            return json.loads(result[0])
+        return None
 
 def find_reusable(user_id: str, question: str) -> Optional[Dict]:
     """Busca interações que podem ser reutilizadas"""

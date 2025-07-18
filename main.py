@@ -1,10 +1,12 @@
 import streamlit as st
-
-# Agora importe os outros módulos
 import json
 import os
-from cache_db import save_interaction, log_error, get_user_history
+import traceback
+from cache_db import save_interaction, log_error, get_user_history, get_interaction_full_data
 from config import MAX_RATE_LIMIT, DATASET_ID, PROJECT_ID, TABLES_CONFIG, CLIENT_CONFIG  # Importa a configuração do assistente
+
+# Mensagem padrão para erros (nunca mostrar detalhes técnicos ao usuário)
+STANDARD_ERROR_MESSAGE = CLIENT_CONFIG.get("error_message", "Não foi possível processar sua solicitação no momento. Nossa equipe técnica foi notificada e está analisando a situação. Tente reformular sua pergunta ou entre em contato conosco.")
 
 # DEVE SER O PRIMEIRO COMANDO STREAMLIT (após importações)
 st.set_page_config(
@@ -16,103 +18,18 @@ st.set_page_config(
 from style import MOBILE_IFRAME_BASE  # Importa o módulo de estilos
 from gemini_handler import initialize_model, refine_with_gemini, should_reuse_data
 from database import build_query, execute_query
-from utils import display_message_with_spoiler, slugfy_response
+from utils import display_message_with_spoiler, slugfy_response, safe_serialize_gemini_params, safe_serialize_data, safe_serialize_tech_details
 from rate_limit import RateLimiter
 from logger import log_interaction
 
-def safe_serialize_gemini_params(params):
-    """
-    Serializa parâmetros do Gemini de forma segura, lidando com RepeatedComposite e outros tipos
-    """
-    if params is None:
-        return None
-        
-    serializable = {}
-    
-    for key, value in params.items():
-        try:
-            # Tenta serializar diretamente primeiro
-            json.dumps(value)
-            serializable[key] = value
-        except (TypeError, ValueError):
-            # Se falhar, converte para tipos básicos
-            if hasattr(value, '__iter__') and not isinstance(value, (str, bytes)):
-                # É uma lista/sequência
-                serializable[key] = list(value)
-            else:
-                # Converte para string como fallback
-                serializable[key] = str(value)
-    
-    return serializable
-
-def safe_serialize_data(data):
-    """
-    Serializa dados de forma segura para JSON
-    """
-    if data is None:
-        return None
-        
-    if isinstance(data, list):
-        return [
-            {
-                k: str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v
-                for k, v in item.items()
-            }
-            for item in data
-        ]
-    
-    return data
-
-# ====================================================================
-# REUTILIZAÇÃO ULTRA-CONSERVADORA DE DADOS
-# ====================================================================
-# 
-# DECISÃO BASEADA EM IA (Gemini) 🧠 - MODO CONSERVADOR:
-# O Gemini analisa o contexto e decide se pode reutilizar dados, mas
-# com uma abordagem EXTREMAMENTE conservadora para evitar problemas.
-#
-# ✅ REUTILIZAR APENAS (casos óbvios de exportação/visualização):
-# - "gere um Excel desses dados" → REUTILIZA (exportação simples)
-# - "criar gráfico desses dados" → REUTILIZA (visualização simples)  
-# - "mostrar em tabela HTML" → REUTILIZA (formatação simples)
-# - "mais detalhes sobre esses resultados" → REUTILIZA (elaboração simples)
-#
-# ❌ NOVA CONSULTA SEMPRE (casos que requerem SQL):
-# - "compare com 2024" → NOVA CONSULTA (dados diferentes)
-# - "mostre também SP" → NOVA CONSULTA (filtro adicional)
-# - "calcule a porcentagem" → NOVA CONSULTA (deixa SQL calcular)
-# - "qual modelo vendeu mais?" → NOVA CONSULTA (pode não estar nos dados)
-# - "some com janeiro" → NOVA CONSULTA (agregação)
-# - Qualquer manipulação, agregação, comparação, filtro adicional
-#
-# 🔴 FILOSOFIA: EM CASO DE DÚVIDA, SEMPRE NOVA CONSULTA!
-# Melhor fazer SQL otimizado do que manipular dados localmente.
-# Isso garante precisão e evita complexidade desnecessária.
-# ====================================================================
-
 # Configuração do rate limit (100 requisições por dia)
 rate_limiter = RateLimiter(max_requests_per_day=MAX_RATE_LIMIT)
-#Inicializa variáveis para armazenar os dados
-refined_response = None
-serializable_params = None
-serializable_data = None
-tech_details = None
-query = None
+
 # Variável para controlar a exibição de detalhes técnicos
 SHOW_TECHNICAL_SPOILER = True  # Defina como True para mostrar detalhes técnicos
 
 # Configuração de estilos para mobile
 st.markdown(MOBILE_IFRAME_BASE, unsafe_allow_html=True)
-
-if "last_data" not in st.session_state:
-    st.session_state.last_data = {
-        "raw_data": None,
-        "params": None,
-        "query": None,
-        "tech_details": None,
-        "prompt": None,
-        "df": None  # Novo: DataFrame para exportação
-    }
 
 # Carrega as credenciais do arquivo
 with open(os.path.join(os.path.dirname(__file__), "credentials.json"), "r") as f:
@@ -169,13 +86,15 @@ with st.container():
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
-    if "last_data" not in st.session_state:
-        st.session_state.last_data = {
-            "raw_data": None,
-            "params": None,
-            "query": None,
+    # Inicializa variáveis de sessão para armazenar os dados (isolamento multi-usuário)
+    if "current_interaction" not in st.session_state:
+        st.session_state.current_interaction = {
+            "refined_response": None,
+            "serializable_params": None,
+            "serializable_data": None,
             "tech_details": None,
-            "prompt": None,
+            "query": None,
+            "raw_response": None
         }
 
     # Exibe o histórico de chat
@@ -211,63 +130,80 @@ if prompt:
             # Verifica se deve reutilizar dados usando inteligência do Gemini
             # O Gemini analisa o contexto completo e decide se os dados existentes são suficientes
             should_reuse = False
-            if st.session_state.last_data["raw_data"] is not None:
+            if user_history:  # Só verifica reutilização se houver histórico
                 reuse_decision = should_reuse_data(
                     st.session_state.model,
                     prompt,
-                    st.session_state.last_data,
                     user_history
                 )
                 should_reuse = reuse_decision.get("should_reuse", False)
             
             if should_reuse:
-                # Reutiliza os dados da última consulta baseado na decisão do Gemini
+                # Reutiliza dados baseado na decisão do Gemini - busca dados completos pelo ID
                 with st.spinner("Processando com dados anteriores..."):
-                    # Usa os dados já disponíveis
-                    serializable_data = safe_serialize_data(st.session_state.last_data["raw_data"])
+                    # Busca o ID da interação a ser reutilizada
+                    interaction_id = reuse_decision.get("interaction_id")
                     
-                    refined_response, tech_details = refine_with_gemini(
-                        prompt,
-                        serializable_data,
-                        st.session_state.last_data["params"],
-                        st.session_state.last_data["query"],
-                    )
+                    if interaction_id:
+                        # Busca os dados completos da interação específica
+                        full_data = get_interaction_full_data(interaction_id)
+                        if full_data:
+                            st.session_state.current_interaction["serializable_data"] = safe_serialize_data(full_data)
+                            # Busca metadados da interação para o refine_with_gemini
+                            reused_interaction = next((item for item in user_history if item.get('id') == interaction_id), None)
+                            reused_params = reused_interaction.get('function_params') if reused_interaction else None
+                            reused_query = reused_interaction.get('query_sql') if reused_interaction else None
+                        else:
+                            # Se não encontrar dados, força nova consulta
+                            should_reuse = False
+                    else:
+                        # Se não tiver ID, força nova consulta
+                        should_reuse = False
                     
-                    # Adiciona informação sobre reutilização nos detalhes técnicos
-                    if tech_details:
-                        tech_details["reuse_info"] = {
-                            "reused": True,
-                            "reason": reuse_decision.get("reason", "Decisão inteligente do Gemini"),
-                            "original_prompt": st.session_state.last_data["prompt"]
-                        }
+                    if should_reuse:  # Verifica novamente após validações
+                        st.session_state.current_interaction["refined_response"], st.session_state.current_interaction["tech_details"] = refine_with_gemini(
+                            prompt,
+                            st.session_state.current_interaction["serializable_data"],
+                            reused_params,
+                            reused_query,
+                        )
+                        
+                        # Adiciona informação sobre reutilização nos detalhes técnicos
+                        if st.session_state.current_interaction["tech_details"]:
+                            st.session_state.current_interaction["tech_details"]["reuse_info"] = {
+                                "reused": True,
+                                "reason": reuse_decision.get("reason", "Decisão inteligente do Gemini"),
+                                "original_prompt": reused_interaction.get('user_prompt') if reused_interaction else "N/A",
+                                "interaction_id": interaction_id
+                            }
 
-                # Atualiza o histórico
-                st.session_state.chat_history.append(
-                    {
-                        "role": "assistant",
-                        "content": refined_response,
-                        "tech_details": tech_details,
-                    }
-                )
+                        # Atualiza o histórico
+                        st.session_state.chat_history.append(
+                            {
+                                "role": "assistant",
+                                "content": st.session_state.current_interaction["refined_response"],
+                                "tech_details": st.session_state.current_interaction["tech_details"],
+                            }
+                        )
 
-                # Salva a interação de reutilização no cache
-                try:
-                    save_interaction(
-                        user_id=creds["login"],
-                        question=prompt,
-                        function_params=safe_serialize_gemini_params(st.session_state.last_data["params"]),
-                        query_sql=st.session_state.last_data["query"],
-                        raw_data=serializable_data,
-                        raw_response=None,
-                        refined_response=refined_response,
-                        tech_details=tech_details,
-                        status="OK",
-                        reused_from=st.session_state.last_data.get("prompt")
-                    )
-                except Exception as cache_error:
-                    print(f"Erro ao salvar no cache (reutilização): {cache_error}")
-                    
-            else:
+                        # Salva a interação de reutilização no cache
+                        try:
+                            save_interaction(
+                                user_id=creds["login"],
+                                question=prompt,
+                                function_params=safe_serialize_gemini_params(reused_params),
+                                query_sql=reused_query,
+                                raw_data=st.session_state.current_interaction["serializable_data"],
+                                raw_response=None,
+                                refined_response=st.session_state.current_interaction["refined_response"],
+                                tech_details=safe_serialize_tech_details(st.session_state.current_interaction["tech_details"]),
+                                status="OK",
+                                reused_from=reused_interaction.get('user_prompt') if reused_interaction else "N/A"
+                            )
+                        except Exception as cache_error:
+                            print(f"Erro ao salvar no cache (reutilização): {cache_error}")
+                            
+            if not should_reuse:
                 # Processa uma nova consulta
                 convo = st.session_state.model.start_chat(
                     history=[
@@ -294,30 +230,137 @@ if prompt:
                         params = function_call.args
 
                         # Serialização SEGURA dos parâmetros usando função especializada
-                        serializable_params = safe_serialize_gemini_params(params)
+                        st.session_state.current_interaction["serializable_params"] = safe_serialize_gemini_params(params)
 
-                        # Obter nome da tabela e construir full_table_id
-                        table_name = serializable_params.get("table_name")
-                        if table_name not in TABLES_CONFIG.keys():
-                            st.error(f"Tabela {table_name} não configurada")
-                            st.stop()
+                        # Obter e validar o full_table_id
+                        full_table_id = st.session_state.current_interaction["serializable_params"].get("full_table_id")
+                        if not full_table_id:
+                            # NUNCA mostrar erro técnico ao usuário - salvar no BigQuery e DuckDB para análise
+                            error_details = f"Missing full_table_id in parameters: {st.session_state.current_interaction['serializable_params']}"
                             
-                        full_table_id = f"{PROJECT_ID}.{DATASET_ID}.{table_name}"
+                            # Log no BigQuery (para controle geral)
+                            log_interaction(
+                                user_input=prompt,
+                                function_params=st.session_state.current_interaction["serializable_params"],
+                                query=None,
+                                raw_data=None,
+                                raw_response=None,
+                                refined_response=STANDARD_ERROR_MESSAGE,
+                                first_ten_table_lines=None,
+                                graph_data=None,
+                                export_data=None,
+                                status="ERROR",
+                                status_msg=error_details,
+                                client_request_count=rate_limiter.state["count"],
+                                custom_fields={
+                                    "error_type": "missing_full_table_id",
+                                    "function_params": st.session_state.current_interaction["serializable_params"]
+                                }
+                            )
+                            
+                            # Log específico de erro no DuckDB (para análise detalhada)
+                            log_error(
+                                user_id=creds["login"],
+                                error_type="missing_full_table_id",
+                                error_message=error_details,
+                                context=f"User request: {prompt} | Function params: {json.dumps(st.session_state.current_interaction['serializable_params'])}",
+                                traceback=None
+                            )
+                            
+                            st.session_state.chat_history.append(
+                                {"role": "assistant", "content": STANDARD_ERROR_MESSAGE}
+                            )
+                            st.rerun()
+
+                        # Validar se o full_table_id é válido (formato correto)
+                        expected_full_table_ids = [f"{PROJECT_ID}.{DATASET_ID}.{table_name}" for table_name in TABLES_CONFIG.keys()]
+                        if full_table_id not in expected_full_table_ids:
+                            # NUNCA mostrar erro técnico ao usuário - salvar no BigQuery e DuckDB para análise
+                            error_details = f"Invalid full_table_id: {full_table_id} | Available tables: {expected_full_table_ids}"
+                            
+                            # Log no BigQuery (para controle geral)
+                            log_interaction(
+                                user_input=prompt,
+                                function_params=st.session_state.current_interaction["serializable_params"],
+                                query=None,
+                                raw_data=None,
+                                raw_response=None,
+                                refined_response=STANDARD_ERROR_MESSAGE,
+                                first_ten_table_lines=None,
+                                graph_data=None,
+                                export_data=None,
+                                status="ERROR",
+                                status_msg=error_details,
+                                client_request_count=rate_limiter.state["count"],
+                                custom_fields={
+                                    "error_type": "invalid_full_table_id",
+                                    "requested_full_table_id": full_table_id,
+                                    "available_full_table_ids": expected_full_table_ids
+                                }
+                            )
+                            
+                            # Log específico de erro no DuckDB (para análise detalhada)
+                            log_error(
+                                user_id=creds["login"],
+                                error_type="invalid_full_table_id",
+                                error_message=error_details,
+                                context=f"User request: {prompt} | Function params: {json.dumps(st.session_state.current_interaction['serializable_params'])}",
+                                traceback=None
+                            )
+                            
+                            st.session_state.chat_history.append(
+                                {"role": "assistant", "content": STANDARD_ERROR_MESSAGE}
+                            )
+                            st.rerun()
                         
                         # Construir e executar query
-                        query = build_query(full_table_id, serializable_params)
-                        raw_data = execute_query(query)
+                        st.session_state.current_interaction["query"] = build_query(st.session_state.current_interaction["serializable_params"])
+                        raw_data = execute_query(st.session_state.current_interaction["query"])
 
                         if "error" in raw_data:
+                            # NUNCA mostrar erro técnico ao usuário - salvar no BigQuery e DuckDB para análise
+                            error_details = f"Query Error: {raw_data['error']}"
+                            failed_query = raw_data.get('query', 'N/A')
+                            
+                            # Log no BigQuery (para controle geral)
+                            log_interaction(
+                                user_input=prompt,
+                                function_params=st.session_state.current_interaction["serializable_params"],
+                                query=st.session_state.current_interaction["query"] if st.session_state.current_interaction["query"] else None,
+                                raw_data=None,
+                                raw_response=None,
+                                refined_response=STANDARD_ERROR_MESSAGE,
+                                first_ten_table_lines=None,
+                                graph_data=None,
+                                export_data=None,
+                                status="ERROR",
+                                status_msg=f"{error_details} | Query: {failed_query}",
+                                client_request_count=rate_limiter.state["count"],
+                                custom_fields={
+                                    "error_type": "query_execution_error",
+                                    "error_details": raw_data['error'],
+                                    "failed_query": failed_query
+                                }
+                            )
+                            
+                            # Log específico de erro no DuckDB (para análise detalhada)
+                            log_error(
+                                user_id=creds["login"],
+                                error_type="query_execution_error",
+                                error_message=error_details,
+                                context=f"User request: {prompt} | Failed Query: {failed_query} | Function params: {json.dumps(st.session_state.current_interaction['serializable_params'])}",
+                                traceback=raw_data['error']
+                            )
+                            
                             st.session_state.chat_history.append(
                                 {
                                     "role": "assistant",
-                                    "content": f"Erro na consulta:\n{raw_data['error']}\n\nQuery:\n```sql\n{raw_data['query']}\n```",
+                                    "content": STANDARD_ERROR_MESSAGE,
                                 }
                             )
                         else:
                             # Converte os dados de retorno para um formato serializável SEGURO
-                            serializable_data = safe_serialize_data(raw_data)
+                            st.session_state.current_interaction["serializable_data"] = safe_serialize_data(raw_data)
 
                             # Atualiza a mensagem de processamento
                             processing_msg.chat_message("assistant").markdown(
@@ -325,30 +368,21 @@ if prompt:
                             )
 
                             # Refina a resposta com o Gemini
-                            refined_response, tech_details = refine_with_gemini(
-                                prompt, serializable_data, serializable_params, query
+                            st.session_state.current_interaction["refined_response"], st.session_state.current_interaction["tech_details"] = refine_with_gemini(
+                                prompt, st.session_state.current_interaction["serializable_data"], st.session_state.current_interaction["serializable_params"], st.session_state.current_interaction["query"]
                             )
-
-                            # Atualiza o histórico e os últimos dados
-                            st.session_state.last_data = {
-                                "raw_data": serializable_data,
-                                "params": serializable_params,
-                                "query": query,
-                                "tech_details": tech_details,
-                                "prompt": prompt,
-                            }
 
                             # Salva a interação no cache
                             try:
                                 save_interaction(
                                     user_id=creds["login"],
                                     question=prompt,
-                                    function_params=serializable_params,
-                                    query_sql=query,
-                                    raw_data=serializable_data,
+                                    function_params=st.session_state.current_interaction["serializable_params"],
+                                    query_sql=st.session_state.current_interaction["query"],
+                                    raw_data=st.session_state.current_interaction["serializable_data"],
                                     raw_response=None,  # Será definido abaixo
-                                    refined_response=refined_response,
-                                    tech_details=tech_details,
+                                    refined_response=st.session_state.current_interaction["refined_response"],
+                                    tech_details=safe_serialize_tech_details(st.session_state.current_interaction["tech_details"]),
                                     status="OK"
                                 )
                             except Exception as cache_error:
@@ -359,8 +393,8 @@ if prompt:
                             st.session_state.chat_history.append(
                                 {
                                     "role": "assistant",
-                                    "content": slugfy_response(refined_response),
-                                    "tech_details": tech_details,
+                                    "content": slugfy_response(st.session_state.current_interaction["refined_response"]),
+                                    "tech_details": st.session_state.current_interaction["tech_details"],
                                 }
                             )
                 else:
@@ -371,75 +405,82 @@ if prompt:
                     )
                 
             # Inicializa variáveis para o log (caso de nova consulta sem function call)
-            if 'serializable_params' not in locals():
-                serializable_params = None
-            if 'query' not in locals():
-                query = None
-            if 'serializable_data' not in locals():
-                serializable_data = None
-            if 'refined_response' not in locals():
-                refined_response = None
-            if 'tech_details' not in locals():
-                tech_details = None
+            # Usa session state para garantir isolamento multi-usuário
+            current_serializable_params = st.session_state.current_interaction.get("serializable_params")
+            current_query = st.session_state.current_interaction.get("query")
+            current_serializable_data = st.session_state.current_interaction.get("serializable_data")
+            current_refined_response = st.session_state.current_interaction.get("refined_response")
+            current_tech_details = st.session_state.current_interaction.get("tech_details")
                     
             # Regra para a estranha manipulação de response por parte do gemini
             try:
                 if 'response' in locals():
-                    raw_response = response.text
+                    current_raw_response = response.text
                 else:
-                    raw_response = None
+                    current_raw_response = None
             except (AttributeError, ValueError):
-                raw_response = None
+                current_raw_response = None
 
             # Força atualização da tela
             log_interaction(
                 user_input=prompt,
-                function_params=serializable_params,
-                query=query if query else None,
-                raw_data=serializable_data if serializable_data else None,
-                raw_response=raw_response,
-                refined_response=refined_response,
-                first_ten_table_lines=serializable_data[:10] if serializable_data else None,
-                graph_data=tech_details.get("chart_info")  if tech_details and tech_details.get("chart_info") else None,
-                export_data=tech_details.get("export_info") if tech_details and tech_details.get("export_info") else None,  # Preencha se houver exportação de dados
+                function_params=current_serializable_params,
+                query=current_query if current_query else None,
+                raw_data=current_serializable_data if current_serializable_data else None,
+                raw_response=current_raw_response,
+                refined_response=current_refined_response,
+                first_ten_table_lines=current_serializable_data[:10] if current_serializable_data else None,
+                graph_data=current_tech_details.get("chart_info") if current_tech_details and current_tech_details.get("chart_info") else None,
+                export_data=current_tech_details.get("export_info") if current_tech_details and current_tech_details.get("export_info") else None,
                 status="OK",
                 status_msg=f"Consulta processada com sucesso.",
                 client_request_count=rate_limiter.state["count"],
-                custom_fields=None,  # Use se quiser logar algo extra
+                custom_fields=None,
             )
             st.rerun()
 
         except Exception as e:
-            # Inicializa variáveis para o log em caso de erro
-            if 'serializable_params' not in locals():
-                serializable_params = None
-            if 'query' not in locals():
-                query = None
-            if 'serializable_data' not in locals():
-                serializable_data = None
-            if 'raw_response' not in locals():
-                raw_response = None
-            if 'refined_response' not in locals():
-                refined_response = None
-            if 'tech_details' not in locals():
-                tech_details = None
+            # Usa session state para garantir isolamento multi-usuário
+            current_serializable_params = st.session_state.current_interaction.get("serializable_params")
+            current_query = st.session_state.current_interaction.get("query")
+            current_serializable_data = st.session_state.current_interaction.get("serializable_data")
+            current_refined_response = st.session_state.current_interaction.get("refined_response")
+            current_tech_details = st.session_state.current_interaction.get("tech_details")
+            current_raw_response = st.session_state.current_interaction.get("raw_response")
                 
+            error_details = f"Exception: {str(e)} | Type: {type(e).__name__}"
+            
+            # Log no BigQuery (para controle geral)
             log_interaction(
                 user_input=prompt,
-                function_params=serializable_params,
-                query=query if query else None,
-                raw_data=serializable_data if serializable_data else None,
-                raw_response=raw_response,
-                refined_response=refined_response if refined_response else None,
+                function_params=current_serializable_params,
+                query=current_query if current_query else None,
+                raw_data=current_serializable_data if current_serializable_data else None,
+                raw_response=current_raw_response,
+                refined_response=STANDARD_ERROR_MESSAGE,
                 first_ten_table_lines=None,
-                graph_data=tech_details.get("chart_info") if tech_details and tech_details.get("chart_info") else None,
-                export_data=tech_details.get("export_info") if tech_details and tech_details.get("export_info") else None,
+                graph_data=current_tech_details.get("chart_info") if current_tech_details and current_tech_details.get("chart_info") else None,
+                export_data=current_tech_details.get("export_info") if current_tech_details and current_tech_details.get("export_info") else None,
                 status="ERROR",
-                status_msg=str(e),
+                status_msg=error_details,
                 client_request_count=rate_limiter.state["count"],
-                custom_fields=None,
+                custom_fields={
+                    "error_type": "general_exception",
+                    "error_details": str(e),
+                    "exception_type": type(e).__name__
+                }
             )
+            
+            # Log específico de erro no DuckDB (para análise detalhada)
+            log_error(
+                user_id=creds["login"],
+                error_type="general_exception",
+                error_message=str(e),
+                context=f"User request: {prompt} | Exception type: {type(e).__name__}",
+                traceback=traceback.format_exc()
+            )
+            
             st.session_state.chat_history.append(
-                {"role": "assistant", "content": f"Ocorreu um erro: {str(e)}"}
+                {"role": "assistant", "content": STANDARD_ERROR_MESSAGE}
             )
             st.rerun()

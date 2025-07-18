@@ -195,3 +195,72 @@ def create_tech_details_spoiler(tech_details: dict) -> str:
             content += f"- {fmt.upper()}: {filename}\n"
     
     return content
+
+
+def safe_serialize_gemini_params(params):
+    """
+    Serializa parâmetros do Gemini para JSON, lidando com tipos complexos.
+    """
+    if params is None:
+        return None
+    if hasattr(params, "_values"):
+        params = {k: v for k, v in params.items()}
+    elif not isinstance(params, dict):
+        params = dict(params)
+    
+    serializable = {}
+    for k, v in params.items():
+        try:
+            json.dumps(v)
+            serializable[k] = v
+        except (TypeError, ValueError):
+            serializable[k] = str(v)
+    return serializable
+
+
+def safe_serialize_data(data):
+    """
+    Serializa dados para JSON, convertendo tipos problemáticos.
+    """
+    if data is None:
+        return None
+    if isinstance(data, list):
+        return [safe_serialize_data(item) for item in data]
+    if isinstance(data, dict):
+        serializable = {}
+        for k, v in data.items():
+            try:
+                json.dumps(v)
+                serializable[k] = v
+            except (TypeError, ValueError):
+                serializable[k] = str(v)
+        return serializable
+    try:
+        json.dumps(data)
+        return data
+    except (TypeError, ValueError):
+        return str(data)
+
+
+def safe_serialize_tech_details(tech_details):
+    """
+    Serializa detalhes técnicos removendo objetos não serializáveis como Figure.
+    """
+    if not tech_details:
+        return None
+    
+    # Copia o dicionário para não modificar o original
+    safe_details = tech_details.copy()
+    
+    # Remove a figura do Plotly se existir (não é serializável)
+    if safe_details.get("chart_info") and safe_details["chart_info"].get("fig"):
+        # Mantém apenas os metadados do gráfico, remove a figura
+        safe_details["chart_info"] = {
+            "type": safe_details["chart_info"].get("type"),
+            "x": safe_details["chart_info"].get("x"),
+            "y": safe_details["chart_info"].get("y"),
+            "color": safe_details["chart_info"].get("color")
+        }
+    
+    # Serializa recursivamente outros campos
+    return safe_serialize_data(safe_details)

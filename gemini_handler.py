@@ -1,6 +1,6 @@
 import google.generativeai as genai
 from google.generativeai.types import Tool, FunctionDeclaration
-from config import MODEL_NAME, SYSTEM_INSTRUCTION, TABLES_CONFIG
+from config import MODEL_NAME, SYSTEM_INSTRUCTION, TABLES_CONFIG, PROJECT_ID, DATASET_ID
 import re
 import json
 import pandas as pd
@@ -13,10 +13,14 @@ def initialize_model():
     Inicializa o modelo Gemini com instruções dinâmicas baseadas nas tabelas configuradas
     """
     
-    # Constrói a descrição dinamicamente baseada nas tabelas disponíveis
+    # Constrói a descrição dinamicamente baseada nas tabelas disponíveis com full_table_id
     tables_description = "Consulta dados no BigQuery. Tabelas disponíveis:\n"
+    full_table_mapping = {}
+    
     for table_name, config in TABLES_CONFIG.items():
-        tables_description += f"- {table_name}: {config['description']}\n"
+        full_table_id = f"{PROJECT_ID}.{DATASET_ID}.{table_name}"
+        full_table_mapping[full_table_id] = table_name
+        tables_description += f"- {full_table_id}: {config['description']}\n"
     
     tables_description += (
         "\nREGRAS ABSOLUTAS:\n"
@@ -35,7 +39,7 @@ def initialize_model():
         "   Isso garante visualização correta em gráficos de linha temporal!\n\n"
         "Exemplo CORRETO para top 3 modelos por estado:\n"
         "{\n"
-        '  "table_name": "drvy_VeiculosVendas",\n'
+        f'  "full_table_id": "{PROJECT_ID}.{DATASET_ID}.drvy_VeiculosVendas",\n'
         '  "select": ["modelo", "uf", "SUM(QTE) AS total"],\n'
         '  "where": "EXTRACT(YEAR FROM dta_venda) = 2024",\n'
         '  "group_by": ["modelo", "uf"],\n'
@@ -44,7 +48,7 @@ def initialize_model():
         "}\n\n"
         "Exemplo CORRETO para vendas mensais (gráfico temporal):\n"
         "{\n"
-        '  "table_name": "drvy_VeiculosVendas",\n'
+        f'  "full_table_id": "{PROJECT_ID}.{DATASET_ID}.drvy_VeiculosVendas",\n'
         '  "select": ["FORMAT_DATE(\'%Y-%m\', dta_venda) AS periodo_mes", "SUM(QTE) AS total_vendas"],\n'
         '  "where": "EXTRACT(YEAR FROM dta_venda) = 2024",\n'
         '  "group_by": ["FORMAT_DATE(\'%Y-%m\', dta_venda)"],\n'
@@ -58,10 +62,10 @@ def initialize_model():
         parameters={
             "type": "object",
             "properties": {
-                "table_name": {
+                "full_table_id": {
                     "type": "string",
-                    "description": f"Nome da tabela no BigQuery. Opções: {', '.join(TABLES_CONFIG.keys())}",
-                    "enum": list(TABLES_CONFIG.keys())
+                    "description": f"ID completo da tabela no BigQuery (PROJECT.DATASET.TABLE). Opções: {', '.join(full_table_mapping.keys())}",
+                    "enum": list(full_table_mapping.keys())
                 },
                 "select": {
                     "type": "array",
@@ -91,7 +95,7 @@ def initialize_model():
                     "description": "USO PROIBIDO para consultas agrupadas - apenas para consultas simples",
                 },
             },
-            "required": ["table_name", "select"],
+            "required": ["full_table_id", "select"],
         },
     )
 
@@ -184,9 +188,14 @@ def refine_with_gemini(
        - Só gere arquivos excel/xlsx ou csv se o usuário solicitar explicitamente (usando palavras como exportar, baixar, excel, planilha, csv).
        - Atenção à formatação para evitar erros de markdown.
 
-    IMPORTANTE: Os dados fornecidos são FINAIS e COMPLETOS. NÃO tente solicitar dados adicionais, 
-    fazer comparações com períodos não presentes nos dados, ou sugerir que faltam informações 
-    se a pergunta pode ser respondida com os dados disponíveis.
+    🔴 IMPORTANTE: Os dados fornecidos foram FILTRADOS e PROCESSADOS pelo BigQuery conforme a consulta SQL executada.
+    Se a consulta SQL contém filtros (WHERE), os dados JÁ ESTÃO filtrados por esses critérios.
+    
+    CONSULTA SQL EXECUTADA: {query if query else "Consulta não disponível"}
+    FILTROS APLICADOS: {function_params.get('where', 'Nenhum filtro') if function_params else 'Não disponível'}
+
+    Os dados fornecidos são FINAIS e COMPLETOS para a pergunta feita. NÃO diga que faltam informações 
+    se a consulta SQL já aplicou os filtros necessários.
 
     PERGUNTA DO USUÁRIO: "{prompt}"
 
@@ -296,92 +305,86 @@ def refine_with_gemini(
         "function_params": function_params,
         "query": query,
         "raw_data": data,
-        "chart_info": chart_info,
+        "chart_info": {
+            "type": chart_info["type"],
+            "x": chart_info["x"],
+            "y": chart_info["y"],
+            "color": chart_info["color"],
+            # "fig" removido para evitar erro de serialização no cache
+        } if chart_info else None,
         "export_links": export_links,
         "export_info": export_info,
     }
+    
+    # Adicionar figura de volta ao chart_info para retorno (uso imediato)
+    if chart_info:
+        tech_details["chart_info"]["fig"] = chart_info["fig"]
+    
     #response_text = re.sub(r"GRAPH-TYPE:.*", "", response_text).strip()
     return response_text, tech_details
 
 
-def should_reuse_data(model, current_prompt: str, last_data: dict, user_history: list = None) -> dict:
+def should_reuse_data(model, current_prompt: str, user_history: list = None) -> dict:
     """
-    Pergunta ao Gemini se deve reutilizar os dados da última consulta
+    Pergunta ao Gemini se deve reutilizar os dados das últimas consultas
     considerando o histórico do usuário
     Retorna um dict com 'should_reuse': bool e 'reason': str
     """
-    if not last_data.get("raw_data") or not last_data.get("prompt"):
-        return {"should_reuse": False, "reason": "Nenhum dado anterior disponível"}
+    if not user_history:
+        return {"should_reuse": False, "reason": "Nenhum histórico disponível"}
     
-    # Constrói contexto do histórico recente (últimas 5 interações)
-    history_context = ""
-    if user_history:
-        recent_history = user_history[-5:]  # Últimas 5 interações
-        history_items = []
-        for interaction in recent_history:
-            history_items.append(f"- {interaction.get('user_prompt', 'N/A')}")
-        if history_items:
-            history_context = f"\nHISTÓRICO RECENTE:\n" + "\n".join(history_items) + "\n"
+    # Constrói contexto do histórico recente
+    history_items = []
+    for interaction in user_history:
+        data_summary = f" ({interaction.get('raw_data_count', 0)} registros)" if interaction.get('raw_data_count', 0) > 0 else ""
+        interaction_id = interaction.get('id', 'N/A')
+        history_items.append(f"- ID: {interaction_id} | {interaction.get('user_prompt', 'N/A')}{data_summary}")
+    
+    if not history_items:
+        return {"should_reuse": False, "reason": "Histórico vazio"}
+        
+    history_context = f"\nHISTÓRICO RECENTE (com IDs para referência):\n" + "\n".join(history_items) + "\n"
     
     context_prompt = f"""
-Analise se a nova pergunta pode ser respondida REUTILIZANDO os dados da consulta anterior:
-{history_context}
-PERGUNTA ANTERIOR: "{last_data.get('prompt', '')}"
+🚨 VALIDADOR INTELIGENTE DE REUTILIZAÇÃO DE DADOS 🚨
+
+MISSÃO: Analisar o histórico e determinar se alguma consulta anterior pode responder à nova pergunta.
+
 NOVA PERGUNTA: "{current_prompt}"
 
-DADOS DISPONÍVEIS: {len(last_data.get('raw_data', []))} registros da última consulta
+{history_context}
 
-🔴 REGRA FUNDAMENTAL: SEJA EXTREMAMENTE CONSERVADOR na reutilização!
+🧠 ANÁLISE INTELIGENTE - Examine o histórico e responda:
 
-✅ REUTILIZAR APENAS nos casos ÓBVIOS de exportação/visualização:
-- "gerar excel", "exportar csv", "baixar planilha" dos MESMOS dados EXATOS
-- "criar gráfico", "fazer visualização" dos MESMOS dados EXATOS
-- "mostrar em tabela", "formatar em HTML" dos MESMOS dados EXATOS
-- Reformulação simples da mesma resposta (sem mudança de dados)
+1. **QUANTIDADE**: Se a nova pergunta solicita mais registros do que qualquer consulta anterior retornou, é NOVA CONSULTA.
+   - Ex: Histórico mostra "5 registros" mas nova pergunta pede "20 modelos" → NOVA CONSULTA
+   - Ex: Histórico mostra "100 registros" mas nova pergunta pede "10 primeiros" → PODE REUTILIZAR
 
-❌ NUNCA REUTILIZAR quando houver QUALQUER tipo de:
-- CONTAGEM: "conte", "contar", "quantos", "contagem" → SQL COUNT()
-- AGREGAÇÃO: "some", "total", "média", "máximo", "mínimo" → SQL SUM(), AVG(), MAX(), MIN()
-- AGRUPAMENTO: "por modelo", "por categoria", "por ano" → SQL GROUP BY
-- ORDENAÇÃO diferente: "mais vendidos", "ranking" → SQL ORDER BY
-- CÁLCULOS: "porcentagem", "percentual", "proporção" → SQL com cálculos
-- FILTROS adicionais: "apenas Honda", "só 2024" → SQL WHERE
-- COMPARAÇÕES: "compare", "versus", "diferença" → SQL JOINS/UNION
-- PERÍODOS diferentes: qualquer ano/mês/data diferente
-- LOCAIS diferentes: qualquer estado/cidade/região diferente
-- PRODUTOS/MODELOS diferentes ou específicos
-- Palavras como: "também", "além disso", "inclua", "mostre mais"
-- Qualquer palavra que indica TRANSFORMAÇÃO dos dados
+2. **ESCOPO**: Se a nova pergunta muda filtros, período, ou critérios, é NOVA CONSULTA.
+   - Ex: Histórico de "todos estados" mas nova pergunta pede "só SP" → NOVA CONSULTA
+   - Ex: Histórico de "2023" mas nova pergunta pede "2024" → NOVA CONSULTA
 
-🚨 CASOS CRÍTICOS QUE SEMPRE REQUEREM NOVA CONSULTA:
-- "conte os modelos" → SQL: SELECT modelo, COUNT(*) ... GROUP BY modelo
-- "quantos por estado" → SQL: SELECT estado, COUNT(*) ... GROUP BY estado  
-- "total de vendas" → SQL: SELECT SUM(quantidade) ...
-- "modelos mais vendidos" → SQL: ... ORDER BY vendas DESC
-- "apenas Honda" → SQL: ... WHERE marca = 'Honda'
-- "dados de 2024" → SQL: ... WHERE ano = 2024
+3. **AGREGAÇÃO**: Se a nova pergunta pede cálculos diferentes dos já feitos, é NOVA CONSULTA.
+   - Ex: Histórico tem lista simples mas nova pergunta pede "total por categoria" → NOVA CONSULTA
 
-LEMBRE-SE: O BigQuery é MUITO mais eficiente para agregações/contagens/filtros 
-do que tentar fazer isso localmente com os dados já retornados!
+4. **VISUALIZAÇÃO/EXPORT**: Se a nova pergunta só quer apresentar os mesmos dados de forma diferente, PODE REUTILIZAR.
+   - Ex: "fazer gráfico", "exportar excel", "mostrar tabela" dos mesmos dados → REUTILIZAR
 
-EXEMPLOS PRÁTICOS:
-✅ "gere um excel desses dados" → REUTILIZAR (exportação)
-❌ "conte os modelos" → NOVA CONSULTA (COUNT + GROUP BY)
-❌ "quantos Honda?" → NOVA CONSULTA (COUNT + WHERE)
-❌ "mais vendidos primeiro" → NOVA CONSULTA (ORDER BY)
-❌ "total geral" → NOVA CONSULTA (SUM)
+🎯 DECISÃO:
+- Encontrou consulta anterior que responde à nova pergunta com dados suficientes? → REUTILIZAR (informe o ID)
+- Nova pergunta precisa de dados diferentes/mais dados? → NOVA CONSULTA
 
-Responda APENAS no formato JSON válido:
-{{"should_reuse": true, "reason": "explicação clara"}}
-ou
-{{"should_reuse": false, "reason": "explicação clara"}}
+Responda APENAS:
+{{"should_reuse": false, "reason": "nova pergunta requer dados diferentes/mais registros"}}
+OU
+{{"should_reuse": true, "reason": "consulta anterior contém dados suficientes", "interaction_id": "ID_da_consulta"}}
 """
 
     try:
         # Usa um modelo simples só para avaliação, sem tools
         evaluation_model = genai.GenerativeModel(
             MODEL_NAME,
-            generation_config={"temperature": 0.5, "max_output_tokens": 200}  # Mais tokens para processar instruções complexas
+            generation_config={"temperature": 0.3, "max_output_tokens": 150}
         )
         
         response = evaluation_model.generate_content(context_prompt)

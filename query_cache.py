@@ -79,7 +79,7 @@ def query_cache():
         
         if errors:
             for timestamp, user, error_type, error_msg in errors:
-                error_short = error_msg[:50] + "..." if len(error_msg) > 50 else error_msg
+                error_short = error_msg[:2000] + "..." if len(error_msg) > 2000 else error_msg
                 print(f"  [{timestamp}] {user} - {error_type}: {error_short}")
         else:
             print("  Nenhum erro registrado!")
