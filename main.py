@@ -124,6 +124,16 @@ if prompt:
         st.session_state.chat_history.append({"role": "user", "content": prompt})
 
         try:
+            # Limpa o estado da interação anterior para evitar contaminação
+            st.session_state.current_interaction = {
+                "refined_response": None,
+                "serializable_params": None,
+                "serializable_data": None,
+                "tech_details": None,
+                "query": None,
+                "raw_response": None
+            }
+            
             # Busca histórico do usuário para contexto na decisão de reutilização
             user_history = get_user_history(creds["login"])
             
@@ -358,6 +368,8 @@ if prompt:
                                     "content": STANDARD_ERROR_MESSAGE,
                                 }
                             )
+                            # Força atualização da tela e PARA o processamento aqui para evitar reutilização
+                            st.rerun()
                         else:
                             # Converte os dados de retorno para um formato serializável SEGURO
                             st.session_state.current_interaction["serializable_data"] = safe_serialize_data(raw_data)
@@ -421,22 +433,23 @@ if prompt:
             except (AttributeError, ValueError):
                 current_raw_response = None
 
-            # Força atualização da tela
-            log_interaction(
-                user_input=prompt,
-                function_params=current_serializable_params,
-                query=current_query if current_query else None,
-                raw_data=current_serializable_data if current_serializable_data else None,
-                raw_response=current_raw_response,
-                refined_response=current_refined_response,
-                first_ten_table_lines=current_serializable_data[:10] if current_serializable_data else None,
-                graph_data=current_tech_details.get("chart_info") if current_tech_details and current_tech_details.get("chart_info") else None,
-                export_data=current_tech_details.get("export_info") if current_tech_details and current_tech_details.get("export_info") else None,
-                status="OK",
-                status_msg=f"Consulta processada com sucesso.",
-                client_request_count=rate_limiter.state["count"],
-                custom_fields=None,
-            )
+            # Log apenas para casos de sucesso (não duplicar logs de erro)
+            if current_refined_response and current_serializable_data:
+                log_interaction(
+                    user_input=prompt,
+                    function_params=current_serializable_params,
+                    query=current_query if current_query else None,
+                    raw_data=current_serializable_data if current_serializable_data else None,
+                    raw_response=current_raw_response,
+                    refined_response=current_refined_response,
+                    first_ten_table_lines=current_serializable_data[:10] if current_serializable_data else None,
+                    graph_data=current_tech_details.get("chart_info") if current_tech_details and current_tech_details.get("chart_info") else None,
+                    export_data=current_tech_details.get("export_info") if current_tech_details and current_tech_details.get("export_info") else None,
+                    status="OK",
+                    status_msg=f"Consulta processada com sucesso.",
+                    client_request_count=rate_limiter.state["count"],
+                    custom_fields=None,
+                )
             st.rerun()
 
         except Exception as e:

@@ -369,26 +369,31 @@ NOVA PERGUNTA: "{current_prompt}"
 
 🧠 ANÁLISE INTELIGENTE - Examine o histórico e responda:
 
-1. **QUANTIDADE**: Se a nova pergunta solicita mais registros do que qualquer consulta anterior retornou, é NOVA CONSULTA.
+1. **COMPATIBILIDADE**: A nova pergunta é sobre o MESMO ASSUNTO da consulta anterior?
+   - Ex: Nova pergunta sobre "tempo médio" vs histórico sobre "montante de compras" → INCOMPATÍVEL → NOVA CONSULTA
+
+2. **QUANTIDADE**: Se a nova pergunta solicita mais registros do que qualquer consulta anterior retornou, é NOVA CONSULTA.
    - Ex: Histórico mostra "5 registros" mas nova pergunta pede "20 modelos" → NOVA CONSULTA
    - Ex: Histórico mostra "100 registros" mas nova pergunta pede "10 primeiros" → PODE REUTILIZAR
 
-2. **ESCOPO**: Se a nova pergunta muda filtros, período, ou critérios, é NOVA CONSULTA.
+3. **ESCOPO**: Se a nova pergunta muda filtros, período, ou critérios, é NOVA CONSULTA.
    - Ex: Histórico de "todos estados" mas nova pergunta pede "só SP" → NOVA CONSULTA
    - Ex: Histórico de "2023" mas nova pergunta pede "2024" → NOVA CONSULTA
 
-3. **AGREGAÇÃO**: Se a nova pergunta pede cálculos diferentes dos já feitos, é NOVA CONSULTA.
+4. **TIPO DE ANÁLISE**: Se a nova pergunta pede cálculos/análises diferentes dos já feitos, é NOVA CONSULTA.
    - Ex: Histórico tem lista simples mas nova pergunta pede "total por categoria" → NOVA CONSULTA
+   - Ex: Histórico tem valores mas nova pergunta pede "tempo médio" → NOVA CONSULTA
 
-4. **VISUALIZAÇÃO/EXPORT**: Se a nova pergunta só quer apresentar os mesmos dados de forma diferente, PODE REUTILIZAR.
+5. **VISUALIZAÇÃO/EXPORT**: Se a nova pergunta só quer apresentar os mesmos dados de forma diferente, PODE REUTILIZAR.
    - Ex: "fazer gráfico", "exportar excel", "mostrar tabela" dos mesmos dados → REUTILIZAR
 
 🎯 DECISÃO:
+- Se a nova pergunta é sobre ASSUNTO DIFERENTE ou pede ANÁLISE DIFERENTE → NOVA CONSULTA
 - Encontrou consulta anterior que responde à nova pergunta com dados suficientes? → REUTILIZAR (informe o ID)
 - Nova pergunta precisa de dados diferentes/mais dados? → NOVA CONSULTA
 
 Responda APENAS:
-{{"should_reuse": false, "reason": "nova pergunta requer dados diferentes/mais registros"}}
+{{"should_reuse": false, "reason": "nova pergunta sobre assunto/análise diferente"}}
 OU
 {{"should_reuse": true, "reason": "consulta anterior contém dados suficientes", "interaction_id": "ID_da_consulta"}}
 """

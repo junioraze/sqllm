@@ -122,6 +122,31 @@ INSTRUÇÕES ADICIONAIS PARA QUALIFY E AGRUPAMENTO:
 - Para agrupar por ano: inclua "EXTRACT(YEAR FROM dta_venda) AS ano" no SELECT
 - Referencie esses campos no GROUP BY como "mes" ou "ano"
 
+⚠️ INSTRUÇÕES ESPECIAIS PARA CÁLCULOS TEMPORAIS:
+🔴 REGRA CRÍTICA - Para calcular diferenças de tempo entre datas:
+- Para tempo médio em DIAS: use DATE_DIFF(DATE(data_fim), DATE(data_inicio), DAY)
+- Para tempo médio em HORAS: use DATETIME_DIFF(data_fim, data_inicio, HOUR)
+- Para tempo médio em MINUTOS: use DATETIME_DIFF(data_fim, data_inicio, MINUTE)
+- SEMPRE use AVG() para calcular a média: AVG(DATE_DIFF(...))
+- SEMPRE agrupe por campos relevantes quando solicitar "por tipo" ou "por categoria"
+- Para rankings de tempo: ORDER BY tempo_medio ASC (menor tempo = melhor performance)
+
+EXEMPLO CORRETO para tempo médio entre criação e aprovação:
+{
+  "select": [
+    "ACAO",
+    "AVG(DATE_DIFF(DATE(DT_ACAO), DATE(DT_CRIACAO), DAY)) AS tempo_medio_dias",
+    "COUNT(*) AS total_acoes"
+  ],
+  "where": "UPPER(ACAO) LIKE UPPER('%APROVACAO%')",
+  "group_by": ["ACAO"],
+  "order_by": ["tempo_medio_dias ASC"]
+}
+
+NUNCA use EXTRACT() diretamente em cálculos de diferença temporal!
+NUNCA faça SELECT de campos individuais de data quando GROUP BY está presente!
+SEMPRE use campos agrupados ou agregados no SELECT quando usar GROUP BY!
+
 ⚠️ INSTRUÇÕES ESPECIAIS PARA GRÁFICOS TEMPORAIS:
 Quando o usuário solicitar gráficos que abrangem múltiplos anos (ex: 2024 e 2025):
 🔴 REGRA CRÍTICA - SEMPRE crie coluna de data contínua:
