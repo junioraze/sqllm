@@ -24,8 +24,12 @@ def initialize_model():
     
     tables_description += (
         "\nREGRAS ABSOLUTAS:\n"
-        "1. Para TOP N por grupo (ex: top 3 por estado) USE QUALIFY com PARTITION BY\n"
-        "2. NUNCA use LIMIT para consultas agrupadas\n"
+        "1. 🚨 QUALIFY - REGRAS CRÍTICAS:\n"
+        "   - Para TOP N GERAL (ex: 'top 20 modelos'): NUNCA use PARTITION BY, use apenas ORDER BY\n"
+        "   - Para TOP N POR GRUPO (ex: 'top 3 modelos por estado'): use PARTITION BY com o campo do grupo\n"
+        "   - PARTITION BY só funciona com campos que estão no GROUP BY\n"
+        "   - NUNCA use PARTITION BY com campos que já estão filtrados no WHERE\n"
+        "2. NUNCA use LIMIT para consultas agrupadas - sempre use QUALIFY\n"
         "3. Para múltiplas dimensões inclua TODOS os campos do PARTITION BY no SELECT\n"
         "4. Campos no GROUP BY DEVEM estar no SELECT\n"
         "5. SEMPRE use a tabela correta baseada na pergunta do usuário\n"
@@ -37,7 +41,16 @@ def initialize_model():
         "   - OU: FORMAT_DATE('%Y-%m-%d', data) AS periodo_dia (para dados diários)\n"
         "   - OU: EXTRACT(YEAR FROM data) AS ano (apenas para dados anuais)\n"
         "   Isso garante visualização correta em gráficos de linha temporal!\n\n"
-        "Exemplo CORRETO para top 3 modelos por estado:\n"
+        "Exemplo CORRETO para top 20 modelos (SEM PARTITION BY):\n"
+        "{\n"
+        f'  "full_table_id": "{PROJECT_ID}.{DATASET_ID}.drvy_VeiculosVendas",\n'
+        '  "select": ["modelo", "SUM(QTE) AS total_vendas"],\n'
+        '  "where": "EXTRACT(YEAR FROM dta_venda) = 2024",\n'
+        '  "group_by": ["modelo"],\n'
+        '  "order_by": ["total_vendas DESC"],\n'
+        '  "qualify": "ROW_NUMBER() OVER (ORDER BY total_vendas DESC) <= 20"\n'
+        "}\n\n"
+        "Exemplo CORRETO para top 3 modelos por estado (COM PARTITION BY):\n"
         "{\n"
         f'  "full_table_id": "{PROJECT_ID}.{DATASET_ID}.drvy_VeiculosVendas",\n'
         '  "select": ["modelo", "uf", "SUM(QTE) AS total"],\n'
@@ -88,7 +101,7 @@ def initialize_model():
                 },
                 "qualify": {
                     "type": "string",
-                    "description": "CONDIÇÃO OBRIGATÓRIA para TOP N: ROW_NUMBER() OVER (PARTITION BY...) <= N",
+                    "description": "Para TOP N: ROW_NUMBER() OVER (ORDER BY...) <= N (SEM partition) OU ROW_NUMBER() OVER (PARTITION BY campo_grupo ORDER BY...) <= N (COM partition apenas para grupos diferentes)",
                 },
                 "limit": {
                     "type": "integer",
