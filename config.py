@@ -63,12 +63,152 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv(
 # Instruções gerais para o modelo Gemini
 INSTRUCOES_GERAIS = """\n
 INSTRUÇÕES PARA ANÁLISE DE DADOS:
-1. Você tem liberdade para criar consultas SQL completas
-2. Pode usar qualquer campo da tabela
-3. Pode criar funções de agregação personalizadas
-4. Certifique-se de incluir filtros temporais quando relevante
-5. Para análises com múltiplas dimensões (ex: top N por grupo), use QUALIFY ROW_NUMBER() OVER (PARTITION BY ...)
-6. Só gere visualização gráfica se o usuário solicitar explicitamente um gráfico, visualização, plot, curva, barra, linha ou termos semelhantes.
+
+🚨 REGRAS CRÍTICAS PARA CONSULTAS COMPLEXAS:
+
+🔥 **REGRA DE OURO PARA CTE (WITH)**:
+**SEMPRE que o usuário pedir MAIS DE UMA COISA na pergunta → USE CTE OBRIGATORIAMENTE!**
+
+**EXEMPLOS DE PERGUNTAS QUE EXIGEM CTE**:
+- ❌ Pergunta simples: "Quais os 10 modelos mais vendidos?" → SEM CTE (uma coisa só)
+- ✅ Pergunta composta: "Os 5 modelos mais vendidos E sua evolução mensal" → COM CTE (duas coisas)
+- ✅ Pergunta composta: "Top 3 vendedores E histórico de performance de cada um" → COM CTE
+- ✅ Pergunta composta: "Produtos com melhor margem E detalhamento por região" → COM CTE
+
+1. **ANÁLISES DE RANKING + EVOLUÇÃO TEMPORAL**:
+   
+   🔥 **USE CTE (WITH) PARA CONSULTAS COMPLEXAS** - ESTRATÉGIA RECOMENDADA:
+   
+   **Para perguntas como "TOP N modelos mais vendidos E sua evolução temporal"**:
+   
+   ✅ **ESTRATÉGIA SIMPLES E EFICIENTE COM CTE**:
+   
+   **ETAPA 1 (CTE)**: Identifica TOP N - Uma query simples e limpa
+   ```sql
+   WITH top_modelos AS (
+     SELECT modelo
+     FROM tabela
+     WHERE EXTRACT(YEAR FROM data) = 2025
+     GROUP BY modelo
+     QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(vendas) DESC) <= 5
+   )
+   ```
+   
+   **ETAPA 2 (SELECT)**: Usa CTE com IN() para filtrar evolução - Muito mais simples!
+   ```sql
+   SELECT modelo, FORMAT_DATE('%Y-%m', data) AS periodo_mes, SUM(vendas) AS vendas_mes
+   FROM tabela
+   WHERE EXTRACT(YEAR FROM data) = 2025 
+     AND modelo IN (SELECT modelo FROM top_modelos)
+   GROUP BY modelo, FORMAT_DATE('%Y-%m', data)
+   ORDER BY modelo, periodo_mes
+   ```
+   
+   🎯 **PARÂMETROS PARA CTE (ESTRATÉGIA SIMPLES)**:
+   ```json
+   {
+     "full_table_id": "projeto.dataset.tabela",
+     "with_cte": "top_modelos AS (SELECT modelo FROM tabela WHERE EXTRACT(YEAR FROM data) = 2025 GROUP BY modelo QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(vendas) DESC) <= 5)",
+     "select": ["modelo", "FORMAT_DATE('%Y-%m', data) AS periodo_mes", "SUM(vendas) AS vendas_mes"],
+     "where": "EXTRACT(YEAR FROM data) = 2025 AND modelo IN (SELECT modelo FROM top_modelos)",
+     "group_by": ["modelo", "FORMAT_DATE('%Y-%m', data)"],
+     "order_by": ["modelo", "periodo_mes"]
+   }
+   ```
+   
+   ❌ **EVITE**: Subqueries complexas aninhadas - Use CTE para clareza e simplicidade!
+   ❌ **EVITE**: PARTITION BY mes quando o objetivo é TOP N geral + evolução
+   ❌ **EVITE**: JOINs desnecessários quando IN() com CTE resolve mais facilmente
+
+2. **VANTAGENS PRÁTICAS DO CTE PARA PERGUNTAS COMPOSTAS**:
+   - ✅ **Simplicidade**: Cada CTE resolve UMA intenção da pergunta
+   - ✅ **Legibilidade**: Query final muito mais clara e fácil de entender  
+   - ✅ **Manutenção**: Mudanças isoladas em cada CTE
+   - ✅ **Performance**: BigQuery otimiza CTEs automaticamente
+   - ✅ **Debugging**: Pode testar cada CTE separadamente
+   - ✅ **Reutilização**: CTE pode ser usado múltiplas vezes na query principal
+
+3. **CATÁLOGO DE CENÁRIOS DE NEGÓCIO PARA CTE**:
+
+   🏢 **ANÁLISE DE VENDAS**:
+   - "Top vendedores E performance por região"
+   - "Produtos mais vendidos E sazonalidade"  
+   - "Clientes premium E canais preferidos"
+   - "Melhores lojas E evolução de receita"
+
+   📊 **ANÁLISE FINANCEIRA**:
+   - "Produtos rentáveis E análise de margem"
+   - "Receita atual E comparação com ano anterior"
+   - "Centros de custo E detalhamento por categoria"
+   - "Orçamento vs realizado E desvios por departamento"
+
+   🎯 **ANÁLISE DE PERFORMANCE**:
+   - "Campanhas eficazes E ROI por canal"
+   - "Funcionários destaque E histórico de metas"
+   - "Fornecedores confiáveis E tempo de entrega"
+   - "Processos críticos E tempo médio de execução"
+
+   👥 **ANÁLISE DE CLIENTES**:
+   - "Clientes fiéis E padrão de compras"
+   - "Segmentos de alto valor E comportamento"
+   - "Churn previsto E características dos clientes"
+   - "Satisfação alta E análise por touchpoint"
+
+   📈 **ANÁLISE TEMPORAL**:
+   - "Crescimento por trimestre E fatores sazonais"
+   - "Tendências de mercado E impacto nos produtos"
+   - "Picos de demanda E capacidade operacional"
+   - "Ciclos de venda E previsão de receita"
+
+4. **PADRÃO PARA RECONHECER PERGUNTAS COMPOSTAS**:
+   - Palavras conectoras: "E", "MAIS", "TAMBÉM", "ALÉM DE", "JUNTAMENTE COM"
+   - Múltiplas métricas: "ranking E evolução", "total E por categoria"
+   - Análises em camadas: "melhores E detalhamento", "top N E histórico"
+   - Comparações: "atual E anterior", "real E orçado", "interno E benchmark"
+
+5. **ESTRUTURA TÍPICA DE CTE PARA NEGÓCIOS**:
+
+   **CTE TIPO 1 - RANKING + DETALHAMENTO**:
+   ```
+   WITH ranking_base AS (
+     SELECT campo_agrupamento 
+     FROM tabela 
+     GROUP BY campo_agrupamento 
+     QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(metrica) DESC) <= N
+   )
+   SELECT detalhes...
+   FROM tabela INNER JOIN ranking_base ON campo_comum
+   ```
+
+   **CTE TIPO 2 - COMPARAÇÃO TEMPORAL**:
+   ```
+   WITH periodo_atual AS (...),
+        periodo_anterior AS (...)
+   SELECT comparações...
+   FROM periodo_atual LEFT JOIN periodo_anterior ON campo_comum
+   ```
+
+   **CTE TIPO 3 - FILTRO + ANÁLISE MÚLTIPLA**:
+   ```
+   WITH base_filtrada AS (
+     SELECT ... WHERE critérios_específicos
+   ),
+   agregacao_auxiliar AS (
+     SELECT ... FROM base_filtrada GROUP BY ...
+   )
+   SELECT análise_final...
+   ```
+
+🔥 **REGRA PRÁTICA**: Se você consegue dividir a pergunta do usuário em 2+ partes distintas → USE CTE para cada parte!
+
+🔥 **REGRA DE NEGÓCIO**: Para análises que envolvem ranking + detalhamento, comparações temporais, ou segmentação + comportamento → SEMPRE USE CTE!
+
+3. Você tem liberdade para criar consultas SQL completas
+4. Pode usar qualquer campo da tabela
+5. Pode criar funções de agregação personalizadas e CTEs (WITH)
+6. Certifique-se de incluir filtros temporais quando relevante
+7. Para análises com múltiplas dimensões simples (ex: top N por região), use QUALIFY ROW_NUMBER() OVER (PARTITION BY ...)
+8. Só gere visualização gráfica se o usuário solicitar explicitamente um gráfico, visualização, plot, curva, barra, linha ou termos semelhantes.
    - Nunca gere gráfico por padrão, nem sugira gráfico se não for solicitado.
    - Se solicitado, inclua no final da resposta:
      GRAPH-TYPE: [tipo] | X-AXIS: [coluna] | Y-AXIS: [coluna] | COLOR: [coluna]
@@ -78,17 +218,16 @@ INSTRUÇÕES PARA ANÁLISE DE DADOS:
       Resposta: [NÃO incluir gráfico]
       Usuário: "Me mostre um gráfico das vendas das lojas de limoeiro em janeiro/2025"
       Resposta: [Incluir gráfico conforme instrução]
-7. Para consultas com múltiplas dimensões (3+), sempre use PARTITION BY no QUALIFY
-8. PARA CÁLCULOS PERCENTUAIS:
+9. PARA CÁLCULOS PERCENTUAIS:
 - SEMPRE verifique se o denominador é diferente de zero antes de dividir
 - Para produtos sem vendas no período anterior (denominador zero):
   - Ou retorne NULL e filtre depois
 - Use CASE WHEN para tratamento seguro:
   CASE WHEN vendas_anterior > 0 THEN (vendas_atual - vendas_anterior)/vendas_anterior ELSE NULL END
 - Para rankings de crescimento, sempre inclua HAVING crescimento IS NOT NULL
-9. Sempre, de forma Imprescindível inclua os nomes das tabelas na instrução sql no formato: {PROJECT_ID}.{DATASET_ID}.nome_da_tabela
+10. Sempre, de forma Imprescindível inclua os nomes das tabelas na instrução sql no formato: {PROJECT_ID}.{DATASET_ID}.nome_da_tabela
    Exemplo: {PROJECT_ID}.{DATASET_ID}.algum_nome_de_tabela_especificado_abaixo
-10. TABELAS DISPONÍVEIS - USE APENAS ESTAS TABELAS:
+11. TABELAS DISPONÍVEIS - USE APENAS ESTAS TABELAS:
 """
 
 def build_tables_instruction():
@@ -116,6 +255,37 @@ TABLES_INSTRUCTION = build_tables_instruction()
 # Instruções adicionais
 ADDITIONAL_INSTRUCTIONS = """
 INSTRUÇÕES ADICIONAIS PARA QUALIFY E AGRUPAMENTO:
+
+🚨 **CONSULTAS COMPLEXAS - REGRAS DETALHADAS**:
+
+**CENÁRIO 1: TOP N + EVOLUÇÃO TEMPORAL** 
+Para perguntas como "top 5 modelos mais vendidos e sua evolução mensal":
+
+✅ ESTRATÉGIA CORRETA:
+1. Primeiro identifique o TOP N no período COMPLETO (sem dividir por mês)
+2. Para cada item do TOP N, busque sua evolução temporal
+3. Use WHERE com subquery ou CTE (WITH) para filtrar apenas os TOP N
+
+Exemplo de WHERE correto:
+```
+"where": "EXTRACT(YEAR FROM data) = 2025 AND modelo IN (SELECT modelo FROM (SELECT modelo, SUM(vendas) as total FROM tabela WHERE EXTRACT(YEAR FROM data) = 2025 GROUP BY modelo QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(vendas) DESC) <= 5))"
+```
+
+❌ ERRO COMUM: 
+- NUNCA use QUALIFY com PARTITION BY mes para este tipo de pergunta
+- Isso retornaria TOP N de cada mês, não TOP N geral com evolução
+
+**CENÁRIO 2: ANÁLISE TEMPORAL COM RANKING**
+Para gráficos de evolução de rankings:
+
+✅ SELECT correto:
+```
+"select": [
+  "modelo", 
+  "FORMAT_DATE('%Y-%m', data_venda) AS periodo_mes", 
+  "SUM(vendas) AS vendas_mes"
+]
+```
 
 1. PARA DATAS:
 - Para agrupar por mês: inclua "EXTRACT(MONTH FROM dta_venda) AS mes" no SELECT

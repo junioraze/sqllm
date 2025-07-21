@@ -24,16 +24,47 @@ def initialize_model():
     
     tables_description += (
         "\nREGRAS ABSOLUTAS:\n"
-        "1. 🚨 QUALIFY - REGRAS CRÍTICAS:\n"
-        "   - Para TOP N GERAL (ex: 'top 20 modelos'): NUNCA use PARTITION BY, use apenas ORDER BY\n"
-        "   - Para TOP N POR GRUPO (ex: 'top 3 modelos por estado'): use PARTITION BY com o campo do grupo\n"
+        "1. 🚨 CONSULTAS COMPLEXAS - REGRAS CRÍTICAS:\n"
+        "   � **QUANDO USAR CTE (WITH) - REGRA DE OURO**:\n"
+        "   - SEMPRE que o usuário pedir MAIS DE UMA COISA na pergunta → USE CTE!\n"
+        "   - Ex: 'top 5 modelos MAIS vendidos E sua evolução mensal' = 2 coisas → CTE obrigatório\n"
+        "   - Ex: 'produtos com melhor performance E detalhamento por região' = 2 coisas → CTE obrigatório\n"
+        "   - Ex: 'ranking de vendedores E histórico de cada um' = 2 coisas → CTE obrigatório\n"
+        "\n"
+        "   🎯 **ESTRATÉGIA CTE PARA PERGUNTAS COMPOSTAS**:\n"
+        "   - ETAPA 1 (CTE): Resolva a primeira parte (ex: identificar TOP N)\n"
+        "   - ETAPA 2 (SELECT principal): Use o CTE para resolver a segunda parte (ex: evolução)\n"
+        "   - MUITO mais simples que subqueries complexas!\n"
+        "\n"
+        "   🔴 Para 'TOP N + EVOLUÇÃO TEMPORAL' (ex: 'top 5 modelos mais vendidos e evolução mensal'):\n"
+        "   - CTE: Identifica TOP N no período COMPLETO (sem PARTITION BY mes)\n"
+        "   - SELECT: Usa CTE no WHERE com IN() para filtrar evolução temporal\n"
+        "   - NUNCA use PARTITION BY mes quando o objetivo é TOP N geral + evolução\n"
+        "\n"
+        "   ✅ **EXEMPLO PRÁTICO - ESTRATÉGIA SIMPLES COM CTE**:\n"
+        "   Pergunta: 'top 5 modelos mais vendidos de 2025 e evolução mensal'\n"
+        "   \n"
+        "   Estratégia CTE (RECOMENDADA):\n"
+        "   {\n"
+        f'     "full_table_id": "{PROJECT_ID}.{DATASET_ID}.tabela",\n'
+        '     "with_cte": "top_5_modelos AS (SELECT modelo FROM tabela WHERE EXTRACT(YEAR FROM data) = 2025 GROUP BY modelo QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(vendas) DESC) <= 5)",\n'
+        '     "select": ["modelo", "FORMAT_DATE(\'%Y-%m\', data) AS periodo_mes", "SUM(vendas) AS vendas_mes"],\n'
+        '     "where": "EXTRACT(YEAR FROM data) = 2025 AND modelo IN (SELECT modelo FROM top_5_modelos)",\n'
+        '     "group_by": ["modelo", "FORMAT_DATE(\'%Y-%m\', data)"],\n'
+        '     "order_by": ["modelo", "periodo_mes"]\n'
+        "   }\n"
+        "\n"
+        "   ❌ **EVITE**: Subqueries complexas no WHERE quando CTE é mais claro!\n"
+        "\n"
+        "2. 🚨 QUALIFY - REGRAS:\n"
+        "   - Para TOP N GERAL: NUNCA use PARTITION BY, use apenas ORDER BY\n"
+        "   - Para TOP N POR GRUPO: use PARTITION BY com o campo do grupo\n"
         "   - PARTITION BY só funciona com campos que estão no GROUP BY\n"
-        "   - NUNCA use PARTITION BY com campos que já estão filtrados no WHERE\n"
-        "2. NUNCA use LIMIT para consultas agrupadas - sempre use QUALIFY\n"
-        "3. Para múltiplas dimensões inclua TODOS os campos do PARTITION BY no SELECT\n"
-        "4. Campos no GROUP BY DEVEM estar no SELECT\n"
-        "5. SEMPRE use a tabela correta baseada na pergunta do usuário\n"
-        "6. 🔴 GRÁFICOS TEMPORAIS - REGRA CRÍTICA:\n"
+        "3. NUNCA use LIMIT para consultas agrupadas - sempre use QUALIFY\n"
+        "4. Para múltiplas dimensões inclua TODOS os campos do PARTITION BY no SELECT\n"
+        "5. Campos no GROUP BY DEVEM estar no SELECT\n"
+        "6. SEMPRE use a tabela correta baseada na pergunta do usuário\n"
+        "7. 🔴 GRÁFICOS TEMPORAIS - REGRA CRÍTICA:\n"
         "   Para análises temporais (vendas por mês/ano, evolução temporal), SEMPRE crie uma coluna de data contínua:\n"
         "   - NUNCA use EXTRACT(MONTH FROM data) - quebra continuidade temporal\n"
         "   - USE: CONCAT(EXTRACT(YEAR FROM data), '-', LPAD(EXTRACT(MONTH FROM data), 2, '0')) AS periodo_mes\n"
@@ -66,7 +97,99 @@ def initialize_model():
         '  "where": "EXTRACT(YEAR FROM dta_venda) = 2024",\n'
         '  "group_by": ["FORMAT_DATE(\'%Y-%m\', dta_venda)"],\n'
         '  "order_by": ["periodo_mes"]\n'
-        "}"
+        "}\n\n"
+        "🔥 **CTE (Common Table Expressions) PARA CONSULTAS COMPLEXAS**:\n"
+        "🎯 **QUANDO USAR**: Toda pergunta com 'E' ou múltiplas intenções!\n\n"
+        "📚 **CATÁLOGO DE EXEMPLOS CTE PARA NEGÓCIOS**:\n\n"
+        "✅ **EXEMPLO 1: TOP N + EVOLUÇÃO TEMPORAL**\n"
+        "Pergunta: 'top 5 modelos mais vendidos de 2025 e evolução mensal'\n"
+        "{\n"
+        f'  "full_table_id": "{PROJECT_ID}.{DATASET_ID}.tabela",\n'
+        '  "with_cte": "top_modelos AS (SELECT modelo FROM tabela WHERE EXTRACT(YEAR FROM data) = 2025 GROUP BY modelo QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(vendas) DESC) <= 5)",\n'
+        '  "select": ["modelo", "FORMAT_DATE(\'%Y-%m\', data) AS periodo_mes", "SUM(vendas) AS vendas_mes"],\n'
+        '  "where": "EXTRACT(YEAR FROM data) = 2025 AND modelo IN (SELECT modelo FROM top_modelos)",\n'
+        '  "group_by": ["modelo", "FORMAT_DATE(\'%Y-%m\', data)"],\n'
+        '  "order_by": ["modelo", "periodo_mes"]\n'
+        "}\n\n"
+        "✅ **EXEMPLO 2: COMPARAÇÃO ENTRE PERÍODOS**\n"
+        "Pergunta: 'vendas atuais vs mesmo período ano anterior dos melhores produtos'\n"
+        "{\n"
+        f'  "full_table_id": "{PROJECT_ID}.{DATASET_ID}.tabela",\n'
+        '  "with_cte": "vendas_atual AS (SELECT produto, SUM(vendas) as vendas_2025 FROM tabela WHERE EXTRACT(YEAR FROM data) = 2025 GROUP BY produto), vendas_anterior AS (SELECT produto, SUM(vendas) as vendas_2024 FROM tabela WHERE EXTRACT(YEAR FROM data) = 2024 GROUP BY produto)",\n'
+        '  "select": ["a.produto", "a.vendas_2025", "COALESCE(b.vendas_2024, 0) as vendas_2024", "ROUND((a.vendas_2025 - COALESCE(b.vendas_2024, 0)) / COALESCE(b.vendas_2024, 1) * 100, 2) as crescimento_percent"],\n'
+        '  "from_table": "vendas_atual a LEFT JOIN vendas_anterior b ON a.produto = b.produto",\n'
+        '  "where": "a.vendas_2025 > 0",\n'
+        '  "order_by": ["crescimento_percent DESC"]\n'
+        "}\n\n"
+        "✅ **EXEMPLO 3: ANÁLISE DE PERFORMANCE + DETALHAMENTO**\n"
+        "Pergunta: 'vendedores com melhor performance e detalhamento por região'\n"
+        "{\n"
+        f'  "full_table_id": "{PROJECT_ID}.{DATASET_ID}.tabela",\n'
+        '  "with_cte": "top_vendedores AS (SELECT vendedor FROM tabela WHERE EXTRACT(YEAR FROM data) = 2025 GROUP BY vendedor QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(vendas) DESC) <= 10)",\n'
+        '  "select": ["v.vendedor", "t.regiao", "SUM(v.vendas) AS vendas_regiao", "COUNT(*) AS total_transacoes"],\n'
+        '  "from_table": "tabela v INNER JOIN top_vendedores t ON v.vendedor = t.vendedor",\n'
+        '  "where": "EXTRACT(YEAR FROM v.data) = 2025",\n'
+        '  "group_by": ["v.vendedor", "t.regiao"],\n'
+        '  "order_by": ["vendas_regiao DESC"]\n'
+        "}\n\n"
+        "✅ **EXEMPLO 4: ANÁLISE DE CONCENTRAÇÃO + PARTICIPAÇÃO**\n"
+        "Pergunta: 'principais clientes e participação nas vendas por categoria'\n"
+        "{\n"
+        f'  "full_table_id": "{PROJECT_ID}.{DATASET_ID}.tabela",\n'
+        '  "with_cte": "top_clientes AS (SELECT cliente FROM tabela GROUP BY cliente QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(vendas) DESC) <= 20), total_categoria AS (SELECT categoria, SUM(vendas) as total FROM tabela GROUP BY categoria)",\n'
+        '  "select": ["c.cliente", "v.categoria", "SUM(v.vendas) AS vendas_cliente", "ROUND(SUM(v.vendas) / tc.total * 100, 2) AS participacao_percent"],\n'
+        '  "from_table": "top_clientes c INNER JOIN tabela v ON c.cliente = v.cliente INNER JOIN total_categoria tc ON v.categoria = tc.categoria",\n'
+        '  "group_by": ["c.cliente", "v.categoria", "tc.total"],\n'
+        '  "order_by": ["participacao_percent DESC"]\n'
+        "}\n\n"
+        "✅ **EXEMPLO 5: ANÁLISE DE TENDÊNCIA + SAZONALIDADE**\n"
+        "Pergunta: 'produtos com crescimento e padrão sazonal por trimestre'\n"
+        "{\n"
+        f'  "full_table_id": "{PROJECT_ID}.{DATASET_ID}.tabela",\n'
+        '  "with_cte": "produtos_crescimento AS (SELECT produto FROM tabela WHERE data >= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH) GROUP BY produto HAVING SUM(vendas) > (SELECT AVG(vendas_produto) FROM (SELECT produto, SUM(vendas) as vendas_produto FROM tabela GROUP BY produto)))",\n'
+        '  "select": ["p.produto", "CONCAT(\'Q\', EXTRACT(QUARTER FROM v.data), \'-\', EXTRACT(YEAR FROM v.data)) AS trimestre", "SUM(v.vendas) AS vendas_trimestre"],\n'
+        '  "from_table": "produtos_crescimento p INNER JOIN tabela v ON p.produto = v.produto",\n'
+        '  "where": "v.data >= DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH)",\n'
+        '  "group_by": ["p.produto", "EXTRACT(QUARTER FROM v.data)", "EXTRACT(YEAR FROM v.data)"],\n'
+        '  "order_by": ["p.produto", "trimestre"]\n'
+        "}\n\n"
+        "✅ **EXEMPLO 6: SEGMENTAÇÃO + ANÁLISE COMPORTAMENTAL**\n"
+        "Pergunta: 'clientes premium e comportamento de compras por canal'\n"
+        "{\n"
+        f'  "full_table_id": "{PROJECT_ID}.{DATASET_ID}.tabela",\n'
+        '  "with_cte": "clientes_premium AS (SELECT cliente FROM tabela GROUP BY cliente HAVING SUM(valor_compra) > 50000 AND COUNT(DISTINCT data) > 10)",\n'
+        '  "select": ["cp.cliente", "v.canal_venda", "COUNT(*) AS total_compras", "AVG(v.valor_compra) AS ticket_medio", "SUM(v.valor_compra) AS valor_total"],\n'
+        '  "from_table": "clientes_premium cp INNER JOIN tabela v ON cp.cliente = v.cliente",\n'
+        '  "group_by": ["cp.cliente", "v.canal_venda"],\n'
+        '  "order_by": ["valor_total DESC"]\n'
+        "}\n\n"
+        "✅ **EXEMPLO 7: ANÁLISE DE MARGEM + RENTABILIDADE**\n"
+        "Pergunta: 'produtos mais rentáveis e análise de margem por região'\n"
+        "{\n"
+        f'  "full_table_id": "{PROJECT_ID}.{DATASET_ID}.tabela",\n'
+        '  "with_cte": "produtos_rentaveis AS (SELECT produto FROM tabela GROUP BY produto HAVING AVG((preco_venda - custo) / preco_venda) > 0.3 QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(preco_venda - custo) DESC) <= 15)",\n'
+        '  "select": ["pr.produto", "v.regiao", "AVG((v.preco_venda - v.custo) / v.preco_venda * 100) AS margem_percent", "SUM(v.preco_venda - v.custo) AS lucro_total"],\n'
+        '  "from_table": "produtos_rentaveis pr INNER JOIN tabela v ON pr.produto = v.produto",\n'
+        '  "group_by": ["pr.produto", "v.regiao"],\n'
+        '  "order_by": ["margem_percent DESC"]\n'
+        "}\n\n"
+        "🎯 **PADRÕES DE RECONHECIMENTO PARA CTE**:\n"
+        "- **'E sua evolução'** → CTE com ranking + temporal\n"
+        "- **'E detalhamento por'** → CTE com filtro + breakdown\n"
+        "- **'vs período anterior'** → CTE múltiplos períodos\n"
+        "- **'e participação em'** → CTE com totais + percentuais\n"
+        "- **'com melhor X e análise Y'** → CTE filtro + análise detalhada\n"
+        "- **'principais X e comportamento'** → CTE ranking + padrões\n\n"
+        "✅ **VANTAGENS DO CTE PARA PERGUNTAS COMPOSTAS**:\n"
+        "- 🎯 Separa claramente cada intenção da pergunta\n"
+        "- 🚀 Muito mais simples que subqueries aninhadas\n"
+        "- 🔧 Facilita manutenção e debugging\n"
+        "- 💡 Permite reutilização de resultados intermediários\n"
+        "- ✨ Query final mais legível e performática\n"
+        "- 📊 Ideal para análises de negócio complexas\n"
+        "\n"
+        "🔥 **REGRA DE OURO**: Se a pergunta tem 'E' conectando duas análises → USE CTE!\n"
+        "🔥 **REGRA ADICIONAL**: Para comparações, rankings com detalhamento, ou múltiplas métricas → SEMPRE CTE!"
     )
     
     query_func = FunctionDeclaration(
@@ -79,6 +202,14 @@ def initialize_model():
                     "type": "string",
                     "description": f"ID completo da tabela no BigQuery (PROJECT.DATASET.TABLE). Opções: {', '.join(full_table_mapping.keys())}",
                     "enum": list(full_table_mapping.keys())
+                },
+                "with_cte": {
+                    "type": "string",
+                    "description": "CTE (Common Table Expression) para consultas complexas. Ex: 'top_modelos AS (SELECT modelo FROM tabela GROUP BY modelo QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(vendas) DESC) <= 5)'. Use para decomposição de consultas TOP N + evolução temporal."
+                },
+                "from_table": {
+                    "type": "string", 
+                    "description": "Tabela ou JOIN a usar no FROM. Se não especificado, usa a tabela física. Para CTE: 'nome_cte' ou 'cte1 c1 JOIN tabela t ON c1.campo = t.campo'"
                 },
                 "select": {
                     "type": "array",
@@ -340,23 +471,35 @@ def refine_with_gemini(
 def should_reuse_data(model, current_prompt: str, user_history: list = None) -> dict:
     """
     Pergunta ao Gemini se deve reutilizar os dados das últimas consultas
-    considerando o histórico do usuário
+    considerando o histórico do usuário e validação de estrutura de dados
     Retorna um dict com 'should_reuse': bool e 'reason': str
     """
     if not user_history:
         return {"should_reuse": False, "reason": "Nenhum histórico disponível"}
     
-    # Constrói contexto do histórico recente
+    # Constrói contexto do histórico recente com detalhes das colunas
     history_items = []
     for interaction in user_history:
         data_summary = f" ({interaction.get('raw_data_count', 0)} registros)" if interaction.get('raw_data_count', 0) > 0 else ""
         interaction_id = interaction.get('id', 'N/A')
-        history_items.append(f"- ID: {interaction_id} | {interaction.get('user_prompt', 'N/A')}{data_summary}")
+        
+        # Adiciona informações sobre a estrutura dos dados (colunas disponíveis)
+        columns_info = ""
+        if interaction.get('first_ten_table_lines'):
+            try:
+                first_record = json.loads(interaction.get('first_ten_table_lines', '[]'))
+                if first_record and isinstance(first_record, list) and len(first_record) > 0:
+                    columns = list(first_record[0].keys())
+                    columns_info = f" | Colunas: {', '.join(columns)}"
+            except:
+                pass
+        
+        history_items.append(f"- ID: {interaction_id} | {interaction.get('user_prompt', 'N/A')}{data_summary}{columns_info}")
     
     if not history_items:
         return {"should_reuse": False, "reason": "Histórico vazio"}
         
-    history_context = f"\nHISTÓRICO RECENTE (com IDs para referência):\n" + "\n".join(history_items) + "\n"
+    history_context = f"\nHISTÓRICO RECENTE (com IDs e estrutura de dados para referência):\n" + "\n".join(history_items) + "\n"
     
     context_prompt = f"""
 🚨 VALIDADOR INTELIGENTE DE REUTILIZAÇÃO DE DADOS 🚨
@@ -367,33 +510,48 @@ NOVA PERGUNTA: "{current_prompt}"
 
 {history_context}
 
-🧠 ANÁLISE INTELIGENTE - Examine o histórico e responda:
+🧠 ANÁLISE INTELIGENTE APRIMORADA:
 
-1. **COMPATIBILIDADE**: A nova pergunta é sobre o MESMO ASSUNTO da consulta anterior?
-   - Ex: Nova pergunta sobre "tempo médio" vs histórico sobre "montante de compras" → INCOMPATÍVEL → NOVA CONSULTA
+🔴 REGRAS CRÍTICAS PARA CONSULTAS COMPLEXAS:
 
-2. **QUANTIDADE**: Se a nova pergunta solicita mais registros do que qualquer consulta anterior retornou, é NOVA CONSULTA.
-   - Ex: Histórico mostra "5 registros" mas nova pergunta pede "20 modelos" → NOVA CONSULTA
-   - Ex: Histórico mostra "100 registros" mas nova pergunta pede "10 primeiros" → PODE REUTILIZAR
+1. **ANÁLISE DE COMPATIBILIDADE DE DADOS**:
+   - A nova pergunta precisa de colunas que NÃO EXISTEM nos dados anteriores? → NOVA CONSULTA
+   - Ex: Histórico tem "modelo, total_vendas" mas nova pergunta pede "evolução mensal" → NOVA CONSULTA (falta coluna de data)
+   - Ex: Histórico tem dados agregados (somas, totais) mas nova pergunta pede detalhamento temporal → NOVA CONSULTA
 
-3. **ESCOPO**: Se a nova pergunta muda filtros, período, ou critérios, é NOVA CONSULTA.
-   - Ex: Histórico de "todos estados" mas nova pergunta pede "só SP" → NOVA CONSULTA
-   - Ex: Histórico de "2023" mas nova pergunta pede "2024" → NOVA CONSULTA
+2. **CONSULTAS DE TOP N + EVOLUÇÃO TEMPORAL**:
+   - Se a nova pergunta pede "evolução" ou "por mês/ano" de um ranking anterior → SEMPRE NOVA CONSULTA
+   - Dados de ranking (ex: "top 5 modelos") são agregados e não têm detalhamento temporal
+   - Ex: Histórico "top 20 modelos" + Nova pergunta "evolução mensal dos 5 melhores" → NOVA CONSULTA
 
-4. **TIPO DE ANÁLISE**: Se a nova pergunta pede cálculos/análises diferentes dos já feitos, é NOVA CONSULTA.
-   - Ex: Histórico tem lista simples mas nova pergunta pede "total por categoria" → NOVA CONSULTA
-   - Ex: Histórico tem valores mas nova pergunta pede "tempo médio" → NOVA CONSULTA
+3. **MUDANÇA DE GRANULARIDADE**:
+   - Histórico tem dados totalizados mas nova pergunta pede breakdown (por período, região, etc.) → NOVA CONSULTA
+   - Histórico tem dados detalhados mas nova pergunta pede apenas resumo → PODE REUTILIZAR
 
-5. **VISUALIZAÇÃO/EXPORT**: Se a nova pergunta só quer apresentar os mesmos dados de forma diferente, PODE REUTILIZAR.
+4. **COMPATIBILIDADE DE ASSUNTO**:
+   - Nova pergunta é sobre o MESMO ASSUNTO da consulta anterior? 
+   - Ex: Nova pergunta sobre "tempo médio" vs histórico sobre "montante de vendas" → INCOMPATÍVEL → NOVA CONSULTA
+
+5. **QUANTIDADE E ESCOPO**:
+   - Se a nova pergunta solicita mais registros do que qualquer consulta anterior retornou → NOVA CONSULTA
+   - Se a nova pergunta muda filtros, período, ou critérios → NOVA CONSULTA
+
+6. **TIPO DE ANÁLISE**:
+   - Se a nova pergunta pede cálculos/análises diferentes dos já feitos → NOVA CONSULTA
+   - Se a nova pergunta pede métricas não calculadas anteriormente → NOVA CONSULTA
+
+7. **VISUALIZAÇÃO/EXPORT APENAS**:
+   - Se a nova pergunta só quer apresentar os mesmos dados de forma diferente → PODE REUTILIZAR
    - Ex: "fazer gráfico", "exportar excel", "mostrar tabela" dos mesmos dados → REUTILIZAR
 
-🎯 DECISÃO:
-- Se a nova pergunta é sobre ASSUNTO DIFERENTE ou pede ANÁLISE DIFERENTE → NOVA CONSULTA
-- Encontrou consulta anterior que responde à nova pergunta com dados suficientes? → REUTILIZAR (informe o ID)
-- Nova pergunta precisa de dados diferentes/mais dados? → NOVA CONSULTA
+🎯 DECISÃO PRIORITÁRIA:
+- **EVOLUÇÃO TEMPORAL + RANKING**: Se nova pergunta combina ranking com evolução temporal → SEMPRE NOVA CONSULTA
+- **FALTA DE COLUNAS**: Se nova pergunta precisa de colunas não disponíveis nos dados anteriores → NOVA CONSULTA
+- **GRANULARIDADE DIFERENTE**: Se nova pergunta precisa de mais detalhes que os dados agregados anteriores → NOVA CONSULTA
+- **VISUALIZAÇÃO APENAS**: Se nova pergunta só quer gráfico/export dos mesmos dados → REUTILIZAR
 
 Responda APENAS:
-{{"should_reuse": false, "reason": "nova pergunta sobre assunto/análise diferente"}}
+{{"should_reuse": false, "reason": "nova pergunta sobre evolução temporal requer dados com detalhamento que não existem no histórico agregado"}}
 OU
 {{"should_reuse": true, "reason": "consulta anterior contém dados suficientes", "interaction_id": "ID_da_consulta"}}
 """
@@ -402,7 +560,7 @@ OU
         # Usa um modelo simples só para avaliação, sem tools
         evaluation_model = genai.GenerativeModel(
             MODEL_NAME,
-            generation_config={"temperature": 0.3, "max_output_tokens": 150}
+            generation_config={"temperature": 0.1, "max_output_tokens": 200}  # Temperatura mais baixa para decisões mais consistentes
         )
         
         response = evaluation_model.generate_content(context_prompt)
