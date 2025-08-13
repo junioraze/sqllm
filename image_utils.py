@@ -43,9 +43,9 @@ def get_background_style():
                 background: transparent !important;
             }}
             
-            /* CONTAINERS COM TRANSPARÊNCIA LARANJA MAIS INTENSA */
+            /* CONTAINERS COM TRANSPARÊNCIA LARANJA MAIS SUAVE */
             .block-container {{
-                background: rgba(255, 140, 66, 0.45) !important;
+                background: rgba(255, 140, 66, 0.3) !important;
                 backdrop-filter: blur(15px) !important;
                 border-radius: 20px !important;
                 margin: 1rem !important;
@@ -54,9 +54,18 @@ def get_background_style():
                 border: 1px solid rgba(255, 140, 66, 0.4) !important;
             }}
             
-            /* MENSAGENS DE CHAT ELEGANTES */
+            /* BOTTOM BLOCK CONTAINER COM MESMO PADRÃO */
+            [data-testid="stBottomBlockContainer"] {{
+                background: rgba(255, 140, 66, 0.3) !important;
+                backdrop-filter: blur(15px) !important;
+                border-radius: 20px !important;
+                border: 1px solid rgba(255, 140, 66, 0.4) !important;
+                box-shadow: 0 8px 32px rgba(255, 107, 53, 0.3) !important;
+            }}
+            
+            /* MENSAGENS DE CHAT MAIS SUAVES */
             .stChatMessage {{
-                background: rgba(255, 140, 66, 0.7) !important;
+                background: rgba(255, 140, 66, 0.5) !important;
                 backdrop-filter: blur(10px) !important;
                 border-radius: 15px !important;
                 margin-bottom: 1rem !important;
@@ -65,9 +74,75 @@ def get_background_style():
                 color: #fff !important;
             }}
             
-            /* EXPANSORES ELEGANTES */
+            /* GRÁFICOS PLOTLY COM FUNDO LARANJA MAIS SUAVE */
+            .js-plotly-plot .plotly {{
+                background: rgba(255, 140, 66, 0.4) !important;
+                border-radius: 12px !important;
+            }}
+            
+            .js-plotly-plot .plotly .bg {{
+                fill: rgba(255, 140, 66, 0.4) !important;
+            }}
+            
+            .js-plotly-plot .plotly .plot-container {{
+                background: rgba(255, 140, 66, 0.4) !important;
+                border-radius: 12px !important;
+            }}
+            
+            .stPlotlyChart > div {{
+                background: rgba(255, 140, 66, 0.4) !important;
+                border-radius: 12px !important;
+                backdrop-filter: blur(10px) !important;
+            }}
+            
+            /* MELHORIAS DE FONTE PARA GRÁFICOS */
+            .js-plotly-plot text {{
+                font-family: 'Arial', sans-serif !important;
+                font-weight: 600 !important;
+                fill: white !important;
+                text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5) !important;
+            }}
+            
+            .js-plotly-plot .xtick text, .js-plotly-plot .ytick text {{
+                font-size: 13px !important;
+                font-weight: 600 !important;
+                fill: white !important;
+                text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7) !important;
+            }}
+            
+            .js-plotly-plot .g-xtitle text, .js-plotly-plot .g-ytitle text {{
+                font-size: 14px !important;
+                font-weight: 700 !important;
+                fill: white !important;
+                text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8) !important;
+            }}
+            
+            .js-plotly-plot .gtitle text {{
+                font-size: 18px !important;
+                font-weight: 700 !important;
+                fill: white !important;
+                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8) !important;
+            }}
+            
+            .js-plotly-plot .legend text {{
+                font-size: 12px !important;
+                font-weight: 600 !important;
+                fill: white !important;
+                text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7) !important;
+            }}
+            
+            /* HOVER LABELS */
+            .js-plotly-plot .hovertext {{
+                background: rgba(0, 0, 0, 0.8) !important;
+                color: white !important;
+                border: 1px solid rgba(255, 140, 66, 0.8) !important;
+                font-size: 12px !important;
+                font-weight: 600 !important;
+            }}
+            
+            /* EXPANSORES MAIS SUAVES */
             .stExpander {{
-                background: rgba(255, 140, 66, 0.8) !important;
+                background: rgba(255, 140, 66, 0.5) !important;
                 backdrop-filter: blur(10px) !important;
                 border-radius: 12px !important;
                 border: 1px solid rgba(255, 107, 53, 0.5) !important;
@@ -75,15 +150,15 @@ def get_background_style():
             }}
             
             .streamlit-expanderHeader {{
-                background: rgba(255, 107, 53, 0.9) !important;
+                background: rgba(255, 107, 53, 0.6) !important;
                 backdrop-filter: blur(8px) !important;
                 border-radius: 8px !important;
                 color: #fff !important;
             }}
             
-            /* INPUT DE CHAT COM TEMA LARANJA */
+            /* INPUT DE CHAT COM TEMA LARANJA MAIS SUAVE */
             .stChatInput textarea {{
-                background: rgba(255, 107, 53, 0.9) !important;
+                background: rgba(255, 107, 53, 0.7) !important;
                 color: #fff !important;
                 border-radius: 12px !important;
                 border: 2px solid rgba(255, 140, 66, 0.6) !important;
@@ -159,7 +234,7 @@ def get_background_style():
                 background: linear-gradient(135deg, #ff8c42 0%, #ff6b35 100%) !important;
             }
             .block-container {
-                background: rgba(255, 140, 66, 0.45) !important;
+                background: rgba(255, 140, 66, 0.3) !important;
                 backdrop-filter: blur(10px) !important;
                 border-radius: 15px !important;
                 margin: 1rem !important;
@@ -180,7 +255,7 @@ def get_background_style():
             }
             
             .stChatInput textarea {
-                background: rgba(255, 107, 53, 0.9) !important;
+                background: rgba(255, 107, 53, 0.7) !important;
                 color: #fff !important;
                 border-radius: 8px !important;
                 border: 1px solid rgba(255, 140, 66, 0.6) !important;
@@ -212,9 +287,9 @@ def get_login_background_style():
         [data-testid="stSidebar"] { display: none !important; }
         header[data-testid="stHeader"] { display: none !important; }
         
-        /* CONTAINER DE LOGIN COM TRANSPARÊNCIA LARANJA MAIS INTENSA */
+        /* CONTAINER DE LOGIN COM TRANSPARÊNCIA LARANJA MAIS SUAVE */
         .block-container {
-            background: rgba(255, 140, 66, 0.45) !important;
+            background: rgba(255, 140, 66, 0.3) !important;
             backdrop-filter: blur(15px) !important;
             border-radius: 15px !important;
             max-width: 500px !important;

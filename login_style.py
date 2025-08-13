@@ -21,9 +21,9 @@ LOGIN_SCREEN_STYLE = """
         [data-testid="stSidebar"] { display: none !important; }
         header[data-testid="stHeader"] { display: none !important; }
         
-        /* CONTAINER DE LOGIN COM TRANSPARÊNCIA LARANJA MAIS INTENSA */
+        /* CONTAINER DE LOGIN COM TRANSPARÊNCIA LARANJA MAIS SUAVE */
         .block-container {
-            background: rgba(255, 140, 66, 0.45) !important;
+            background: rgba(255, 140, 66, 0.3) !important;
             backdrop-filter: blur(15px) !important;
             border-radius: 20px !important;
             max-width: 600px !important;

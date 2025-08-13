@@ -300,7 +300,68 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
         else:
             return None
 
-        fig.update_layout(hovermode="x unified", plot_bgcolor="rgba(0,0,0,0)")
+        fig.update_layout(
+            hovermode="x unified", 
+            plot_bgcolor="rgba(255, 140, 66, 0.2)",
+            paper_bgcolor="rgba(255, 140, 66, 0.2)",
+            font=dict(
+                color="white",
+                size=14,
+                family="Arial, sans-serif"
+            ),
+            title=dict(
+                font=dict(
+                    color="white",
+                    size=18,
+                    family="Arial, sans-serif"
+                ),
+                x=0.5,
+                xanchor='center'
+            ),
+            xaxis=dict(
+                gridcolor="rgba(255, 255, 255, 0.2)",
+                color="white",
+                tickfont=dict(
+                    color="white",
+                    size=13,
+                    family="Arial, sans-serif"
+                ),
+                title=dict(
+                    font=dict(
+                        color="white",
+                        size=14,
+                        family="Arial, sans-serif"
+                    )
+                )
+            ),
+            yaxis=dict(
+                gridcolor="rgba(255, 255, 255, 0.2)",
+                color="white",
+                tickfont=dict(
+                    color="white",
+                    size=13,
+                    family="Arial, sans-serif"
+                ),
+                title=dict(
+                    font=dict(
+                        color="white",
+                        size=14,
+                        family="Arial, sans-serif"
+                    )
+                )
+            ),
+            legend=dict(
+                font=dict(
+                    color="white",
+                    size=12,
+                    family="Arial, sans-serif"
+                ),
+                bgcolor="rgba(255, 140, 66, 0.5)",
+                bordercolor="rgba(255, 255, 255, 0.3)",
+                borderwidth=1
+            ),
+            margin=dict(l=60, r=60, t=60, b=60)
+        )
         return fig
 
     except Exception as e:

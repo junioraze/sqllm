@@ -9,15 +9,24 @@ MOBILE_IFRAME_CHAT = """
             background-repeat: no-repeat !important;
         }
         
-        /* CONTAINER PRINCIPAL COM TRANSPARÊNCIA LARANJA MAIS INTENSA */
+        /* CONTAINER PRINCIPAL COM TRANSPARÊNCIA LARANJA MAIS SUAVE */
         .block-container {
-            background: rgba(255, 140, 66, 0.45) !important;
+            background: rgba(255, 140, 66, 0.3) !important;
             backdrop-filter: blur(10px) !important;
             border-radius: 15px !important;
             margin: 1rem !important;
             padding: 1.5rem !important;
             box-shadow: 0 4px 6px rgba(255, 107, 53, 0.3) !important;
             border: 1px solid rgba(255, 140, 66, 0.4) !important;
+        }
+        
+        /* BOTTOM BLOCK CONTAINER COM MESMO PADRÃO */
+        [data-testid="stBottomBlockContainer"] {
+            background: rgba(255, 140, 66, 0.3) !important;
+            backdrop-filter: blur(10px) !important;
+            border-radius: 15px !important;
+            border: 1px solid rgba(255, 140, 66, 0.4) !important;
+            box-shadow: 0 4px 6px rgba(255, 107, 53, 0.3) !important;
         }
         
         /* REMOVE MENU HAMBÚRGUER */
@@ -30,9 +39,9 @@ MOBILE_IFRAME_CHAT = """
         button[data-testid="baseButton-headerNoPadding"] { display: none !important; }
         [data-testid="stSidebar"] { display: none !important; }
         
-        /* MENSAGENS DE CHAT COM TEMA LARANJA */
+        /* MENSAGENS DE CHAT COM TEMA LARANJA MAIS SUAVE */
         .stChatMessage {
-            background: rgba(255, 140, 66, 0.8) !important;
+            background: rgba(255, 140, 66, 0.5) !important;
             backdrop-filter: blur(5px) !important;
             border-radius: 12px !important;
             margin-bottom: 0.75rem !important;
@@ -41,16 +50,73 @@ MOBILE_IFRAME_CHAT = """
             color: #fff !important;
         }
         
-        /* EXPANSORES COM TEMA LARANJA */
+        /* GRÁFICOS PLOTLY COM FUNDO LARANJA MAIS SUAVE */
+        .js-plotly-plot .plotly {
+            background: rgba(255, 140, 66, 0.4) !important;
+            border-radius: 12px !important;
+        }
+        
+        .js-plotly-plot .plotly .bg {
+            fill: rgba(255, 140, 66, 0.4) !important;
+        }
+        
+        .js-plotly-plot .plotly .plot-container {
+            background: rgba(255, 140, 66, 0.4) !important;
+            border-radius: 12px !important;
+        }
+        
+        .stPlotlyChart > div {
+            background: rgba(255, 140, 66, 0.4) !important;
+            border-radius: 12px !important;
+            backdrop-filter: blur(5px) !important;
+        }
+        
+        /* MELHORIAS DE FONTE PARA GRÁFICOS MOBILE */
+        .js-plotly-plot text {
+            font-family: 'Arial', sans-serif !important;
+            font-weight: 600 !important;
+            fill: white !important;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5) !important;
+        }
+        
+        .js-plotly-plot .xtick text, .js-plotly-plot .ytick text {
+            font-size: 12px !important;
+            font-weight: 600 !important;
+            fill: white !important;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7) !important;
+        }
+        
+        .js-plotly-plot .g-xtitle text, .js-plotly-plot .g-ytitle text {
+            font-size: 13px !important;
+            font-weight: 700 !important;
+            fill: white !important;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8) !important;
+        }
+        
+        .js-plotly-plot .gtitle text {
+            font-size: 16px !important;
+            font-weight: 700 !important;
+            fill: white !important;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8) !important;
+        }
+        
+        .js-plotly-plot .legend text {
+            font-size: 11px !important;
+            font-weight: 600 !important;
+            fill: white !important;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7) !important;
+        }
+        
+        /* EXPANSORES COM TEMA LARANJA MAIS SUAVE */
         .stExpander {
-            background: rgba(255, 140, 66, 0.8) !important;
+            background: rgba(255, 140, 66, 0.5) !important;
             backdrop-filter: blur(5px) !important;
             border-radius: 8px !important;
             border: 1px solid rgba(255, 107, 53, 0.5) !important;
         }
         
         .streamlit-expanderHeader {
-            background: rgba(255, 107, 53, 0.9) !important;
+            background: rgba(255, 107, 53, 0.6) !important;
             backdrop-filter: blur(5px) !important;
             color: #fff !important;
         }
@@ -140,7 +206,7 @@ MOBILE_IFRAME_BASE = """
                 bottom: 0;
                 left: 0;
                 right: 0;
-                background: rgba(255, 107, 53, 0.9);
+                background: rgba(255, 107, 53, 0.7);
                 padding: 0.8rem;
                 z-index: 100;
                 border-top: 1px solid rgba(255, 140, 66, 0.6);
