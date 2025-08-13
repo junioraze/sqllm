@@ -1,6 +1,6 @@
 import streamlit as st
-import json
 import os
+import json
 import traceback
 from cache_db import save_interaction, log_error, get_user_history, get_interaction_full_data
 from config import MAX_RATE_LIMIT, DATASET_ID, PROJECT_ID, TABLES_CONFIG, CLIENT_CONFIG  # Importa a configuração do assistente
@@ -16,6 +16,7 @@ st.set_page_config(
 )
 
 from style import MOBILE_IFRAME_BASE  # Importa o módulo de estilos
+from image_utils import get_background_style, get_login_background_style  # Importa utilitários de imagem
 from gemini_handler import initialize_model, refine_with_gemini, should_reuse_data
 from database import build_query, execute_query
 from utils import display_message_with_spoiler, slugfy_response, safe_serialize_gemini_params, safe_serialize_data, safe_serialize_tech_details
@@ -25,11 +26,8 @@ from logger import log_interaction
 # Configuração do rate limit (100 requisições por dia)
 rate_limiter = RateLimiter(max_requests_per_day=MAX_RATE_LIMIT)
 
-# Variável para controlar a exibição de detalhes técnicos
+# Configuração inicial
 SHOW_TECHNICAL_SPOILER = True  # Defina como True para mostrar detalhes técnicos
-
-# Configuração de estilos para mobile
-st.markdown(MOBILE_IFRAME_BASE, unsafe_allow_html=True)
 
 # Carrega as credenciais do arquivo
 with open(os.path.join(os.path.dirname(__file__), "credentials.json"), "r") as f:
@@ -39,6 +37,16 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
+    # Aplica estilos específicos para a tela de login
+    st.markdown(get_login_background_style(), unsafe_allow_html=True)
+    
+    # Adiciona a imagem de logo/descrição
+    try:
+        st.image("etc/desc_logo.jpg", use_container_width=True, output_format="auto")
+    except:
+        # Se não conseguir carregar a imagem, continua sem ela
+        pass
+    
     st.title(f"Login {CLIENT_CONFIG.get('app_subtitle', 'Sistema de Análise')}")
     login = st.text_input("E-mail", value="", key="login_input")
     password = st.text_input("Senha", type="password", key="password_input")
@@ -49,6 +57,10 @@ if not st.session_state.authenticated:
         else:
             st.error("Usuário ou senha inválidos.")
     st.stop()
+
+# Aplica o fundo personalizado para o chatbot (somente após login)
+st.markdown(MOBILE_IFRAME_BASE, unsafe_allow_html=True)
+st.markdown(get_background_style(), unsafe_allow_html=True)
 
 # Container principal para todo o conteúdo
 with st.container():

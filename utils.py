@@ -2,12 +2,9 @@ import json
 import streamlit as st
 from datetime import datetime
 import uuid
-from style import MOBILE_IFRAME_CHAT
 import pandas as pd
 from io import BytesIO
 import base64, re
-# Estilo adicional para o chat
-st.markdown(MOBILE_IFRAME_CHAT, unsafe_allow_html=True)
 
 def _generate_key():
     timestamp = datetime.now().strftime("%Y%m%d")
