@@ -15,6 +15,33 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# FORÇA TEMA LIGHT SEMPRE (equivalente ao menu hambúrguer > Settings > Theme > Light)
+st.markdown("""
+<script>
+    // Força o tema light programaticamente
+    setTimeout(function() {
+        const iframe = window.parent.document.querySelector('iframe[title="streamlit_app"]');
+        const doc = iframe ? iframe.contentDocument || iframe.contentWindow.document : document;
+        
+        // Remove o tema dark se estiver aplicado
+        const stApp = doc.querySelector('.stApp');
+        if (stApp) {
+            stApp.classList.remove('dark');
+            stApp.classList.add('light');
+        }
+        
+        // Força as variáveis CSS do tema light
+        const root = doc.documentElement;
+        if (root) {
+            root.style.setProperty('--primary-color', '#ff6b35');
+            root.style.setProperty('--background-color', '#ffffff');
+            root.style.setProperty('--secondary-background-color', '#f0f2f6');
+            root.style.setProperty('--text-color', '#093374');
+        }
+    }, 100);
+</script>
+""", unsafe_allow_html=True)
+
 from style import MOBILE_IFRAME_BASE  # Importa o módulo de estilos
 from image_utils import get_background_style, get_login_background_style  # Importa utilitários de imagem
 from gemini_handler import initialize_model, refine_with_gemini, should_reuse_data
