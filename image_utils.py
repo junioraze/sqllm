@@ -19,10 +19,10 @@ def get_background_style():
     if base64_bg:
         return f"""
         <style>
-            /* FUNDO GLOBAL PARA TODA A APLICAÇÃO */
+            /* FUNDO GLOBAL COM IMAGEM */
             .stApp, .stApp > div:first-child, [data-testid="stAppViewContainer"], 
             [data-testid="stHeader"], .main, .stMainBlockContainer {{
-                background: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.5)), url('data:image/jpeg;base64,{base64_bg}') !important;
+                background: url('data:image/jpeg;base64,{base64_bg}') !important;
                 background-size: cover !important;
                 background-position: center !important;
                 background-attachment: fixed !important;
@@ -31,7 +31,7 @@ def get_background_style():
             
             /* FORÇA O FUNDO EM TODA A HIERARQUIA */
             body, html, #root, [data-testid="stApp"] {{
-                background: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.5)), url('data:image/jpeg;base64,{base64_bg}') !important;
+                background: url('data:image/jpeg;base64,{base64_bg}') !important;
                 background-size: cover !important;
                 background-position: center !important;
                 background-attachment: fixed !important;
@@ -43,56 +43,58 @@ def get_background_style():
                 background: transparent !important;
             }}
             
-            /* CONTAINERS COM TRANSPARÊNCIA ELEGANTE */
+            /* CONTAINERS COM TRANSPARÊNCIA LARANJA MAIS INTENSA */
             .block-container {{
-                background: rgba(255, 255, 255, 0.65) !important;
+                background: rgba(255, 140, 66, 0.45) !important;
                 backdrop-filter: blur(15px) !important;
                 border-radius: 20px !important;
                 margin: 1rem !important;
                 padding: 2rem !important;
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
-                border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                box-shadow: 0 8px 32px rgba(255, 107, 53, 0.3) !important;
+                border: 1px solid rgba(255, 140, 66, 0.4) !important;
             }}
             
             /* MENSAGENS DE CHAT ELEGANTES */
             .stChatMessage {{
-                background: rgba(255, 255, 255, 0.45) !important;
+                background: rgba(255, 140, 66, 0.7) !important;
                 backdrop-filter: blur(10px) !important;
                 border-radius: 15px !important;
                 margin-bottom: 1rem !important;
-                border: 1px solid rgba(255, 255, 255, 0.3) !important;
-                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1) !important;
+                border: 1px solid rgba(255, 107, 53, 0.5) !important;
+                box-shadow: 0 4px 16px rgba(255, 107, 53, 0.2) !important;
+                color: #fff !important;
             }}
             
             /* EXPANSORES ELEGANTES */
             .stExpander {{
-                background: rgba(255, 255, 255, 0.55) !important;
+                background: rgba(255, 140, 66, 0.8) !important;
                 backdrop-filter: blur(10px) !important;
                 border-radius: 12px !important;
-                border: 1px solid rgba(255, 255, 255, 0.3) !important;
-                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+                border: 1px solid rgba(255, 107, 53, 0.5) !important;
+                box-shadow: 0 4px 16px rgba(255, 107, 53, 0.15) !important;
             }}
             
             .streamlit-expanderHeader {{
-                background-color: rgba(248, 250, 253, 0.6) !important;
+                background: rgba(255, 107, 53, 0.9) !important;
                 backdrop-filter: blur(8px) !important;
                 border-radius: 8px !important;
+                color: #fff !important;
             }}
             
-            /* INPUT DE CHAT MELHORADO COM TRANSPARÊNCIA */
+            /* INPUT DE CHAT COM TEMA LARANJA */
             .stChatInput textarea {{
-                background: linear-gradient(135deg, #ff8c42 0%, #ff6b35 100%) !important;
+                background: rgba(255, 107, 53, 0.9) !important;
                 color: #fff !important;
                 border-radius: 12px !important;
-                border: 2px solid rgba(255, 255, 255, 0.2) !important;
+                border: 2px solid rgba(255, 140, 66, 0.6) !important;
                 padding: 0.8rem !important;
                 font-size: 1rem !important;
                 transition: all 0.3s ease !important;
             }}
             
             .stChatInput textarea:focus {{
-                border-color: #ff8c42 !important;
-                box-shadow: 0 0 0 3px rgba(255, 140, 66, 0.2) !important;
+                border-color: rgba(255, 140, 66, 0.8) !important;
+                box-shadow: 0 0 0 3px rgba(255, 140, 66, 0.3) !important;
             }}
             
             .stChatInput textarea::placeholder {{
@@ -143,29 +145,28 @@ def get_background_style():
                 .stCodeBlock {{
                     font-size: 0.8rem !important;
                     padding: 0.5rem !important;
-                    background: rgba(248, 250, 253, 0.95) !important;
+                    background: rgba(255, 140, 66, 0.9) !important;
                     backdrop-filter: blur(5px) !important;
                 }}
             }}
         </style>
         """
     else:
-        # Fallback sem imagem de fundo
+        # Fallback com gradiente laranja
         return """
         <style>
             .stApp > div:first-child {
                 background: linear-gradient(135deg, #ff8c42 0%, #ff6b35 100%) !important;
             }
             .block-container {
-                background: rgba(255, 255, 255, 0.95) !important;
+                background: rgba(255, 140, 66, 0.45) !important;
                 backdrop-filter: blur(10px) !important;
                 border-radius: 15px !important;
                 margin: 1rem !important;
                 padding: 1.5rem !important;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+                box-shadow: 0 4px 6px rgba(255, 107, 53, 0.3) !important;
             }
             
-            /* GARANTIR QUE O INPUT FIQUE TRANSPARENTE */
             .stChatInput {
                 background: transparent !important;
                 border: none !important;
@@ -179,10 +180,10 @@ def get_background_style():
             }
             
             .stChatInput textarea {
-                background: linear-gradient(135deg, #ff8c42 0%, #ff6b35 100%) !important;
+                background: rgba(255, 107, 53, 0.9) !important;
                 color: #fff !important;
                 border-radius: 8px !important;
-                border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                border: 1px solid rgba(255, 140, 66, 0.6) !important;
             }
         </style>
         """
@@ -191,9 +192,9 @@ def get_login_background_style():
     """Retorna o estilo CSS para a tela de login"""
     return """
     <style>
-        /* LOGIN BACKGROUND */
+        /* LOGIN BACKGROUND COM IMAGEM */
         .stApp > div:first-child {
-            background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('etc/fundo.jpg') !important;
+            background: url('etc/fundo.jpg') !important;
             background-size: cover !important;
             background-position: center !important;
             background-attachment: fixed !important;
@@ -211,15 +212,17 @@ def get_login_background_style():
         [data-testid="stSidebar"] { display: none !important; }
         header[data-testid="stHeader"] { display: none !important; }
         
+        /* CONTAINER DE LOGIN COM TRANSPARÊNCIA LARANJA MAIS INTENSA */
         .block-container {
-            background: rgba(255, 255, 255, 0.95) !important;
+            background: rgba(255, 140, 66, 0.45) !important;
             backdrop-filter: blur(15px) !important;
             border-radius: 15px !important;
             max-width: 500px !important;
             width: 85% !important;
             margin: 0.2rem auto !important;
             padding: 0.7rem 1.2rem !important;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1) !important;
+            box-shadow: 0 4px 20px rgba(255, 107, 53, 0.4) !important;
+            border: 1px solid rgba(255, 140, 66, 0.6) !important;
             min-height: auto !important;
             position: relative !important;
             top: 50% !important;
@@ -228,23 +231,24 @@ def get_login_background_style():
         
         h1 {
             text-align: center !important;
-            color: #333 !important;
+            color: #fff !important;
             margin-bottom: 0.3rem !important;
             margin-top: 0 !important;
             font-weight: 600 !important;
             font-size: 1.4rem !important;
             line-height: 1.2 !important;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
         }
         
-        /* CAMPOS DE INPUT EM LAYOUT HORIZONTAL */
+        /* CAMPOS DE INPUT */
         .stTextInput {
             margin-bottom: 0.3rem !important;
         }
         
         .stTextInput > div > div > input {
-            background: linear-gradient(135deg, #ff8c42 0%, #ff6b35 100%) !important;
+            background: rgba(255, 107, 53, 0.9) !important;
             color: #fff !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            border: 1px solid rgba(255, 140, 66, 0.6) !important;
             border-radius: 6px !important;
             padding: 0.4rem 0.7rem !important;
             font-size: 0.9rem !important;
@@ -258,22 +262,23 @@ def get_login_background_style():
         }
         
         .stTextInput > div > div > input:focus {
-            box-shadow: 0 0 0 2px rgba(255, 140, 66, 0.3) !important;
-            border-color: rgba(255, 255, 255, 0.4) !important;
+            box-shadow: 0 0 0 2px rgba(255, 140, 66, 0.5) !important;
+            border-color: rgba(255, 140, 66, 0.8) !important;
         }
         
         /* LABELS DOS INPUTS */
         .stTextInput > label {
-            color: #333 !important;
+            color: #fff !important;
             font-weight: 500 !important;
             margin-bottom: 0.2rem !important;
             font-size: 0.85rem !important;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
         }
         
         /* BOTÃO ENTRAR */
         .stButton > button {
             width: 100% !important;
-            background: linear-gradient(135deg, #ff8c42 0%, #ff6b35 100%) !important;
+            background: rgba(255, 107, 53, 0.95) !important;
             color: white !important;
             border: none !important;
             border-radius: 6px !important;
@@ -283,17 +288,22 @@ def get_login_background_style():
             margin-top: 0.3rem !important;
             transition: all 0.3s ease !important;
             height: 38px !important;
+            box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3) !important;
         }
         
         .stButton > button:hover {
             transform: translateY(-2px) !important;
-            box-shadow: 0 4px 12px rgba(255, 140, 66, 0.3) !important;
+            box-shadow: 0 4px 12px rgba(255, 107, 53, 0.4) !important;
+            background: rgba(255, 107, 53, 1) !important;
         }
         
         .stAlert {
             border-radius: 8px !important;
             margin-top: 0.5rem !important;
             margin-bottom: 0 !important;
+            background: rgba(255, 140, 66, 0.9) !important;
+            color: #fff !important;
+            border: 1px solid rgba(255, 107, 53, 0.6) !important;
         }
         
         @media screen and (max-width: 768px) {

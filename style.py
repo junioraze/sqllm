@@ -1,21 +1,23 @@
 MOBILE_IFRAME_CHAT = """
     <style>
-        /* CHATBOT BACKGROUND */
+        /* CHATBOT BACKGROUND COM IMAGEM */
         .stApp > div:first-child {
-            background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('etc/fundo.jpg') !important;
+            background: url('etc/fundo.jpg') !important;
             background-size: cover !important;
             background-position: center !important;
             background-attachment: fixed !important;
             background-repeat: no-repeat !important;
         }
         
+        /* CONTAINER PRINCIPAL COM TRANSPARÊNCIA LARANJA MAIS INTENSA */
         .block-container {
-            background: rgba(255, 255, 255, 0.95) !important;
+            background: rgba(255, 140, 66, 0.45) !important;
             backdrop-filter: blur(10px) !important;
             border-radius: 15px !important;
             margin: 1rem !important;
             padding: 1.5rem !important;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+            box-shadow: 0 4px 6px rgba(255, 107, 53, 0.3) !important;
+            border: 1px solid rgba(255, 140, 66, 0.4) !important;
         }
         
         /* REMOVE MENU HAMBÚRGUER */
@@ -28,34 +30,38 @@ MOBILE_IFRAME_CHAT = """
         button[data-testid="baseButton-headerNoPadding"] { display: none !important; }
         [data-testid="stSidebar"] { display: none !important; }
         
-        /* MENSAGENS DE CHAT */
+        /* MENSAGENS DE CHAT COM TEMA LARANJA */
         .stChatMessage {
-            background: rgba(255, 255, 255, 0.9) !important;
+            background: rgba(255, 140, 66, 0.8) !important;
             backdrop-filter: blur(5px) !important;
             border-radius: 12px !important;
             margin-bottom: 0.75rem !important;
             padding: 0.75rem !important;
+            border: 1px solid rgba(255, 107, 53, 0.5) !important;
+            color: #fff !important;
         }
         
-        /* EXPANSORES */
+        /* EXPANSORES COM TEMA LARANJA */
         .stExpander {
-            background: rgba(255, 255, 255, 0.9) !important;
+            background: rgba(255, 140, 66, 0.8) !important;
             backdrop-filter: blur(5px) !important;
             border-radius: 8px !important;
+            border: 1px solid rgba(255, 107, 53, 0.5) !important;
         }
         
         .streamlit-expanderHeader {
-            background-color: rgba(240, 242, 246, 0.9) !important;
+            background: rgba(255, 107, 53, 0.9) !important;
             backdrop-filter: blur(5px) !important;
+            color: #fff !important;
         }
 
-        /* CHAT INPUT STYLING */
+        /* CHAT INPUT COM TEMA LARANJA */
         .stChatInput textarea {
-            background: linear-gradient(135deg, #ff8c42 0%, #ff6b35 100%) !important;
+            background: rgba(255, 107, 53, 0.9) !important;
             color: #fff !important;
             border-radius: 8px !important;
             backdrop-filter: blur(5px) !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            border: 1px solid rgba(255, 140, 66, 0.6) !important;
         }
         .stChatInput textarea::placeholder {
             color: rgba(255, 255, 255, 0.8) !important;
@@ -81,7 +87,7 @@ MOBILE_IFRAME_CHAT = """
             .stCodeBlock {
                 font-size: 0.8rem !important;
                 padding: 0.5rem !important;
-                background: rgba(248, 250, 253, 0.9) !important;
+                background: rgba(255, 140, 66, 0.9) !important;
                 backdrop-filter: blur(5px) !important;
             }
         }
@@ -110,13 +116,13 @@ MOBILE_IFRAME_BASE = """
         button[data-testid="baseButton-headerNoPadding"] { display: none !important; }
         [data-testid="stSidebar"] { display: none !important; }
         
-        /* CHAT INPUT STYLING COMPLEMENTAR */
+        /* CHAT INPUT COM TEMA LARANJA */
         .stChatInput textarea {
-            background: linear-gradient(135deg, #ff8c42 0%, #ff6b35 100%) !important;
+            background: rgba(255, 107, 53, 0.9) !important;
             color: #fff !important;
             border-radius: 8px !important;
             backdrop-filter: blur(5px) !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            border: 1px solid rgba(255, 140, 66, 0.6) !important;
         }
         .stChatInput textarea::placeholder {
             color: rgba(255, 255, 255, 0.8) !important;
@@ -134,20 +140,22 @@ MOBILE_IFRAME_BASE = """
                 bottom: 0;
                 left: 0;
                 right: 0;
-                background: rgba(0, 0, 0, 0.9);
+                background: rgba(255, 107, 53, 0.9);
                 padding: 0.8rem;
                 z-index: 100;
-                border-top: 1px solid #333;
+                border-top: 1px solid rgba(255, 140, 66, 0.6);
                 backdrop-filter: blur(10px);
             }
             h1 {
                 font-size: 1.5rem !important;
                 margin-bottom: 0.5rem !important;
                 padding-top: 0.5rem !important;
+                color: #fff !important;
+                text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
             }
             .stCodeBlock { 
                 font-size: 0.8rem !important; 
-                background: rgba(248, 250, 253, 0.9) !important;
+                background: rgba(255, 140, 66, 0.9) !important;
                 backdrop-filter: blur(5px) !important;
             }
         }
