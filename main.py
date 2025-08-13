@@ -19,7 +19,14 @@ from style import MOBILE_IFRAME_BASE  # Importa o módulo de estilos
 from image_utils import get_background_style, get_login_background_style  # Importa utilitários de imagem
 from gemini_handler import initialize_model, refine_with_gemini, should_reuse_data
 from database import build_query, execute_query
-from utils import display_message_with_spoiler, slugfy_response, safe_serialize_gemini_params, safe_serialize_data, safe_serialize_tech_details
+from utils import (
+    display_message_with_spoiler, 
+    slugfy_response, 
+    safe_serialize_gemini_params, 
+    safe_serialize_data, 
+    safe_serialize_tech_details,
+    format_text_with_ia_highlighting
+)
 from rate_limit import RateLimiter
 from logger import log_interaction
 
@@ -47,30 +54,193 @@ if not st.session_state.authenticated:
         # Se não conseguir carregar a imagem, continua sem ela
         pass
     
-    st.title(f"Login {CLIENT_CONFIG.get('app_subtitle', 'Sistema de Análise')}")
-    login = st.text_input("E-mail", value="", key="login_input")
-    password = st.text_input("Senha", type="password", key="password_input")
+    # Título de login com IA destacado - USANDO MARKDOWN PURO
+    login_title = f"Login {CLIENT_CONFIG.get('app_subtitle', 'Sistema de Análise')}"
+    formatted_login_title = format_text_with_ia_highlighting(login_title)
+    st.markdown(f"# {formatted_login_title}", unsafe_allow_html=True)
+    
+    # CSS para campos de login e preservação de cores IA
+    st.markdown("""
+    <style>
+    /* TÍTULO DE LOGIN CENTRALIZADO */
+    .stApp h1 {
+        text-align: center !important;
+        color: #093374 !important;
+    }
+    
+    /* Labels dos campos de login */
+    .stTextInput > label {
+        color: #093374 !important;
+        font-weight: 600 !important;
+    }
+    
+    /* Campos de input */
+    .stTextInput > div > div > input {
+        border-color: #093374 !important;
+    }
+    
+    .stTextInput > div > div > input:focus {
+        border-color: #ff6b35 !important;
+        box-shadow: 0 0 0 1px #ff6b35 !important;
+    }
+    
+    /* FORÇA TEXTO AZUL EM TÍTULOS E CORPO */
+    h1, p, div, body {
+        color: #093374 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    login = st.text_input(format_text_with_ia_highlighting("E-mail"), value="", key="login_input")
+    password = st.text_input(format_text_with_ia_highlighting("Senha"), type="password", key="password_input")
     if st.button("Entrar"):
         if login == creds["login"] and password == creds["password"]:
             st.session_state.authenticated = True
             st.rerun()
         else:
-            st.error("Usuário ou senha inválidos.")
+            error_msg = format_text_with_ia_highlighting("Usuário ou senha inválidos.")
+            st.error(error_msg)
     st.stop()
 
 # Aplica o fundo personalizado para o chatbot (somente após login)
 st.markdown(MOBILE_IFRAME_BASE, unsafe_allow_html=True)
 st.markdown(get_background_style(), unsafe_allow_html=True)
 
+# CSS FINAL - DEPOIS DE TODOS OS OUTROS CSS PARA GARANTIR PRIORIDADE ABSOLUTA
+st.markdown("""
+<style>
+/* CORES FINAIS COM MÁXIMA ESPECIFICIDADE - FORÇA AZUL */
+.stApp h1, .stApp h2, .stApp h3, .stApp p, .stApp div, 
+.stApp span, .stApp li, .stApp ul, .stApp ol, .stApp strong, .stApp em,
+.main h1, .main h2, .main h3, .main p, .main div,
+.main span, .main li, .main ul, .main ol, .main strong, .main em {
+    color: #093374 !important;
+}
+
+/* CHAT - USUÁRIO LARANJA, ASSISTENTE AZUL COM ESPECIFICIDADE MÁXIMA */
+.stApp .stChatMessage[data-testid="chat-message-user"] *,
+.stApp .stChatMessage[data-testid="chat-message-user"] p,
+.stApp .stChatMessage[data-testid="chat-message-user"] div,
+.stApp .stChatMessage[data-testid="chat-message-user"] span {
+    color: #ff6b35 !important;
+}
+
+.stApp .stChatMessage[data-testid="chat-message-assistant"] *,
+.stApp .stChatMessage[data-testid="chat-message-assistant"] p,
+.stApp .stChatMessage[data-testid="chat-message-assistant"] div,
+.stApp .stChatMessage[data-testid="chat-message-assistant"] span {
+    color: #093374 !important;
+}
+
+/* EXPANSORES COM ESPECIFICIDADE MÁXIMA */
+.stApp .streamlit-expanderHeader *,
+.stApp .streamlit-expanderContent *,
+.stApp .stExpander * {
+    color: #093374 !important;
+}
+
+/* CÓDIGO COM ESPECIFICIDADE MÁXIMA */
+.stApp .stCode *,
+.stApp .stCode pre,
+.stApp .stCode code {
+    color: #093374 !important;
+}
+
+/* PRESERVA SPANS IA EM LARANJA COM ESPECIFICIDADE MÁXIMA */
+.stApp h1 span[style*="color: #ff6b35"],
+.stApp h1 span[style*="color:#ff6b35"],
+.stApp h2 span[style*="color: #ff6b35"],
+.stApp h2 span[style*="color:#ff6b35"],
+.stApp h3 span[style*="color: #ff6b35"],
+.stApp h3 span[style*="color:#ff6b35"],
+.stApp p span[style*="color: #ff6b35"],
+.stApp p span[style*="color:#ff6b35"],
+.stApp div span[style*="color: #ff6b35"],
+.stApp div span[style*="color:#ff6b35"],
+.stApp .streamlit-expanderContent span[style*="color: #ff6b35"],
+.stApp .streamlit-expanderContent span[style*="color:#ff6b35"],
+.stApp .streamlit-expanderHeader span[style*="color: #ff6b35"],
+.stApp .streamlit-expanderHeader span[style*="color:#ff6b35"],
+.stApp .stExpander span[style*="color: #ff6b35"],
+.stApp .stExpander span[style*="color:#ff6b35"],
+.stApp .stCode span[style*="color: #ff6b35"],
+.stApp .stCode span[style*="color:#ff6b35"],
+.stApp .stChatMessage[data-testid="chat-message-assistant"] span[style*="color: #ff6b35"],
+.stApp .stChatMessage[data-testid="chat-message-assistant"] span[style*="color:#ff6b35"],
+.main h1 span[style*="color: #ff6b35"],
+.main h1 span[style*="color:#ff6b35"],
+.main h2 span[style*="color: #ff6b35"],
+.main h2 span[style*="color:#ff6b35"],
+.main h3 span[style*="color: #ff6b35"],
+.main h3 span[style*="color:#ff6b35"],
+.main p span[style*="color: #ff6b35"],
+.main p span[style*="color:#ff6b35"],
+.main div span[style*="color: #ff6b35"],
+.main div span[style*="color:#ff6b35"] {
+    color: #ff6b35 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # Container principal para todo o conteúdo
 with st.container():
     
-    st.title(CLIENT_CONFIG.get("app_title", "Sistema de Análise de Dados"))
+    # Título principal com IA destacado - USANDO MARKDOWN PURO
+    title_text = CLIENT_CONFIG.get("app_title", "Sistema de Análise de Dados")
+    formatted_title = format_text_with_ia_highlighting(title_text)
+    st.markdown(f"# {formatted_title}", unsafe_allow_html=True)
+
+    # CSS FINAL - DEPOIS DE TODOS OS OUTROS CSS PARA GARANTIR PRIORIDADE ABSOLUTA
+    st.markdown("""
+    <style>
+    /* TÍTULO CENTRALIZADO */
+    .stApp h1 {
+        text-align: center !important;
+        margin-bottom: 2rem !important;
+    }
+    
+    /* CORES FINAIS COM MÁXIMA ESPECIFICIDADE - FORÇA AZUL */
+    .stApp h1, .stApp h2, .stApp h3, .stApp p, .stApp div, 
+    .stApp span, .stApp li, .stApp ul, .stApp ol, .stApp strong, .stApp em,
+    .main h1, .main h2, .main h3, .main p, .main div,
+    .main span, .main li, .main ul, .main ol, .main strong, .main em {
+        color: #093374 !important;
+    }
+
+    /* CHAT - USUÁRIO LARANJA, ASSISTENTE AZUL COM ESPECIFICIDADE MÁXIMA */
+    .stApp .stChatMessage[data-testid="chat-message-user"] *,
+    .stApp .stChatMessage[data-testid="chat-message-user"] p,
+    .stApp .stChatMessage[data-testid="chat-message-user"] div,
+    .stApp .stChatMessage[data-testid="chat-message-user"] span {
+        color: #ff6b35 !important;
+    }
+
+    .stApp .stChatMessage[data-testid="chat-message-assistant"] *,
+    .stApp .stChatMessage[data-testid="chat-message-assistant"] p,
+    .stApp .stChatMessage[data-testid="chat-message-assistant"] div,
+    .stApp .stChatMessage[data-testid="chat-message-assistant"] span {
+        color: #093374 !important;
+    }
+
+    /* EXPANSORES COM ESPECIFICIDADE MÁXIMA */
+    .stApp .streamlit-expanderHeader *,
+    .stApp .streamlit-expanderContent *,
+    .stApp .stExpander * {
+        color: #093374 !important;
+    }
+
+    /* CÓDIGO COM ESPECIFICIDADE MÁXIMA */
+    .stApp .stCode *,
+    .stApp .stCode pre,
+    .stApp .stCode code {
+        color: #093374 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
     with st.expander("⚠️ Limitações e Regras do Assistente (clique para ver)", expanded=False):
         limitations = CLIENT_CONFIG.get("limitations", {})
-        st.markdown(
-            f"""
+        limitations_text = f"""
             - {limitations.get("data_access", "Este assistente só pode consultar as tabelas configuradas no sistema.")}
             - {limitations.get("cross_reference", "Não é possível acessar ou cruzar dados de outras tabelas ou fontes externas.")}
             - {limitations.get("single_query", "Apenas uma consulta por vez é permitida.")}
@@ -80,16 +250,23 @@ with st.container():
             - **Limite diário de {CLIENT_CONFIG.get('rate_limit_description', 'requisições')}: {MAX_RATE_LIMIT}**. Se atingido, você receberá uma mensagem de aviso.
             > Para detalhes técnicos, consulte a documentação ou o spoiler abaixo.
             """
-        )
+        # Aplica formatação IA para as limitações
+        formatted_limitations = format_text_with_ia_highlighting(limitations_text)
+        st.markdown(formatted_limitations, unsafe_allow_html=True)
 
     # Exemplos de perguntas (configuráveis)
     if "chat_history" not in st.session_state or len(st.session_state.chat_history) == 0:
         business_domain = CLIENT_CONFIG.get("business_domain", "dados")
-        st.write(f"Faça perguntas sobre {business_domain}. Exemplos:")
+        examples_intro = f"Faça perguntas sobre {business_domain}. Exemplos:"
+        # Aplica formatação IA para a introdução dos exemplos
+        formatted_intro = format_text_with_ia_highlighting(examples_intro)
+        st.markdown(formatted_intro, unsafe_allow_html=True)
         
         examples = CLIENT_CONFIG.get("examples", ["- Exemplo de pergunta"])
         examples_text = "\n".join(examples)
-        st.code(examples_text)
+        # Aplica formatação IA também nos exemplos
+        formatted_examples = format_text_with_ia_highlighting(examples_text)
+        st.code(formatted_examples)
 
     # Inicialização do modelo e estado da sessão
     if "model" not in st.session_state:
@@ -117,16 +294,17 @@ with st.container():
 
 # Container fixo para o input (fora do content-container)
 st.markdown('<div class="fixed-bottom">', unsafe_allow_html=True)
-prompt = st.chat_input("Faça sua pergunta...", key="mobile_input")
+prompt = st.chat_input(format_text_with_ia_highlighting("Faça sua pergunta..."), key="mobile_input")
 st.markdown('</div>', unsafe_allow_html=True)
 
 # Captura novo input
 if prompt:
     # Verifica o rate limit antes de processar
     if rate_limiter.check_limit():
+        limit_msg = format_text_with_ia_highlighting("Limite diário de requisições atingido. Tente novamente amanhã.")
         st.session_state.chat_history.append({
             "role": "assistant",
-            "content": "Limite diário de requisições atingido. Tente novamente amanhã."
+            "content": limit_msg
         })
         st.rerun()
     else:
@@ -203,7 +381,7 @@ if prompt:
                         st.session_state.chat_history.append(
                             {
                                 "role": "assistant",
-                                "content": st.session_state.current_interaction["refined_response"],
+                                "content": format_text_with_ia_highlighting(st.session_state.current_interaction["refined_response"]),
                                 "tech_details": st.session_state.current_interaction["tech_details"],
                             }
                         )
@@ -238,7 +416,7 @@ if prompt:
                 # Mostra que está processando
                 processing_msg = st.empty()
                 processing_msg.chat_message("assistant").markdown(
-                    "Processando sua solicitação..."
+                    format_text_with_ia_highlighting("Processando sua solicitação...")
                 )
 
                 response = convo.send_message(prompt)
@@ -290,7 +468,7 @@ if prompt:
                             )
                             
                             st.session_state.chat_history.append(
-                                {"role": "assistant", "content": STANDARD_ERROR_MESSAGE}
+                                {"role": "assistant", "content": format_text_with_ia_highlighting(STANDARD_ERROR_MESSAGE)}
                             )
                             st.rerun()
 
@@ -331,7 +509,7 @@ if prompt:
                             )
                             
                             st.session_state.chat_history.append(
-                                {"role": "assistant", "content": STANDARD_ERROR_MESSAGE}
+                                {"role": "assistant", "content": format_text_with_ia_highlighting(STANDARD_ERROR_MESSAGE)}
                             )
                             st.rerun()
                         
@@ -377,7 +555,7 @@ if prompt:
                             st.session_state.chat_history.append(
                                 {
                                     "role": "assistant",
-                                    "content": STANDARD_ERROR_MESSAGE,
+                                    "content": format_text_with_ia_highlighting(STANDARD_ERROR_MESSAGE),
                                 }
                             )
                             # Força atualização da tela e PARA o processamento aqui para evitar reutilização
@@ -388,7 +566,7 @@ if prompt:
 
                             # Atualiza a mensagem de processamento
                             processing_msg.chat_message("assistant").markdown(
-                                "Dados recebidos. Calculando resultados..."
+                                format_text_with_ia_highlighting("Dados recebidos. Calculando resultados...")
                             )
 
                             # Refina a resposta com o Gemini
@@ -417,7 +595,7 @@ if prompt:
                             st.session_state.chat_history.append(
                                 {
                                     "role": "assistant",
-                                    "content": slugfy_response(st.session_state.current_interaction["refined_response"]),
+                                    "content": format_text_with_ia_highlighting(slugfy_response(st.session_state.current_interaction["refined_response"])),
                                     "tech_details": st.session_state.current_interaction["tech_details"],
                                 }
                             )
@@ -425,7 +603,7 @@ if prompt:
                     # Resposta direta sem chamada de função
                     processing_msg.empty()
                     st.session_state.chat_history.append(
-                        {"role": "assistant", "content": response.text}
+                        {"role": "assistant", "content": format_text_with_ia_highlighting(response.text)}
                     )
                 
             # Inicializa variáveis para o log (caso de nova consulta sem function call)
@@ -506,6 +684,6 @@ if prompt:
             )
             
             st.session_state.chat_history.append(
-                {"role": "assistant", "content": STANDARD_ERROR_MESSAGE}
+                {"role": "assistant", "content": format_text_with_ia_highlighting(STANDARD_ERROR_MESSAGE)}
             )
             st.rerun()

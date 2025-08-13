@@ -287,6 +287,7 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
                 color=color,
                 barmode="group",  # Essencial para múltiplas dimensões
                 color_discrete_sequence=palette,
+                title="Viz"  # Título personalizado em vez de "undefined"
             )
         elif chart_type == "line":
             fig = px.line(
@@ -296,22 +297,24 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
                 color=color,
                 markers=True,
                 color_discrete_sequence=palette,
+                title="Viz"  # Título personalizado em vez de "undefined"
             )
         else:
             return None
 
         fig.update_layout(
             hovermode="x unified", 
-            plot_bgcolor="rgba(255, 140, 66, 0.2)",
-            paper_bgcolor="rgba(255, 140, 66, 0.2)",
+            plot_bgcolor="rgba(255, 255, 255, 0.95)",  # Fundo branco
+            paper_bgcolor="rgba(255, 255, 255, 0.95)",  # Papel branco
             font=dict(
-                color="white",
+                color="#093374",  # Azul mais escuro
                 size=14,
                 family="Arial, sans-serif"
             ),
             title=dict(
+                text="",  # Remove o título completamente
                 font=dict(
-                    color="white",
+                    color="#093374",  # Azul mais escuro
                     size=18,
                     family="Arial, sans-serif"
                 ),
@@ -319,32 +322,32 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
                 xanchor='center'
             ),
             xaxis=dict(
-                gridcolor="rgba(255, 255, 255, 0.2)",
-                color="white",
+                gridcolor="rgba(0, 0, 0, 0.1)",
+                color="#093374",  # Azul mais escuro
                 tickfont=dict(
-                    color="white",
+                    color="#093374",  # Azul mais escuro
                     size=13,
                     family="Arial, sans-serif"
                 ),
                 title=dict(
                     font=dict(
-                        color="white",
+                        color="#093374",  # Azul mais escuro
                         size=14,
                         family="Arial, sans-serif"
                     )
                 )
             ),
             yaxis=dict(
-                gridcolor="rgba(255, 255, 255, 0.2)",
-                color="white",
+                gridcolor="rgba(0, 0, 0, 0.1)",
+                color="#093374",  # Azul mais escuro
                 tickfont=dict(
-                    color="white",
+                    color="#093374",  # Azul mais escuro
                     size=13,
                     family="Arial, sans-serif"
                 ),
                 title=dict(
                     font=dict(
-                        color="white",
+                        color="#093374",  # Azul mais escuro
                         size=14,
                         family="Arial, sans-serif"
                     )
@@ -352,14 +355,23 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
             ),
             legend=dict(
                 font=dict(
-                    color="white",
+                    color="#093374",  # Azul mais escuro
                     size=12,
                     family="Arial, sans-serif"
                 ),
-                bgcolor="rgba(255, 140, 66, 0.5)",
-                bordercolor="rgba(255, 255, 255, 0.3)",
+                bgcolor="rgba(255, 255, 255, 0.9)",  # Fundo branco
+                bordercolor="rgba(0, 0, 0, 0.2)",
                 borderwidth=1
             ),
+            hoverlabel=dict(
+                bgcolor="rgba(255, 255, 255, 0.95)",  # Fundo branco
+                font_color="#093374",  # Azul mais escuro
+                bordercolor="rgba(0, 0, 0, 0.2)",
+                font_size=12,
+                font_family="Arial, sans-serif"
+            ),
+            autosize=True,  # Permite redimensionamento automático
+            height=500,     # Altura mínima para evitar compressão
             margin=dict(l=60, r=60, t=60, b=60)
         )
         return fig

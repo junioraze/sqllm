@@ -6,6 +6,34 @@ import pandas as pd
 from io import BytesIO
 import base64, re
 
+def format_text_with_ia_highlighting(text: str) -> str:
+    """
+    Formata qualquer texto aplicando destaque laranja em variações de IA usando Markdown.
+    Funciona para: IA, ia, Ia, iA
+    
+    Args:
+        text (str): Texto a ser formatado
+        
+    Returns:
+        str: Texto com IA destacado em laranja usando Markdown
+    """
+    if not text or not isinstance(text, str):
+        return text
+    
+    # Padrões para capturar todas as variações de IA usando Markdown
+    patterns = [
+        (r'\bIA\b', ':orange[**IA**]'),      # IA maiúsculo
+        (r'\bia\b', ':orange[**ia**]'),      # ia minúsculo  
+        (r'\bIa\b', ':orange[**Ia**]'),      # Ia primeira maiúscula
+        (r'\biA\b', ':orange[**iA**]')       # iA segunda maiúscula
+    ]
+    
+    formatted_text = text
+    for pattern, replacement in patterns:
+        formatted_text = re.sub(pattern, replacement, formatted_text)
+    
+    return formatted_text
+
 def _generate_key():
     timestamp = datetime.now().strftime("%Y%m%d")
     unique_id = uuid.uuid4().hex[:6]  # Pega os primeiros 6 caracteres do UUID
@@ -116,7 +144,9 @@ def display_message_with_spoiler(
     role: str, content: str, tech_details: dict = None, tech_flag: bool = False
 ):
     with st.chat_message(role):
-        st.markdown(content, unsafe_allow_html=True)
+        # Aplica formatação IA ao conteúdo das mensagens
+        formatted_content = format_text_with_ia_highlighting(content)
+        st.markdown(formatted_content, unsafe_allow_html=True)
         
         if (
             tech_details
@@ -126,12 +156,14 @@ def display_message_with_spoiler(
             st.plotly_chart(
                 tech_details["chart_info"]["fig"],
                 use_container_width=True,
+                height=600,  # Altura fixa para evitar compressão
                 key=_generate_key(),
             )
         
         # Atualização aqui: renderizar todos os botões em uma única linha
         if tech_details and tech_details.get("export_links"):
-            st.markdown("**Exportar dados:**")
+            export_text = format_text_with_ia_highlighting("**Exportar dados:**")
+            st.markdown(export_text)
             
             # Criar uma string HTML com todos os botões juntos
             buttons_html = '<div style="display: flex">'
@@ -143,7 +175,8 @@ def display_message_with_spoiler(
         
         # Exibir detalhes técnicos se habilitado
         if tech_details and tech_flag:
-            with st.expander("🔍 Detalhes Técnicos"):
+            expander_title = format_text_with_ia_highlighting("🔍 Detalhes Técnicos")
+            with st.expander(expander_title):
                 st.markdown(create_tech_details_spoiler(tech_details))
 
 
@@ -152,36 +185,36 @@ def create_tech_details_spoiler(tech_details: dict) -> str:
     """Cria o conteúdo do spoiler com detalhes técnicos"""
     if not tech_details:
         return ""
-    content = "### Detalhes Técnicos\n\n"
+    content = format_text_with_ia_highlighting("### Detalhes Técnicos\n\n")
     
     # Informações sobre reutilização de dados
     if tech_details.get("reuse_info"):
         reuse_info = tech_details["reuse_info"]
         if reuse_info.get("reused"):
-            content += "**🔄 Dados Reutilizados:**\n"
-            content += f"- Motivo: {reuse_info.get('reason', 'N/A')}\n"
-            content += f"- Consulta original: {reuse_info.get('original_prompt', 'N/A')}\n\n"
+            content += format_text_with_ia_highlighting("**🔄 Dados Reutilizados:**\n")
+            content += format_text_with_ia_highlighting(f"- Motivo: {reuse_info.get('reason', 'N/A')}\n")
+            content += format_text_with_ia_highlighting(f"- Consulta original: {reuse_info.get('original_prompt', 'N/A')}\n\n")
         else:
-            content += "**🆕 Nova Consulta Realizada**\n\n"
+            content += format_text_with_ia_highlighting("**🆕 Nova Consulta Realizada**\n\n")
     
     if tech_details.get("function_params"):
-        content += "**Parâmetros da Função:**\n```json\n"
+        content += format_text_with_ia_highlighting("**Parâmetros da Função:**\n```json\n")
         serialized_params = serialize_params(tech_details["function_params"])
         content += json.dumps(serialized_params, indent=2, default=str)
         content += "\n```\n\n"
     
     if tech_details.get("query"):
-        content += "**Query SQL Executada:**\n```sql\n"
+        content += format_text_with_ia_highlighting("**Query SQL Executada:**\n```sql\n")
         content += tech_details["query"]
         content += "\n```\n\n"
     
     if tech_details.get("raw_data"):
-        content += "**Dados Brutos Recebidos:**\n"
+        content += format_text_with_ia_highlighting("**Dados Brutos Recebidos:**\n")
         content += dict_to_markdown_table(tech_details["raw_data"][:5])  # Mostrar apenas 5 linhas
     
     if tech_details.get("chart_info"):
-        content += "\n**Informações do Gráfico:**\n"
-        content += f"- Tipo: {tech_details['chart_info']['type']}\n"
+        content += format_text_with_ia_highlighting("\n**Informações do Gráfico:**\n")
+        content += format_text_with_ia_highlighting(f"- Tipo: {tech_details['chart_info']['type']}\n")
         content += f"- Eixo X: {tech_details['chart_info']['x']}\n"
         content += f"- Eixo Y: {tech_details['chart_info']['y']}\n"
     
@@ -191,7 +224,8 @@ def create_tech_details_spoiler(tech_details: dict) -> str:
         for fmt, filename in tech_details["export_info"].items():
             content += f"- {fmt.upper()}: {filename}\n"
     
-    return content
+    # Aplica formatação IA para o conteúdo dos detalhes técnicos
+    return format_text_with_ia_highlighting(content)
 
 
 def safe_serialize_gemini_params(params):
