@@ -8,29 +8,27 @@ import base64, re
 
 def format_text_with_ia_highlighting(text: str) -> str:
     """
-    Formata qualquer texto aplicando destaque laranja em variações de IA usando Markdown.
-    Funciona para: IA, ia, Ia, iA
+    Formata qualquer texto aplicando destaque laranja em variações de IA usando HTML.
+    Funciona para: IA, ia, Ia, iA e garante máxima compatibilidade com Streamlit.
     
     Args:
         text (str): Texto a ser formatado
         
     Returns:
-        str: Texto com IA destacado em laranja usando Markdown
+        str: Texto com IA destacado em laranja usando HTML spans
     """
     if not text or not isinstance(text, str):
         return text
     
-    # Padrões para capturar todas as variações de IA usando Markdown
-    patterns = [
-        (r'\bIA\b', ':orange[**IA**]'),      # IA maiúsculo
-        (r'\bia\b', ':orange[**ia**]'),      # ia minúsculo  
-        (r'\bIa\b', ':orange[**Ia**]'),      # Ia primeira maiúscula
-        (r'\biA\b', ':orange[**iA**]')       # iA segunda maiúscula
-    ]
+    # Padrão regex que captura todas as variações de IA
+    pattern = r'\b(IA|ia|Ia|iA)\b'
     
-    formatted_text = text
-    for pattern, replacement in patterns:
-        formatted_text = re.sub(pattern, replacement, formatted_text)
+    # Substitui todas as variações por spans HTML com cor laranja e negrito
+    def replace_ia(match):
+        ia_text = match.group(1)
+        return f'<span style="color: #ff6b35; font-weight: bold;">{ia_text}</span>'
+    
+    formatted_text = re.sub(pattern, replace_ia, text)
     
     return formatted_text
 

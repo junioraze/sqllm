@@ -194,6 +194,8 @@ st.markdown("""
 .stApp .stCode span[style*="color:#ff6b35"],
 .stApp .stChatMessage[data-testid="chat-message-assistant"] span[style*="color: #ff6b35"],
 .stApp .stChatMessage[data-testid="chat-message-assistant"] span[style*="color:#ff6b35"],
+.stApp .stChatMessage[data-testid="chat-message-user"] span[style*="color: #ff6b35"],
+.stApp .stChatMessage[data-testid="chat-message-user"] span[style*="color:#ff6b35"],
 .main h1 span[style*="color: #ff6b35"],
 .main h1 span[style*="color:#ff6b35"],
 .main h2 span[style*="color: #ff6b35"],
@@ -203,8 +205,50 @@ st.markdown("""
 .main p span[style*="color: #ff6b35"],
 .main p span[style*="color:#ff6b35"],
 .main div span[style*="color: #ff6b35"],
-.main div span[style*="color:#ff6b35"] {
+.main div span[style*="color:#ff6b35"],
+/* FORÇA SPANS IA COM MAIS ESPECIFICIDADE AINDA */
+span[style*="color: #ff6b35; font-weight: bold;"],
+span[style*="color:#ff6b35;font-weight:bold;"],
+*[style*="color: #ff6b35; font-weight: bold;"],
+*[style*="color:#ff6b35;font-weight:bold;"] {
     color: #ff6b35 !important;
+    font-weight: bold !important;
+}
+
+/* CHAT INPUT - COR VERMELHA COMBINANDO COM O TEMA */
+.stApp .stChatInput > div > div {
+    background-color: #d32f2f !important; /* Vermelho que combina com as cores */
+    border: 1px solid #b71c1c !important;
+    border-radius: 8px !important;
+}
+
+.stApp .stChatInput textarea {
+    background-color: #d32f2f !important;
+    border: none !important;
+    color: #ffffff !important; /* Texto branco que o usuário digita */
+    font-weight: 500 !important;
+}
+
+.stApp .stChatInput textarea::placeholder {
+    color: #ffffff !important; /* Placeholder branco */
+    opacity: 0.9 !important;
+}
+
+.stApp .stChatInput textarea:focus {
+    border: none !important;
+    outline: none !important;
+    box-shadow: 0 0 0 2px #ff6b35 !important; /* Foco laranja */
+}
+
+/* BOTÃO ENVIAR DO CHAT */
+.stApp .stChatInput button {
+    background-color: #ff6b35 !important;
+    border: none !important;
+    color: #ffffff !important;
+}
+
+.stApp .stChatInput button:hover {
+    background-color: #e55a2b !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -261,6 +305,70 @@ with st.container():
     .stApp .stCode pre,
     .stApp .stCode code {
         color: #093374 !important;
+    }
+    
+    /* PRESERVA SPANS IA EM LARANJA - SEGUNDO BLOCO */
+    .stApp h1 span[style*="color: #ff6b35"],
+    .stApp h1 span[style*="color:#ff6b35"],
+    .stApp h2 span[style*="color: #ff6b35"],
+    .stApp h2 span[style*="color:#ff6b35"],
+    .stApp h3 span[style*="color: #ff6b35"],
+    .stApp h3 span[style*="color:#ff6b35"],
+    .stApp p span[style*="color: #ff6b35"],
+    .stApp p span[style*="color:#ff6b35"],
+    .stApp div span[style*="color: #ff6b35"],
+    .stApp div span[style*="color:#ff6b35"],
+    .stApp .streamlit-expanderContent span[style*="color: #ff6b35"],
+    .stApp .streamlit-expanderContent span[style*="color:#ff6b35"],
+    .stApp .streamlit-expanderHeader span[style*="color: #ff6b35"],
+    .stApp .streamlit-expanderHeader span[style*="color:#ff6b35"],
+    .stApp .stExpander span[style*="color: #ff6b35"],
+    .stApp .stExpander span[style*="color:#ff6b35"],
+    .stApp .stCode span[style*="color: #ff6b35"],
+    .stApp .stCode span[style*="color:#ff6b35"],
+    .stApp .stChatMessage span[style*="color: #ff6b35"],
+    .stApp .stChatMessage span[style*="color:#ff6b35"],
+    span[style*="color: #ff6b35; font-weight: bold;"],
+    span[style*="color:#ff6b35;font-weight:bold;"],
+    *[style*="color: #ff6b35; font-weight: bold;"],
+    *[style*="color:#ff6b35;font-weight:bold;"] {
+        color: #ff6b35 !important;
+        font-weight: bold !important;
+    }
+
+    /* CHAT INPUT - REPETIDO PARA GARANTIA */
+    .stApp .stChatInput > div > div {
+        background-color: #d32f2f !important;
+        border: 1px solid #b71c1c !important;
+        border-radius: 8px !important;
+    }
+
+    .stApp .stChatInput textarea {
+        background-color: #d32f2f !important;
+        border: none !important;
+        color: #ffffff !important;
+        font-weight: 500 !important;
+    }
+
+    .stApp .stChatInput textarea::placeholder {
+        color: #ffffff !important;
+        opacity: 0.9 !important;
+    }
+
+    .stApp .stChatInput textarea:focus {
+        border: none !important;
+        outline: none !important;
+        box-shadow: 0 0 0 2px #ff6b35 !important;
+    }
+
+    .stApp .stChatInput button {
+        background-color: #ff6b35 !important;
+        border: none !important;
+        color: #ffffff !important;
+    }
+
+    .stApp .stChatInput button:hover {
+        background-color: #e55a2b !important;
     }
     </style>
     """, unsafe_allow_html=True)
