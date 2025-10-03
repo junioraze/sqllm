@@ -146,19 +146,21 @@ def display_message_with_spoiler(
         formatted_content = format_text_with_ia_highlighting(content)
         st.markdown(formatted_content, unsafe_allow_html=True)
         
+        # Exibe gráfico se disponível (UMA VEZ APENAS)
         if (
             tech_details
             and tech_details.get("chart_info")
-            and tech_details["chart_info"]["fig"]
+            and tech_details["chart_info"].get("fig")
         ):
             st.plotly_chart(
                 tech_details["chart_info"]["fig"],
                 use_container_width=True,
-                height=600,  # Altura fixa para evitar compressão
+                height=600,
                 key=_generate_key(),
+                config={'displayModeBar': False}
             )
         
-        # Atualização aqui: renderizar todos os botões em uma única linha
+        # Exibe botões de download se disponíveis (UMA VEZ APENAS)
         if tech_details and tech_details.get("export_links"):
             export_text = format_text_with_ia_highlighting("**Exportar dados:**")
             st.markdown(export_text)
@@ -171,11 +173,12 @@ def display_message_with_spoiler(
             
             st.markdown(buttons_html, unsafe_allow_html=True)
         
-        # Exibir detalhes técnicos se habilitado
+        # Exibir detalhes técnicos se habilitado (UMA VEZ APENAS)
         if tech_details and tech_flag:
             expander_title = format_text_with_ia_highlighting("🔍 Detalhes Técnicos")
             with st.expander(expander_title):
-                st.markdown(create_tech_details_spoiler(tech_details))
+                tech_content = create_tech_details_spoiler(tech_details)
+                st.markdown(tech_content, unsafe_allow_html=True)
 
 
 # utils.py - Atualize esta função

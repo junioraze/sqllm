@@ -61,3 +61,22 @@ class RateLimiter:
             self.state['count'] += 1
 
         self._save_state()
+    
+    def get_current_usage(self):
+        """Retorna o uso atual e máximo"""
+        current_date = datetime.now().date()
+        saved_date = datetime.strptime(self.state['date'], '%Y-%m-%d').date()
+        
+        # Se for um novo dia, reinicia o contador
+        if current_date != saved_date:
+            self.state = {
+                'date': datetime.now().strftime('%Y-%m-%d'),
+                'count': 0
+            }
+            self._save_state()
+        
+        return {
+            'current': self.state['count'],
+            'max': self.max_requests,
+            'percentage': (self.state['count'] / self.max_requests) * 100
+        }

@@ -15,34 +15,8 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# FORÇA TEMA LIGHT SEMPRE (equivalente ao menu hambúrguer > Settings > Theme > Light)
-st.markdown("""
-<script>
-    // Força o tema light programaticamente
-    setTimeout(function() {
-        const iframe = window.parent.document.querySelector('iframe[title="streamlit_app"]');
-        const doc = iframe ? iframe.contentDocument || iframe.contentWindow.document : document;
-        
-        // Remove o tema dark se estiver aplicado
-        const stApp = doc.querySelector('.stApp');
-        if (stApp) {
-            stApp.classList.remove('dark');
-            stApp.classList.add('light');
-        }
-        
-        // Força as variáveis CSS do tema light
-        const root = doc.documentElement;
-        if (root) {
-            root.style.setProperty('--primary-color', '#ff6b35');
-            root.style.setProperty('--background-color', '#ffffff');
-            root.style.setProperty('--secondary-background-color', '#f0f2f6');
-            root.style.setProperty('--text-color', '#093374');
-        }
-    }, 100);
-</script>
-""", unsafe_allow_html=True)
-
-from style import MOBILE_IFRAME_BASE  # Importa o módulo de estilos
+from style import MOBILE_IFRAME_CHAT
+from deepseek_theme import apply_deepseek_theme, create_usage_indicator, show_typing_animation, get_login_theme, get_chat_theme
 from image_utils import get_background_style, get_login_background_style  # Importa utilitários de imagem
 from gemini_handler import initialize_model, refine_with_gemini, should_reuse_data
 from database import build_query, execute_query
@@ -71,307 +45,40 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    # Aplica estilos específicos para a tela de login
-    st.markdown(get_login_background_style(), unsafe_allow_html=True)
+    # Aplica tema de login sem mostrar código CSS
+    st.markdown(get_login_theme(), unsafe_allow_html=True)
     
-    # Adiciona a imagem de logo/descrição
-    try:
-        st.image("etc/desc_logo.jpg", use_container_width=True, output_format="auto")
-    except:
-        # Se não conseguir carregar a imagem, continua sem ela
-        pass
+    # Título simples sem container gigante
+    st.markdown("<h1 style='text-align: center; color: #00d4ff; font-size: 2.5rem; margin: 2rem 0;'>ViaQuest</h1>", unsafe_allow_html=True)
     
-    # Título de login com IA destacado - USANDO MARKDOWN PURO
-    login_title = f"Login {CLIENT_CONFIG.get('app_subtitle', 'Sistema de Análise')}"
-    formatted_login_title = format_text_with_ia_highlighting(login_title)
-    st.markdown(f"# {formatted_login_title}", unsafe_allow_html=True)
+    st.markdown("### 🔐 Acesso ao Sistema")
+    st.markdown("Faça login para acessar o sistema de análise de dados inteligente.")
     
-    # CSS para campos de login e preservação de cores IA
-    st.markdown("""
-    <style>
-    /* TÍTULO DE LOGIN CENTRALIZADO */
-    .stApp h1 {
-        text-align: center !important;
-        color: #093374 !important;
-    }
+    login = st.text_input("📧 E-mail", value="", key="login_input")
+    password = st.text_input("🔑 Senha", type="password", key="password_input")
     
-    /* Labels dos campos de login */
-    .stTextInput > label {
-        color: #093374 !important;
-        font-weight: 600 !important;
-    }
-    
-    /* Campos de input */
-    .stTextInput > div > div > input {
-        border-color: #093374 !important;
-    }
-    
-    .stTextInput > div > div > input:focus {
-        border-color: #ff6b35 !important;
-        box-shadow: 0 0 0 1px #ff6b35 !important;
-    }
-    
-    /* FORÇA TEXTO AZUL EM TÍTULOS E CORPO */
-    h1, p, div, body {
-        color: #093374 !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    login = st.text_input(format_text_with_ia_highlighting("E-mail"), value="", key="login_input")
-    password = st.text_input(format_text_with_ia_highlighting("Senha"), type="password", key="password_input")
-    if st.button("Entrar"):
+    if st.button("🚀 Entrar", use_container_width=True):
         if login == creds["login"] and password == creds["password"]:
             st.session_state.authenticated = True
             st.rerun()
         else:
-            error_msg = format_text_with_ia_highlighting("Usuário ou senha inválidos.")
-            st.error(error_msg)
+            st.error("❌ Usuário ou senha inválidos.")
     st.stop()
 
-# Aplica o fundo personalizado para o chatbot (somente após login)
-st.markdown(MOBILE_IFRAME_BASE, unsafe_allow_html=True)
-st.markdown(get_background_style(), unsafe_allow_html=True)
+# Aplica o tema DeepSeek escuro moderno (sem mostrar código)
+st.markdown(get_chat_theme(), unsafe_allow_html=True)
 
-# CSS FINAL - DEPOIS DE TODOS OS OUTROS CSS PARA GARANTIR PRIORIDADE ABSOLUTA
-st.markdown("""
-<style>
-/* CORES FINAIS COM MÁXIMA ESPECIFICIDADE - FORÇA AZUL */
-.stApp h1, .stApp h2, .stApp h3, .stApp p, .stApp div, 
-.stApp span, .stApp li, .stApp ul, .stApp ol, .stApp strong, .stApp em,
-.main h1, .main h2, .main h3, .main p, .main div,
-.main span, .main li, .main ul, .main ol, .main strong, .main em {
-    color: #093374 !important;
-}
-
-/* CHAT - USUÁRIO LARANJA, ASSISTENTE AZUL COM ESPECIFICIDADE MÁXIMA */
-.stApp .stChatMessage[data-testid="chat-message-user"] *,
-.stApp .stChatMessage[data-testid="chat-message-user"] p,
-.stApp .stChatMessage[data-testid="chat-message-user"] div,
-.stApp .stChatMessage[data-testid="chat-message-user"] span {
-    color: #ff6b35 !important;
-}
-
-.stApp .stChatMessage[data-testid="chat-message-assistant"] *,
-.stApp .stChatMessage[data-testid="chat-message-assistant"] p,
-.stApp .stChatMessage[data-testid="chat-message-assistant"] div,
-.stApp .stChatMessage[data-testid="chat-message-assistant"] span {
-    color: #093374 !important;
-}
-
-/* EXPANSORES COM ESPECIFICIDADE MÁXIMA */
-.stApp .streamlit-expanderHeader *,
-.stApp .streamlit-expanderContent *,
-.stApp .stExpander * {
-    color: #093374 !important;
-}
-
-/* CÓDIGO COM ESPECIFICIDADE MÁXIMA */
-.stApp .stCode *,
-.stApp .stCode pre,
-.stApp .stCode code {
-    color: #093374 !important;
-}
-
-/* PRESERVA SPANS IA EM LARANJA COM ESPECIFICIDADE MÁXIMA */
-.stApp h1 span[style*="color: #ff6b35"],
-.stApp h1 span[style*="color:#ff6b35"],
-.stApp h2 span[style*="color: #ff6b35"],
-.stApp h2 span[style*="color:#ff6b35"],
-.stApp h3 span[style*="color: #ff6b35"],
-.stApp h3 span[style*="color:#ff6b35"],
-.stApp p span[style*="color: #ff6b35"],
-.stApp p span[style*="color:#ff6b35"],
-.stApp div span[style*="color: #ff6b35"],
-.stApp div span[style*="color:#ff6b35"],
-.stApp .streamlit-expanderContent span[style*="color: #ff6b35"],
-.stApp .streamlit-expanderContent span[style*="color:#ff6b35"],
-.stApp .streamlit-expanderHeader span[style*="color: #ff6b35"],
-.stApp .streamlit-expanderHeader span[style*="color:#ff6b35"],
-.stApp .stExpander span[style*="color: #ff6b35"],
-.stApp .stExpander span[style*="color:#ff6b35"],
-.stApp .stCode span[style*="color: #ff6b35"],
-.stApp .stCode span[style*="color:#ff6b35"],
-.stApp .stChatMessage[data-testid="chat-message-assistant"] span[style*="color: #ff6b35"],
-.stApp .stChatMessage[data-testid="chat-message-assistant"] span[style*="color:#ff6b35"],
-.stApp .stChatMessage[data-testid="chat-message-user"] span[style*="color: #ff6b35"],
-.stApp .stChatMessage[data-testid="chat-message-user"] span[style*="color:#ff6b35"],
-.main h1 span[style*="color: #ff6b35"],
-.main h1 span[style*="color:#ff6b35"],
-.main h2 span[style*="color: #ff6b35"],
-.main h2 span[style*="color:#ff6b35"],
-.main h3 span[style*="color: #ff6b35"],
-.main h3 span[style*="color:#ff6b35"],
-.main p span[style*="color: #ff6b35"],
-.main p span[style*="color:#ff6b35"],
-.main div span[style*="color: #ff6b35"],
-.main div span[style*="color:#ff6b35"],
-/* FORÇA SPANS IA COM MAIS ESPECIFICIDADE AINDA */
-span[style*="color: #ff6b35; font-weight: bold;"],
-span[style*="color:#ff6b35;font-weight:bold;"],
-*[style*="color: #ff6b35; font-weight: bold;"],
-*[style*="color:#ff6b35;font-weight:bold;"] {
-    color: #ff6b35 !important;
-    font-weight: bold !important;
-}
-
-/* CHAT INPUT - COR VERMELHA COMBINANDO COM O TEMA */
-.stApp .stChatInput > div > div {
-    background-color: #d32f2f !important; /* Vermelho que combina com as cores */
-    border: 1px solid #b71c1c !important;
-    border-radius: 8px !important;
-}
-
-.stApp .stChatInput textarea {
-    background-color: #d32f2f !important;
-    border: none !important;
-    color: #ffffff !important; /* Texto branco que o usuário digita */
-    font-weight: 500 !important;
-}
-
-.stApp .stChatInput textarea::placeholder {
-    color: #ffffff !important; /* Placeholder branco */
-    opacity: 0.9 !important;
-}
-
-.stApp .stChatInput textarea:focus {
-    border: none !important;
-    outline: none !important;
-    box-shadow: 0 0 0 2px #ff6b35 !important; /* Foco laranja */
-}
-
-/* BOTÃO ENVIAR DO CHAT */
-.stApp .stChatInput button {
-    background-color: #ff6b35 !important;
-    border: none !important;
-    color: #ffffff !important;
-}
-
-.stApp .stChatInput button:hover {
-    background-color: #e55a2b !important;
-}
-</style>
-""", unsafe_allow_html=True)
+# Indicador de uso no estilo DeepSeek
+usage_data = rate_limiter.get_current_usage()
+st.markdown(create_usage_indicator(usage_data['current'], usage_data['max']), unsafe_allow_html=True)
 
 # Container principal para todo o conteúdo
 with st.container():
     
-    # Título principal com IA destacado - USANDO MARKDOWN PURO
+    # Título principal com tema DeepSeek
     title_text = CLIENT_CONFIG.get("app_title", "Sistema de Análise de Dados")
     formatted_title = format_text_with_ia_highlighting(title_text)
     st.markdown(f"# {formatted_title}", unsafe_allow_html=True)
-
-    # CSS FINAL - DEPOIS DE TODOS OS OUTROS CSS PARA GARANTIR PRIORIDADE ABSOLUTA
-    st.markdown("""
-    <style>
-    /* TÍTULO CENTRALIZADO */
-    .stApp h1 {
-        text-align: center !important;
-        margin-bottom: 2rem !important;
-    }
-    
-    /* CORES FINAIS COM MÁXIMA ESPECIFICIDADE - FORÇA AZUL */
-    .stApp h1, .stApp h2, .stApp h3, .stApp p, .stApp div, 
-    .stApp span, .stApp li, .stApp ul, .stApp ol, .stApp strong, .stApp em,
-    .main h1, .main h2, .main h3, .main p, .main div,
-    .main span, .main li, .main ul, .main ol, .main strong, .main em {
-        color: #093374 !important;
-    }
-
-    /* CHAT - USUÁRIO LARANJA, ASSISTENTE AZUL COM ESPECIFICIDADE MÁXIMA */
-    .stApp .stChatMessage[data-testid="chat-message-user"] *,
-    .stApp .stChatMessage[data-testid="chat-message-user"] p,
-    .stApp .stChatMessage[data-testid="chat-message-user"] div,
-    .stApp .stChatMessage[data-testid="chat-message-user"] span {
-        color: #ff6b35 !important;
-    }
-
-    .stApp .stChatMessage[data-testid="chat-message-assistant"] *,
-    .stApp .stChatMessage[data-testid="chat-message-assistant"] p,
-    .stApp .stChatMessage[data-testid="chat-message-assistant"] div,
-    .stApp .stChatMessage[data-testid="chat-message-assistant"] span {
-        color: #093374 !important;
-    }
-
-    /* EXPANSORES COM ESPECIFICIDADE MÁXIMA */
-    .stApp .streamlit-expanderHeader *,
-    .stApp .streamlit-expanderContent *,
-    .stApp .stExpander * {
-        color: #093374 !important;
-    }
-
-    /* CÓDIGO COM ESPECIFICIDADE MÁXIMA */
-    .stApp .stCode *,
-    .stApp .stCode pre,
-    .stApp .stCode code {
-        color: #093374 !important;
-    }
-    
-    /* PRESERVA SPANS IA EM LARANJA - SEGUNDO BLOCO */
-    .stApp h1 span[style*="color: #ff6b35"],
-    .stApp h1 span[style*="color:#ff6b35"],
-    .stApp h2 span[style*="color: #ff6b35"],
-    .stApp h2 span[style*="color:#ff6b35"],
-    .stApp h3 span[style*="color: #ff6b35"],
-    .stApp h3 span[style*="color:#ff6b35"],
-    .stApp p span[style*="color: #ff6b35"],
-    .stApp p span[style*="color:#ff6b35"],
-    .stApp div span[style*="color: #ff6b35"],
-    .stApp div span[style*="color:#ff6b35"],
-    .stApp .streamlit-expanderContent span[style*="color: #ff6b35"],
-    .stApp .streamlit-expanderContent span[style*="color:#ff6b35"],
-    .stApp .streamlit-expanderHeader span[style*="color: #ff6b35"],
-    .stApp .streamlit-expanderHeader span[style*="color:#ff6b35"],
-    .stApp .stExpander span[style*="color: #ff6b35"],
-    .stApp .stExpander span[style*="color:#ff6b35"],
-    .stApp .stCode span[style*="color: #ff6b35"],
-    .stApp .stCode span[style*="color:#ff6b35"],
-    .stApp .stChatMessage span[style*="color: #ff6b35"],
-    .stApp .stChatMessage span[style*="color:#ff6b35"],
-    span[style*="color: #ff6b35; font-weight: bold;"],
-    span[style*="color:#ff6b35;font-weight:bold;"],
-    *[style*="color: #ff6b35; font-weight: bold;"],
-    *[style*="color:#ff6b35;font-weight:bold;"] {
-        color: #ff6b35 !important;
-        font-weight: bold !important;
-    }
-
-    /* CHAT INPUT - REPETIDO PARA GARANTIA */
-    .stApp .stChatInput > div > div {
-        background-color: #d32f2f !important;
-        border: 1px solid #b71c1c !important;
-        border-radius: 8px !important;
-    }
-
-    .stApp .stChatInput textarea {
-        background-color: #d32f2f !important;
-        border: none !important;
-        color: #ffffff !important;
-        font-weight: 500 !important;
-    }
-
-    .stApp .stChatInput textarea::placeholder {
-        color: #ffffff !important;
-        opacity: 0.9 !important;
-    }
-
-    .stApp .stChatInput textarea:focus {
-        border: none !important;
-        outline: none !important;
-        box-shadow: 0 0 0 2px #ff6b35 !important;
-    }
-
-    .stApp .stChatInput button {
-        background-color: #ff6b35 !important;
-        border: none !important;
-        color: #ffffff !important;
-    }
-
-    .stApp .stChatInput button:hover {
-        background-color: #e55a2b !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
 
     with st.expander("⚠️ Limitações e Regras do Assistente (clique para ver)", expanded=False):
         limitations = CLIENT_CONFIG.get("limitations", {})
@@ -448,6 +155,11 @@ if prompt:
         # Adiciona a pergunta ao histórico
         st.session_state.chat_history.append({"role": "user", "content": prompt})
 
+        # Mostra animação de typing
+        with st.chat_message("assistant"):
+            typing_placeholder = st.empty()
+            typing_placeholder.markdown(show_typing_animation(), unsafe_allow_html=True)
+
         try:
             # Limpa o estado da interação anterior para evitar contaminação
             st.session_state.current_interaction = {
@@ -475,68 +187,76 @@ if prompt:
             
             if should_reuse:
                 # Reutiliza dados baseado na decisão do Gemini - busca dados completos pelo ID
-                with st.spinner("Processando com dados anteriores..."):
-                    # Busca o ID da interação a ser reutilizada
-                    interaction_id = reuse_decision.get("interaction_id")
-                    
-                    if interaction_id:
-                        # Busca os dados completos da interação específica
-                        full_data = get_interaction_full_data(interaction_id)
-                        if full_data:
-                            st.session_state.current_interaction["serializable_data"] = safe_serialize_data(full_data)
-                            # Busca metadados da interação para o refine_with_gemini
-                            reused_interaction = next((item for item in user_history if item.get('id') == interaction_id), None)
-                            reused_params = reused_interaction.get('function_params') if reused_interaction else None
-                            reused_query = reused_interaction.get('query_sql') if reused_interaction else None
-                        else:
-                            # Se não encontrar dados, força nova consulta
-                            should_reuse = False
+                # Atualiza a animação existente em vez de criar nova
+                typing_placeholder.markdown("<div style='padding: 8px 12px; color: #00d4ff; font-size: 14px; opacity: 0.8;'> Reutilizando dados anteriores...</div>", unsafe_allow_html=True)
+                
+                # Busca o ID da interação a ser reutilizada
+                interaction_id = reuse_decision.get("interaction_id")
+                
+                if interaction_id:
+                    # Busca os dados completos da interação específica
+                    full_data = get_interaction_full_data(interaction_id)
+                    if full_data:
+                        st.session_state.current_interaction["serializable_data"] = safe_serialize_data(full_data)
+                        # Busca metadados da interação para o refine_with_gemini
+                        reused_interaction = next((item for item in user_history if item.get('id') == interaction_id), None)
+                        reused_params = reused_interaction.get('function_params') if reused_interaction else None
+                        reused_query = reused_interaction.get('query_sql') if reused_interaction else None
                     else:
-                        # Se não tiver ID, força nova consulta
+                        # Se não encontrar dados, força nova consulta
                         should_reuse = False
+                else:
+                    # Se não tiver ID, força nova consulta
+                    should_reuse = False
+                
+                if should_reuse:  # Verifica novamente após validações
+                    st.session_state.current_interaction["refined_response"], st.session_state.current_interaction["tech_details"] = refine_with_gemini(
+                        prompt,
+                        st.session_state.current_interaction["serializable_data"],
+                        reused_params,
+                        reused_query,
+                    )
                     
-                    if should_reuse:  # Verifica novamente após validações
-                        st.session_state.current_interaction["refined_response"], st.session_state.current_interaction["tech_details"] = refine_with_gemini(
-                            prompt,
-                            st.session_state.current_interaction["serializable_data"],
-                            reused_params,
-                            reused_query,
-                        )
-                        
-                        # Adiciona informação sobre reutilização nos detalhes técnicos
-                        if st.session_state.current_interaction["tech_details"]:
-                            st.session_state.current_interaction["tech_details"]["reuse_info"] = {
-                                "reused": True,
-                                "reason": reuse_decision.get("reason", "Decisão inteligente do Gemini"),
-                                "original_prompt": reused_interaction.get('user_prompt') if reused_interaction else "N/A",
-                                "interaction_id": interaction_id
-                            }
+                    # Adiciona informação sobre reutilização nos detalhes técnicos
+                    if st.session_state.current_interaction["tech_details"]:
+                        st.session_state.current_interaction["tech_details"]["reuse_info"] = {
+                            "reused": True,
+                            "reason": reuse_decision.get("reason", "Decisão inteligente do Gemini"),
+                            "original_prompt": reused_interaction.get('user_prompt') if reused_interaction else "N/A",
+                            "interaction_id": interaction_id
+                        }
 
-                        # Atualiza o histórico
-                        st.session_state.chat_history.append(
-                            {
-                                "role": "assistant",
-                                "content": format_text_with_ia_highlighting(st.session_state.current_interaction["refined_response"]),
-                                "tech_details": st.session_state.current_interaction["tech_details"],
-                            }
-                        )
+                    # Remove animação de typing
+                    typing_placeholder.empty()
+                    
+                    # Atualiza o histórico e força re-renderização
+                    st.session_state.chat_history.append(
+                        {
+                            "role": "assistant",
+                            "content": format_text_with_ia_highlighting(st.session_state.current_interaction["refined_response"]),
+                            "tech_details": st.session_state.current_interaction["tech_details"],
+                        }
+                    )
+                    
+                    # Força atualização da UI
+                    st.rerun()
 
-                        # Salva a interação de reutilização no cache
-                        try:
-                            save_interaction(
-                                user_id=creds["login"],
-                                question=prompt,
-                                function_params=safe_serialize_gemini_params(reused_params),
-                                query_sql=reused_query,
-                                raw_data=st.session_state.current_interaction["serializable_data"],
-                                raw_response=None,
-                                refined_response=st.session_state.current_interaction["refined_response"],
-                                tech_details=safe_serialize_tech_details(st.session_state.current_interaction["tech_details"]),
-                                status="OK",
-                                reused_from=reused_interaction.get('user_prompt') if reused_interaction else "N/A"
-                            )
-                        except Exception as cache_error:
-                            print(f"Erro ao salvar no cache (reutilização): {cache_error}")
+                    # Salva a interação de reutilização no cache
+                    try:
+                        save_interaction(
+                            user_id=creds["login"],
+                            question=prompt,
+                            function_params=safe_serialize_gemini_params(reused_params),
+                            query_sql=reused_query,
+                            raw_data=st.session_state.current_interaction["serializable_data"],
+                            raw_response=None,
+                            refined_response=st.session_state.current_interaction["refined_response"],
+                            tech_details=safe_serialize_tech_details(st.session_state.current_interaction["tech_details"]),
+                            status="OK",
+                            reused_from=reused_interaction.get('user_prompt') if reused_interaction else "N/A"
+                        )
+                    except Exception as cache_error:
+                        print(f"Erro ao salvar no cache (reutilização): {cache_error}")
                             
             if not should_reuse:
                 # Processa uma nova consulta
@@ -546,12 +266,6 @@ if prompt:
                         for m in st.session_state.chat_history
                         if m["role"] != "assistant" or not m.get("tech_details")
                     ]
-                )
-
-                # Mostra que está processando
-                processing_msg = st.empty()
-                processing_msg.chat_message("assistant").markdown(
-                    format_text_with_ia_highlighting("Processando sua solicitação...")
                 )
 
                 response = convo.send_message(prompt)
@@ -602,6 +316,9 @@ if prompt:
                                 traceback=None
                             )
                             
+                            # Remove animação de typing
+                            typing_placeholder.empty()
+                            
                             st.session_state.chat_history.append(
                                 {"role": "assistant", "content": format_text_with_ia_highlighting(STANDARD_ERROR_MESSAGE)}
                             )
@@ -642,6 +359,9 @@ if prompt:
                                 context=f"User request: {prompt} | Function params: {json.dumps(st.session_state.current_interaction['serializable_params'])}",
                                 traceback=None
                             )
+                            
+                            # Remove animação de typing
+                            typing_placeholder.empty()
                             
                             st.session_state.chat_history.append(
                                 {"role": "assistant", "content": format_text_with_ia_highlighting(STANDARD_ERROR_MESSAGE)}
@@ -687,6 +407,9 @@ if prompt:
                                 traceback=raw_data['error']
                             )
                             
+                            # Remove animação de typing
+                            typing_placeholder.empty()
+                            
                             st.session_state.chat_history.append(
                                 {
                                     "role": "assistant",
@@ -698,11 +421,6 @@ if prompt:
                         else:
                             # Converte os dados de retorno para um formato serializável SEGURO
                             st.session_state.current_interaction["serializable_data"] = safe_serialize_data(raw_data)
-
-                            # Atualiza a mensagem de processamento
-                            processing_msg.chat_message("assistant").markdown(
-                                format_text_with_ia_highlighting("Dados recebidos. Calculando resultados...")
-                            )
 
                             # Refina a resposta com o Gemini
                             st.session_state.current_interaction["refined_response"], st.session_state.current_interaction["tech_details"] = refine_with_gemini(
@@ -725,8 +443,10 @@ if prompt:
                             except Exception as cache_error:
                                 print(f"Erro ao salvar no cache (nova consulta): {cache_error}")
 
-                            # Remove a mensagem de processamento e adiciona a resposta final
-                            processing_msg.empty()
+                            # Remove animação de typing
+                            typing_placeholder.empty()
+                            
+                            # Atualiza o histórico e força re-renderização
                             st.session_state.chat_history.append(
                                 {
                                     "role": "assistant",
@@ -734,12 +454,20 @@ if prompt:
                                     "tech_details": st.session_state.current_interaction["tech_details"],
                                 }
                             )
+                            
+                            # Força atualização da UI
+                            st.rerun()
                 else:
                     # Resposta direta sem chamada de função
-                    processing_msg.empty()
+                    typing_placeholder.empty()
+                    
+                    # Atualiza histórico e força re-renderização
                     st.session_state.chat_history.append(
                         {"role": "assistant", "content": format_text_with_ia_highlighting(response.text)}
                     )
+                    
+                    # Força atualização da UI
+                    st.rerun()
                 
             # Inicializa variáveis para o log (caso de nova consulta sem function call)
             # Usa session state para garantir isolamento multi-usuário
@@ -775,7 +503,7 @@ if prompt:
                     client_request_count=rate_limiter.state["count"],
                     custom_fields=None,
                 )
-            st.rerun()
+            # Removido st.rerun() para evitar comportamento estranho na UI
 
         except Exception as e:
             # Usa session state para garantir isolamento multi-usuário
@@ -817,6 +545,9 @@ if prompt:
                 context=f"User request: {prompt} | Exception type: {type(e).__name__}",
                 traceback=traceback.format_exc()
             )
+            
+            # Remove animação de typing
+            typing_placeholder.empty()
             
             st.session_state.chat_history.append(
                 {"role": "assistant", "content": format_text_with_ia_highlighting(STANDARD_ERROR_MESSAGE)}
