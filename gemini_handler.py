@@ -5,8 +5,10 @@ import re
 import json
 import pandas as pd
 import plotly.express as px
+import streamlit as st
 from utils import create_styled_download_button, generate_excel_bytes, generate_csv_bytes
 from datetime import datetime
+# Importações removidas - tema universal não requer funções específicas
 
 def initialize_model():
     """
@@ -189,7 +191,57 @@ def initialize_model():
         "- 📊 Ideal para análises de negócio complexas\n"
         "\n"
         "🔥 **REGRA DE OURO**: Se a pergunta tem 'E' conectando duas análises → USE CTE!\n"
-        "🔥 **REGRA ADICIONAL**: Para comparações, rankings com detalhamento, ou múltiplas métricas → SEMPRE CTE!"
+        "🔥 **REGRA ADICIONAL**: Para comparações, rankings com detalhamento, ou múltiplas métricas → SEMPRE CTE!\n\n"
+        "🎨 **FORMATAÇÃO DE DADOS PARA GRÁFICOS - REGRA CRÍTICA**:\n"
+        "⚠️ **PROBLEMA COMUM**: Dados em formato 'wide' (vendas_2024, vendas_2025) NÃO funcionam para gráficos de múltiplas linhas!\n\n"
+        "✅ **SOLUÇÃO**: Para gráficos com múltiplas séries (ex: comparar anos), SEMPRE use formato 'long':\n"
+        "- ❌ ERRADO: mes | vendas_2024 | vendas_2025\n"
+        "- ✅ CORRETO: mes | ano | vendas\n\n"
+        "🔧 **QUANDO REFORMATAR DADOS**:\n"
+        "- Se usuário pedir 'gráfico', 'chart', 'visualização' após consulta comparativa\n"
+        "- Se dados anteriores estão em formato wide (múltiplas colunas de valores)\n"
+        "- Se precisar de múltiplas linhas/séries no gráfico\n\n"
+        "📊 **REGRAS DE FORMATAÇÃO POR TIPO DE COMPARAÇÃO**:\n\n"
+        "🔹 **COMPARAÇÃO DE ANOS (múltiplas linhas por ano)**:\n"
+        "   - Eixo X: Apenas MÊS (01, 02, 03...)\n"
+        "   - Color: ano (2024, 2025)\n"
+        "   - SELECT: LPAD(EXTRACT(MONTH FROM data), 2, '0') AS mes, EXTRACT(YEAR FROM data) AS ano\n\n"
+        "🔹 **COMPARAÇÃO DE MESES (múltiplas linhas por mês)**:\n"
+        "   - Eixo X: Apenas ANO (2024, 2025)\n"
+        "   - Color: mes\n"
+        "   - SELECT: EXTRACT(YEAR FROM data) AS ano, LPAD(EXTRACT(MONTH FROM data), 2, '0') AS mes\n\n"
+        "🔹 **SÉRIE TEMPORAL (evolução no tempo)**:\n"
+        "   - Eixo X: Período completo (2024-01, 2024-02...)\n"
+        "   - SELECT: FORMAT_DATE('%Y-%m', data) AS periodo\n\n"
+        "✅ **EXEMPLO PRÁTICO - REFORMATAÇÃO PARA GRÁFICO**:\n"
+        "Situação: Dados anteriores em formato wide, usuário pede gráfico\n"
+        "Solução: Nova query em formato long:\n"
+        "{\n"
+        f'  \"full_table_id\": \"{PROJECT_ID}.{DATASET_ID}.tabela\",\n'
+        '  \"select\": [\"LPAD(EXTRACT(MONTH FROM data), 2, \'0\') AS mes\", \"EXTRACT(YEAR FROM data) AS ano\", \"SUM(vendas) AS vendas\"],\n'
+        '  \"where\": \"EXTRACT(YEAR FROM data) IN (2024, 2025)\",\n'
+        '  \"group_by\": [\"EXTRACT(MONTH FROM data)\", \"EXTRACT(YEAR FROM data)\"],\n'
+        '  \"order_by\": [\"EXTRACT(MONTH FROM data)\", \"ano\"]\n'
+        "}\n\n"
+        "🎯 **RESULTADO IDEAL PARA GRÁFICO COMPARATIVO**:\n"
+        "mes | ano | vendas\n"
+        "01  | 2024 | 145165895\n"
+        "01  | 2025 | 178128981\n"
+        "02  | 2024 | 186732356\n"
+        "02  | 2025 | 195843210\n\n"
+        "🚨 **ATENÇÃO - FORMATO DE MÊS PARA COMPARAÇÕES**:\n"
+        "- Para comparar ANOS no mesmo gráfico: use apenas MÊS no eixo X\n"
+        "- Para comparar MESES no mesmo gráfico: use apenas ANO no eixo X\n"
+        "- NUNCA use formato 'YYYY-MM' quando comparar anos diferentes!\n"
+        "- Use LPAD(EXTRACT(MONTH FROM data), 2, '0') para mês com zero à esquerda\n\n"
+        "🚨 **DETECÇÃO AUTOMÁTICA**: Se dados anteriores têm padrão 'valor_ano1', 'valor_ano2' → SEMPRE reformate!\n\n"
+        "⚡ **EXEMPLOS ESPECÍFICOS DE REFORMATAÇÃO**:\n\n"
+        "❌ **ERRO COMUM - Formato temporal para comparação**:\n"
+        "Query que gera: periodo_mes='2024-01', ano=2024, vendas=1000\n"
+        "Problema: Eixo X terá '2024-01', '2024-02' vs '2025-01', '2025-02' (séries separadas)\n\n"
+        "✅ **CORRETO - Formato de comparação**:\n"
+        "Query que gera: mes='01', ano=2024, vendas=1000\n"
+        "Resultado: Eixo X terá '01', '02', '03'... com linhas para 2024 e 2025 no mesmo ponto\n\n"
     )
     
     query_func = FunctionDeclaration(
@@ -246,7 +298,7 @@ def initialize_model():
     business_tool = Tool(function_declarations=[query_func])
 
     generation_config = {
-        "temperature": 0.5,
+        "temperature": 0.2,  # Ajustado para melhor seguimento de instruções
         "max_output_tokens": 2000,
     }
 
@@ -265,17 +317,18 @@ def initialize_model():
 
 
 def generate_chart(data, chart_type, x_axis, y_axis, color=None):
-    """Gera gráfico com tema escuro DeepSeek e tratamento para múltiplas dimensões"""
+    """
+    Cria gráficos com tema universal elegante que funciona em ambos os temas (escuro/claro)
+    """
     if not data or not x_axis or not y_axis:
         print("❌ Dados insuficientes para gráfico")
         return None
 
     try:
         df = pd.DataFrame.from_records(data)
-        print(f"📊 Gerando gráfico: {chart_type} | X: {x_axis} | Y: {y_axis} | Color: {color}")
-        print(f"📋 Colunas disponíveis: {list(df.columns)}")
+        print(f"📊 Criando gráfico {chart_type}: X={x_axis}, Y={y_axis}, Color={color}")
 
-        # Validação robusta de colunas
+        # Validação de colunas
         if x_axis not in df.columns:
             print(f"❌ Coluna X '{x_axis}' não encontrada")
             return None
@@ -284,57 +337,32 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
             print(f"❌ Coluna Y '{y_axis}' não encontrada")
             return None
             
-        # Tratamento especial para coluna COLOR
-        if color:
-            # Remove espaços e caracteres especiais
-            color = str(color).strip()
-            
-            # Se color é uma lista ou contém colchetes, pega o primeiro elemento válido
-            if '[' in color and ']' in color:
-                # Extrai elementos da lista string
-                import re
-                matches = re.findall(r'(\w+)', color)
-                if matches:
-                    # Tenta encontrar uma coluna válida entre os matches
-                    for match in matches:
-                        if match in df.columns:
-                            color = match
-                            print(f"✅ Color corrigido para: {color}")
-                            break
-                    else:
-                        print(f"⚠️ Nenhuma coluna válida encontrada em {color}, removendo COLOR")
-                        color = None
-                else:
-                    print(f"⚠️ Não foi possível extrair coluna de {color}, removendo COLOR")
-                    color = None
-            elif color not in df.columns:
-                print(f"⚠️ Coluna COLOR '{color}' não encontrada, removendo COLOR")
-                color = None
+        # Tratamento da coluna de cor
+        if color and color not in df.columns:
+            print(f"⚠️ Coluna COLOR '{color}' não encontrada, removendo")
+            color = None
 
-        # Conversão segura de tipos para eixos
+        # Conversão Y para numérico
         try:
             df[y_axis] = pd.to_numeric(df[y_axis], errors="coerce")
         except Exception as e:
-            print(f"⚠️ Erro ao converter Y para numérico: {e}")
+            print(f"⚠️ Erro ao converter Y: {e}")
 
-        # Paleta de cores vibrantes para tema escuro
-        dark_theme_colors = [
-            '#00d4ff',  # Azul principal DeepSeek
-            '#ff6b35',  # Laranja vibrante
-            '#4ecdc4',  # Verde água
-            '#45b7d1',  # Azul claro
-            '#feca57',  # Amarelo dourado
-            '#ff9ff3',  # Rosa vibrante
-            '#54a0ff',  # Azul médio
-            '#5f27cd',  # Roxo
-            '#00d2d3',  # Ciano
-            '#ff9f43',  # Laranja claro
-            '#ff6b6b',  # Vermelho suave
-            '#c44569'   # Rosa escuro
+        # PALETA UNIVERSAL ELEGANTE - Funciona em ambos os temas
+        UNIVERSAL_COLORS = [
+            "#2563eb",  # Azul vibrante
+            "#dc2626",  # Vermelho forte  
+            "#059669",  # Verde esmeralda
+            "#d97706",  # Laranja queimado
+            "#7c3aed",  # Roxo vibrante
+            "#0891b2",  # Azul turquesa
+            "#ea580c",  # Laranja vibrante
+            "#65a30d",  # Verde lima
+            "#be185d",  # Rosa forte
+            "#4338ca"   # Índigo
         ]
 
-        print(f"🎨 Criando gráfico {chart_type} com color: {color}")
-
+        # Criação do gráfico
         if chart_type == "bar":
             fig = px.bar(
                 df,
@@ -342,7 +370,7 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
                 y=y_axis,
                 color=color,
                 barmode="group" if color else "relative",
-                color_discrete_sequence=dark_theme_colors,
+                color_discrete_sequence=UNIVERSAL_COLORS,
                 title=""
             )
         elif chart_type == "line":
@@ -352,116 +380,105 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
                 y=y_axis,
                 color=color,
                 markers=True,
-                color_discrete_sequence=dark_theme_colors,
+                color_discrete_sequence=UNIVERSAL_COLORS,
                 title=""
             )
         else:
-            print(f"❌ Tipo de gráfico '{chart_type}' não suportado")
+            print(f"❌ Tipo '{chart_type}' não suportado")
             return None
 
-        # Tema escuro completo compatível com DeepSeek
+        # LAYOUT UNIVERSAL ELEGANTE
         fig.update_layout(
-            # Cores de fundo transparentes para integrar com o card
-            plot_bgcolor="rgba(0, 0, 0, 0)",  # Fundo transparente do gráfico
-            paper_bgcolor="rgba(0, 0, 0, 0)",  # Fundo transparente do papel
+            # Fundo transparente - adapta-se ao tema do container
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
             
-            # Fonte e cores de texto
+            # Tipografia moderna
             font=dict(
-                color="#e1e5e9",  # Texto claro
-                size=14,
-                family="Inter, -apple-system, BlinkMacSystemFont, sans-serif"  # Fonte moderna
-            ),
-            
-            # Configurações do título (removido)
-            title=dict(
-                text="",
-                font=dict(color="#e1e5e9", size=18),
-                x=0.5,
-                xanchor='center'
-            ),
-            
-            # Eixo X com tema escuro
-            xaxis=dict(
-                gridcolor="rgba(255, 255, 255, 0.1)",  # Grid sutil
-                color="#e1e5e9",  # Cor da linha do eixo
-                tickfont=dict(
-                    color="#e1e5e9",  # Cor dos números
-                    size=12,
-                    family="Inter, sans-serif"
-                ),
-                title=dict(
-                    font=dict(
-                        color="#00d4ff",  # Título do eixo em azul DeepSeek
-                        size=14,
-                        family="Inter, sans-serif"
-                    )
-                ),
-                linecolor="rgba(255, 255, 255, 0.2)",  # Linha do eixo
-                zerolinecolor="rgba(255, 255, 255, 0.2)"  # Linha do zero
-            ),
-            
-            # Eixo Y com tema escuro
-            yaxis=dict(
-                gridcolor="rgba(255, 255, 255, 0.1)",  # Grid sutil
-                color="#e1e5e9",  # Cor da linha do eixo
-                tickfont=dict(
-                    color="#e1e5e9",  # Cor dos números
-                    size=12,
-                    family="Inter, sans-serif"
-                ),
-                title=dict(
-                    font=dict(
-                        color="#00d4ff",  # Título do eixo em azul DeepSeek
-                        size=14,
-                        family="Inter, sans-serif"
-                    )
-                ),
-                linecolor="rgba(255, 255, 255, 0.2)",  # Linha do eixo
-                zerolinecolor="rgba(255, 255, 255, 0.2)"  # Linha do zero
-            ),
-            
-            # Configurações de hover
-            hovermode="x unified",
-            
-            # Legenda com tema escuro
-            legend=dict(
-                bgcolor="rgba(15, 15, 23, 0.8)",  # Fundo da legenda
-                bordercolor="rgba(0, 212, 255, 0.3)",  # Borda da legenda
-                borderwidth=1,
-                font=dict(
-                    color="#e1e5e9",  # Texto da legenda
-                    size=12
-                )
+                family="Inter, 'Segoe UI', system-ui, sans-serif",
+                size=13,
+                color="#374151"  # Cinza neutro legível em ambos os temas
             ),
             
             # Margem otimizada
-            margin=dict(l=50, r=50, t=30, b=50),
+            margin=dict(l=60, r=60, t=40, b=60),
+            height=400,
             
-            # Altura padrão
-            height=450
+            # Eixos com estilo universal
+            xaxis=dict(
+                title=dict(
+                    text=x_axis.replace('_', ' ').title(),
+                    font=dict(size=14, color="#1f2937")
+                ),
+                tickfont=dict(size=12, color="#374151"),
+                gridcolor="rgba(156, 163, 175, 0.3)",
+                gridwidth=1,
+                showgrid=True,
+                zeroline=False,
+                linecolor="#d1d5db",
+                linewidth=1
+            ),
+            
+            yaxis=dict(
+                title=dict(
+                    text=y_axis.replace('_', ' ').title(),
+                    font=dict(size=14, color="#1f2937")
+                ),
+                tickfont=dict(size=12, color="#374151"),
+                gridcolor="rgba(156, 163, 175, 0.3)",
+                gridwidth=1,
+                showgrid=True,
+                zeroline=True,
+                zerolinecolor="rgba(156, 163, 175, 0.5)",
+                zerolinewidth=1,
+                linecolor="#d1d5db",
+                linewidth=1
+            ),
+            
+            # Legenda elegante
+            legend=dict(
+                bgcolor="rgba(255, 255, 255, 0.9)",
+                bordercolor="rgba(209, 213, 219, 0.8)",
+                borderwidth=1,
+                font=dict(size=12, color="#374151"),
+                orientation="v",
+                yanchor="top",
+                y=1,
+                xanchor="left",
+                x=1.02
+            ),
+            
+            showlegend=bool(color),
+            
+            # Hover moderno
+            hoverlabel=dict(
+                bgcolor="rgba(255, 255, 255, 0.95)",
+                bordercolor="rgba(209, 213, 219, 0.8)",
+                font=dict(size=12, color="#1f2937")
+            )
         )
 
-        # Configurações específicas para barras
+        # Customização específica por tipo
         if chart_type == "bar":
             fig.update_traces(
+                hovertemplate="<b>%{x}</b><br>%{y:,.0f}<extra></extra>",
                 marker=dict(
-                    line=dict(width=0.5, color="rgba(255, 255, 255, 0.2)")  # Borda sutil nas barras
-                ),
-                hovertemplate="<b>%{x}</b><br>%{y:,.0f}<extra></extra>"  # Hover customizado
+                    line=dict(width=0.5, color="rgba(255,255,255,0.8)"),
+                    opacity=0.9
+                )
             )
-        
-        # Configurações específicas para linhas
         elif chart_type == "line":
             fig.update_traces(
-                line=dict(width=3),  # Linhas mais grossas
-                marker=dict(size=6),  # Marcadores maiores
-                hovertemplate="<b>%{x}</b><br>%{y:,.0f}<extra></extra>"  # Hover customizado
+                line=dict(width=3),
+                marker=dict(size=8, line=dict(width=2, color="white")),
+                hovertemplate="<b>%{x}</b><br>%{y:,.0f}<extra></extra>"
             )
 
+        print("✅ Gráfico universal criado")
         return fig
 
     except Exception as e:
-        print(f"Erro ao gerar gráfico: {str(e)}")
+        print(f"❌ Erro ao criar gráfico: {str(e)}")
         return None
 
 
@@ -797,9 +814,17 @@ CRITÉRIOS DE AVALIAÇÃO:
    - Nova consulta aborda o MESMO ASSUNTO da consulta anterior? 
    - Mudança de filtros, período ou critérios → NOVA CONSULTA
 
-4. REUTILIZAÇÃO VÁLIDA:
+4. FORMATO DE DADOS PARA GRÁFICOS (CRÍTICO):
+   - Se consulta atual menciona 'gráfico', 'chart', 'visualização' E dados anteriores têm formato 'wide' (ex: vendas_2024, vendas_2025) → NOVA CONSULTA
+   - Gráficos de múltiplas linhas precisam formato 'long' (ano | valor) não 'wide' (valor_2024 | valor_2025) → NOVA CONSULTA
+   - Se dados anteriores têm padrão 'campo_ano1', 'campo_ano2' E consulta pede gráfico → NOVA CONSULTA
+   - Se dados têm formato temporal 'YYYY-MM' E consulta pede comparação de anos → NOVA CONSULTA
+   - Para gráficos comparativos: precisa eixo X simples (só mês) + color (ano) → NOVA CONSULTA se formato atual é temporal
+
+5. REUTILIZAÇÃO VÁLIDA:
    - Consulta anterior contém dados suficientes para responder → REUTILIZAR
    - Apenas mudança de visualização dos mesmos dados → REUTILIZAR
+   - Dados já estão no formato correto para o tipo de análise solicitada → REUTILIZAR
 
 Responda APENAS em formato JSON:
 {{"should_reuse": false, "reason": "descrição técnica"}}

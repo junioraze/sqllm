@@ -47,6 +47,9 @@ def load_client_config():
 TABLES_CONFIG = load_tables_config()
 CLIENT_CONFIG = load_client_config()
 
+# Mensagem padrão para erros (nunca mostrar detalhes técnicos ao usuário)
+STANDARD_ERROR_MESSAGE = CLIENT_CONFIG.get("error_message", "Não foi possível processar sua solicitação no momento. Nossa equipe técnica foi notificada e está analisando a situação. Tente reformular sua pergunta ou entre em contato conosco.")
+
 # Projeto e dataset
 PROJECT_ID = os.getenv("PROJECT_ID")
 DATASET_ID = os.getenv("DATASET_ID")

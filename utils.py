@@ -188,6 +188,68 @@ def create_tech_details_spoiler(tech_details: dict) -> str:
         return ""
     content = format_text_with_ia_highlighting("### Detalhes Técnicos\n\n")
     
+    # Performance e Timing (NOVO - Primeira seção)
+    if tech_details.get("timing_info") or tech_details.get("total_duration"):
+        content += format_text_with_ia_highlighting("**⏱️ Performance:**\n")
+        
+        total_duration = tech_details.get("total_duration", 0)
+        content += format_text_with_ia_highlighting(f"- **Duração Total: {total_duration:.2f}ms**\n\n")
+        
+        timing_info = tech_details.get("timing_info", {})
+        if timing_info:
+            content += format_text_with_ia_highlighting("**📊 Detalhamento por Etapa:**\n")
+            content += "| Etapa | Início | Duração (ms) |\n"
+            content += "|-------|--------|-------------|\n"
+            
+            # Ordena por ordem de execução (timestamp de início)
+            sorted_timings = sorted(timing_info.items(), key=lambda x: x[1].get('start', 0))
+            
+            for step_name, timing_data in sorted_timings:
+                timestamp = timing_data.get('timestamp', 'N/A')
+                duration = timing_data.get('duration', 0)
+                
+                if duration is not None:
+                    if duration < 1000:  # Menos de 1 segundo
+                        duration_formatted = f"{duration:.1f}ms"
+                    else:  # 1 segundo ou mais
+                        duration_formatted = f"{duration/1000:.2f}s"
+                else:
+                    duration_formatted = "Em andamento..."
+                
+                # Traduz nomes técnicos para nomes mais amigáveis
+                step_display_name = {
+                    'processo_completo': '🔄 Processo Completo',
+                    'verificacao_reuso': '🔍 Verificação de Reuso',
+                    'processamento_reuso': '♻️ Processamento Reuso',
+                    'processamento_nova_consulta': '🆕 Nova Consulta',
+                    'preparando_conversa_gemini': '💬 Preparando Conversa',
+                    'envio_gemini_inicial': '🚀 Envio Inicial Gemini',
+                    'validacao_resposta_gemini': '✅ Validação Resposta',
+                    'analise_tipo_resposta': '🔍 Análise Tipo Resposta',
+                    'preparacao_parametros': '⚙️ Preparação Parâmetros',
+                    'validacao_table_id': '🔒 Validação Table ID',
+                    'construcao_query': '🔧 Construção Query',
+                    'execucao_sql': '💾 Execução SQL',
+                    'serializacao_dados': '📦 Serialização Dados',
+                    'refinamento_gemini_final': '✨ Refinamento Final',
+                    'refinamento_gemini_reuso': '✨ Refinamento Reuso',
+                    'preparando_tech_details': '📋 Preparando Detalhes',
+                    'finalizacao_reuso': '🏁 Finalização Reuso',
+                    'salvamento_interacao': '💾 Salvamento',
+                    'finalizacao_nova_consulta': '🏁 Finalização',
+                    'exibindo_feedback_reuso': '💬 Feedback Reuso',
+                    'preparando_dados_reuso': '📦 Preparando Dados Reuso'
+                }.get(step_name, step_name.replace('_', ' ').title())
+                
+                content += f"| {step_display_name} | {timestamp} | {duration_formatted} |\n"
+            
+            content += "\n"
+    
+    # Árvore de decisão horizontal (caminho do fluxo)
+    if tech_details.get("flow_path"):
+        content += format_text_with_ia_highlighting("**🌳 Caminho de Decisão:**\n")
+        content += f"```\n{tech_details['flow_path']}\n```\n\n"
+    
     # Informações sobre reutilização de dados
     if tech_details.get("reuse_info"):
         reuse_info = tech_details["reuse_info"]
