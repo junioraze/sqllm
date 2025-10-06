@@ -1,4 +1,3 @@
-# DeepSeek Theme System - Arquitetura Unificada e Limpa
 import streamlit as st
 
 # ========================================
@@ -33,14 +32,14 @@ DEEPSEEK_DARK_THEME = """
     --shadow-button: 0 4px 15px rgba(0, 212, 255, 0.3);
     --shadow-button-hover: 0 6px 25px rgba(0, 212, 255, 0.5);
     
-    --gradient-title: linear-gradient(135deg, #00d4ff 0%, #00a8cc 50%, #0066ff 100%);
-    --gradient-button: linear-gradient(135deg, #00d4ff 0%, #0066ff 100%);
-    --gradient-download: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    --gradient-title: linear-gradient(135deg, #00d4ff 0%, #00a8cc 50%, #0099ff 100%);
+    --gradient-button: linear-gradient(135deg, #00d4ff 0%, #0099ff 100%);
+    --gradient-download: linear-gradient(135deg, #00d4ff 0%, #0099ff 100%);
     --gradient-user: linear-gradient(135deg, rgba(0, 212, 255, 0.15) 0%, rgba(0, 168, 204, 0.15) 100%);
     --gradient-assistant: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(16, 185, 129, 0.15) 100%);
     --gradient-shimmer: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.1), transparent);
-    --gradient-scrollbar: linear-gradient(135deg, #00d4ff 0%, #0066ff 100%);
-    --gradient-scrollbar-hover: linear-gradient(135deg, #00a8cc 0%, #0052cc 100%);
+    --gradient-scrollbar: linear-gradient(135deg, #00d4ff 0%, #0099ff 100%);
+    --gradient-scrollbar-hover: linear-gradient(135deg, #00a8cc 0%, #0088cc 100%);
 }
 
 /* ESTRUTURA BASE ÚNICA */
@@ -647,18 +646,18 @@ DEEPSEEK_LIGHT_THEME = """
     
     --shadow-primary: 0 8px 32px rgba(0, 0, 0, 0.1);
     --shadow-hover: 0 4px 20px rgba(14, 165, 233, 0.1);
-    --shadow-focus: 0 0 20px rgba(14, 165, 233, 0.3);
-    --shadow-button: 0 4px 15px rgba(14, 165, 233, 0.3);
-    --shadow-button-hover: 0 6px 25px rgba(14, 165, 233, 0.5);
+    --shadow-focus: 0 0 20px rgba(0, 212, 255, 0.3);
+    --shadow-button: 0 4px 15px rgba(0, 212, 255, 0.3);
+    --shadow-button-hover: 0 6px 25px rgba(0, 212, 255, 0.5);
     
-    --gradient-title: linear-gradient(135deg, #0066ff 0%, #00a8cc 50%, #00d4ff 100%);
-    --gradient-button: linear-gradient(135deg, #0ea5e9 0%, #0066ff 100%);
-    --gradient-download: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-    --gradient-user: linear-gradient(135deg, rgba(0, 102, 255, 0.1) 0%, rgba(0, 168, 204, 0.1) 100%);
+    --gradient-title: linear-gradient(135deg, #00d4ff 0%, #00a8cc 50%, #0099ff 100%);
+    --gradient-button: linear-gradient(135deg, #00d4ff 0%, #0099ff 100%);
+    --gradient-download: linear-gradient(135deg, #00d4ff 0%, #0099ff 100%);
+    --gradient-user: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(0, 168, 204, 0.1) 100%);
     --gradient-assistant: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(16, 185, 129, 0.1) 100%);
-    --gradient-shimmer: linear-gradient(90deg, transparent, rgba(14, 165, 233, 0.1), transparent);
-    --gradient-scrollbar: linear-gradient(135deg, #0ea5e9 0%, #0066ff 100%);
-    --gradient-scrollbar-hover: linear-gradient(135deg, #0284c7 0%, #0052cc 100%);
+    --gradient-shimmer: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.1), transparent);
+    --gradient-scrollbar: linear-gradient(135deg, #00d4ff 0%, #0099ff 100%);
+    --gradient-scrollbar-hover: linear-gradient(135deg, #00a8cc 0%, #0088cc 100%);
 }
 
 /* ESTRUTURA BASE ÚNICA */
@@ -1231,13 +1230,41 @@ input::placeholder {
 # ========================================
 
 def get_login_theme():
-    """Retorna o CSS para a tela de login com inputs padronizados"""
+    """Retorna o CSS completo para a tela de login/registro integrado ao tema"""
     return """
     <style>
+    /* VARIÁVEIS DE COR - TEMA ESCURO INTEGRADO */
+    :root {
+        --bg-primary: #0a0a0a;
+        --bg-secondary: rgba(10, 10, 10, 0.98);
+        --bg-tertiary: rgba(20, 20, 20, 0.8);
+        --bg-input: rgba(25, 25, 25, 0.9);
+        --text-primary: #e5e7eb;
+        --text-secondary: rgba(229, 231, 235, 0.5);
+        --text-accent: #00d4ff;
+        --border-primary: rgba(255, 255, 255, 0.1);
+        --border-secondary: rgba(255, 255, 255, 0.2);
+        --border-accent: #00d4ff;
+        --shadow-focus: 0 0 20px rgba(0, 212, 255, 0.3);
+        --gradient-button: linear-gradient(135deg, #00d4ff 0%, #0099ff 100%);
+        --success-bg: rgba(0, 212, 255, 0.15);
+        --success-border: #00d4ff;
+        --success-text: #00d4ff;
+        --error-bg: rgba(239, 68, 68, 0.15);
+        --error-border: #ef4444;
+        --error-text: #ff6b6b;
+        --warning-bg: rgba(245, 158, 11, 0.15);
+        --warning-border: #f59e0b;
+        --warning-text: #fbbf24;
+        --info-bg: rgba(0, 212, 255, 0.2);
+        --info-border: #00d4ff;
+        --info-text: #00d4ff;
+    }
+
     /* BASE LOGIN THEME */
     .stApp, .main, [data-testid="stAppViewContainer"], .block-container {
-        background: #0a0a0a !important;
-        color: #e5e7eb !important;
+        background: var(--bg-primary) !important;
+        color: var(--text-primary) !important;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important;
     }
     
@@ -1249,6 +1276,8 @@ def get_login_theme():
     button[title="View fullscreen"], 
     button[data-testid="baseButton-headerNoPadding"], 
     header[data-testid="stHeader"],
+    [data-testid="stSidebar"],
+    section[data-testid="stSidebar"],
     .stAppDeployButton,
     #stDecoration {
         display: none !important;
@@ -1256,49 +1285,892 @@ def get_login_theme():
         opacity: 0 !important;
         pointer-events: none !important;
     }
-    
-    /* INPUTS DE LOGIN */
-    .stTextInput input, .stPasswordInput input {
-        background: rgba(25, 25, 25, 0.9) !important;
-        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+
+    /* CONTAINER PRINCIPAL */
+    .block-container {
+        background: var(--bg-secondary) !important;
+        border-radius: 16px !important;
+        backdrop-filter: blur(20px) !important;
+        border: 1px solid var(--border-primary) !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+        padding: 2rem !important;
+        margin: 1rem !important;
+        max-width: 800px !important;
+        animation: fadeIn 0.8s ease-out !important;
+    }
+
+    @keyframes fadeIn {
+        0% { opacity: 0; transform: translateY(30px); }
+        100% { opacity: 1; transform: translateY(0); }
+    }
+
+    /* TABS DO STREAMLIT */
+    .stTabs [data-baseweb="tab-list"] {
+        background: var(--bg-tertiary) !important;
         border-radius: 12px !important;
-        color: #ffffff !important;
+        padding: 0.5rem !important;
+        border: 1px solid var(--border-primary) !important;
+        margin-bottom: 2rem !important;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        background: transparent !important;
+        color: var(--text-secondary) !important;
+        border-radius: 8px !important;
+        padding: 0.75rem 1.5rem !important;
+        font-weight: 500 !important;
+        transition: all 0.3s ease !important;
+        border: none !important;
+    }
+
+    .stTabs [data-baseweb="tab"]:hover {
+        background: rgba(0, 212, 255, 0.1) !important;
+        color: var(--text-accent) !important;
+    }
+
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        background: var(--gradient-button) !important;
+        color: white !important;
+        box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3) !important;
+    }
+
+    /* INPUTS DE LOGIN/REGISTRO */
+    .stTextInput input, 
+    .stPasswordInput input,
+    .stTextInput input[type="email"] {
+        background: var(--bg-input) !important;
+        border: 1px solid var(--border-secondary) !important;
+        border-radius: 12px !important;
+        color: var(--text-primary) !important;
         padding: 1rem 1.25rem !important;
         font-size: 1rem !important;
         transition: all 0.3s ease !important;
+        backdrop-filter: blur(10px) !important;
     }
-    
-    .stTextInput input::placeholder, .stPasswordInput input::placeholder {
-        color: rgba(255, 255, 255, 0.6) !important;
+
+    .stTextInput input::placeholder, 
+    .stPasswordInput input::placeholder {
+        color: var(--text-secondary) !important;
         font-style: italic !important;
     }
-    
-    .stTextInput label, .stPasswordInput label {
-        color: #e5e7eb !important;
+
+    .stTextInput label, 
+    .stPasswordInput label {
+        color: var(--text-primary) !important;
         font-weight: 500 !important;
+        margin-bottom: 0.5rem !important;
     }
-    
-    .stTextInput input:focus, .stPasswordInput input:focus {
-        border-color: #00d4ff !important;
-        box-shadow: 0 0 20px rgba(0, 212, 255, 0.3) !important;
+
+    .stTextInput input:focus, 
+    .stPasswordInput input:focus {
+        border-color: var(--border-accent) !important;
+        box-shadow: var(--shadow-focus) !important;
+        transform: scale(1.02) !important;
         outline: none !important;
     }
-    
-    /* BOTÕES DE LOGIN */
+
+    /* BOTÕES DE LOGIN/REGISTRO */
     .stButton button {
-        background: linear-gradient(135deg, #00d4ff 0%, #0066ff 100%) !important;
+        background: var(--gradient-button) !important;
         border: none !important;
-        border-radius: 8px !important;
+        border-radius: 12px !important;
         color: white !important;
-        padding: 0.75rem 2rem !important;
+        padding: 0.875rem 2rem !important;
         font-weight: 600 !important;
         width: 100% !important;
         transition: all 0.3s ease !important;
+        box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3) !important;
+        font-size: 1rem !important;
+    }
+
+    .stButton button:hover {
+        transform: translateY(-2px) scale(1.02) !important;
+        box-shadow: 0 6px 25px rgba(0, 212, 255, 0.5) !important;
+    }
+
+    /* ALERTAS DE SUCESSO */
+    .stAlert[data-baseweb="notification"] {
+        border-radius: 12px !important;
+        backdrop-filter: blur(10px) !important;
+        border-width: 1px !important;
+        border-style: solid !important;
+        padding: 1rem 1.25rem !important;
+        margin: 1rem 0 !important;
+    }
+
+    /* Sucesso - Verde */
+    .stSuccess, [data-testid="stAlert"][data-baseweb="notification"]:has([data-testid="successIcon"]) {
+        background: var(--success-bg) !important;
+        border-color: var(--success-border) !important;
+        color: var(--success-text) !important;
+    }
+
+    .stSuccess [data-testid="successIcon"], 
+    [data-testid="stAlert"] [data-testid="successIcon"] {
+        color: var(--success-text) !important;
+    }
+
+    /* Erro - Vermelho */
+    .stError, [data-testid="stAlert"][data-baseweb="notification"]:has([data-testid="errorIcon"]) {
+        background: var(--error-bg) !important;
+        border-color: var(--error-border) !important;
+        color: var(--error-text) !important;
+    }
+
+    .stError [data-testid="errorIcon"], 
+    [data-testid="stAlert"] [data-testid="errorIcon"] {
+        color: var(--error-text) !important;
+    }
+
+    /* Warning - Amarelo */
+    .stWarning, [data-testid="stAlert"][data-baseweb="notification"]:has([data-testid="warningIcon"]) {
+        background: var(--warning-bg) !important;
+        border-color: var(--warning-border) !important;
+        color: var(--warning-text) !important;
+    }
+
+    .stWarning [data-testid="warningIcon"], 
+    [data-testid="stAlert"] [data-testid="warningIcon"] {
+        color: var(--warning-text) !important;
+    }
+
+    /* Info - Azul */
+    .stInfo, [data-testid="stAlert"][data-baseweb="notification"]:has([data-testid="infoIcon"]) {
+        background: var(--info-bg) !important;
+        border-color: var(--info-border) !important;
+        color: var(--info-text) !important;
+    }
+
+    .stInfo [data-testid="infoIcon"], 
+    [data-testid="stAlert"] [data-testid="infoIcon"] {
+        color: var(--info-text) !important;
+    }
+
+    /* EXPANSORES DE PLANOS */
+    .stExpander {
+        background: var(--bg-tertiary) !important;
+        border: 1px solid var(--border-primary) !important;
+        border-radius: 12px !important;
+        margin: 0.5rem 0 !important;
+        backdrop-filter: blur(10px) !important;
+        transition: all 0.3s ease !important;
+    }
+
+    .stExpander:hover {
+        border-color: rgba(0, 212, 255, 0.3) !important;
+        box-shadow: 0 4px 20px rgba(0, 212, 255, 0.1) !important;
+    }
+
+    .streamlit-expanderHeader {
+        background: transparent !important;
+        color: var(--text-accent) !important;
+        font-weight: 600 !important;
+        padding: 1rem !important;
+        transition: all 0.3s ease !important;
+    }
+
+    .streamlit-expanderHeader:hover {
+        background: rgba(0, 212, 255, 0.05) !important;
+    }
+
+    .streamlit-expanderContent {
+        background: var(--bg-tertiary) !important;
+        color: var(--text-primary) !important;
+        padding: 1rem !important;
+        border-top: 1px solid var(--border-primary) !important;
+    }
+
+    /* COLUNAS */
+    .stColumn {
+        padding: 0 0.5rem !important;
+    }
+
+    /* FORM CONTAINERS */
+    .stForm {
+        background: var(--bg-tertiary) !important;
+        border: 1px solid var(--border-primary) !important;
+        border-radius: 16px !important;
+        padding: 1.5rem !important;
+        margin: 1rem 0 !important;
+        backdrop-filter: blur(10px) !important;
+    }
+
+    /* CARDS INFORMATIVOS - MELHOR CONTRASTE */
+    .stAlert, .stMarkdown div[data-testid="stMarkdownContainer"] {
+        border-radius: 12px !important;
+        backdrop-filter: blur(10px) !important;
+    }
+
+    /* Cards de Info com ícone 💡 */
+    .stInfo, 
+    .stMarkdown div:has-text("💡"),
+    [data-testid="stMarkdownContainer"]:has(p:contains("💡")),
+    div[data-testid="stMarkdownContainer"] p:contains("💡") {
+        background: var(--info-bg) !important;
+        border: 1px solid var(--info-border) !important;
+        color: var(--info-text) !important;
+        padding: 1.25rem !important;
+        margin: 1rem 0 !important;
+        border-radius: 12px !important;
+        font-weight: 500 !important;
+    }
+
+    /* MELHORAR TODOS OS BOTÕES */
+    .stButton button, 
+    button[kind="primary"],
+    button[kind="secondary"] {
+        background: var(--gradient-button) !important;
+        border: 1px solid var(--border-accent) !important;
+        border-radius: 12px !important;
+        color: white !important;
+        padding: 0.875rem 2rem !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3) !important;
+    }
+
+    .stButton button:hover,
+    button[kind="primary"]:hover,
+    button[kind="secondary"]:hover {
+        transform: translateY(-2px) scale(1.02) !important;
+        box-shadow: 0 6px 25px rgba(0, 212, 255, 0.5) !important;
+        border-color: var(--border-accent) !important;
+    }
+
+    /* BOTÕES SECUNDÁRIOS */
+    button[kind="secondary"] {
+        background: rgba(0, 212, 255, 0.1) !important;
+        color: var(--text-accent) !important;
+        border: 1px solid var(--border-accent) !important;
+    }
+
+    /* TODAS AS BORDAS DE FOCO */
+    *:focus,
+    *:focus-visible {
+        outline: 2px solid var(--border-accent) !important;
+        outline-offset: 2px !important;
+    }
+
+    /* ANIMAÇÃO DE BALLOONS */
+    .balloons {
+        animation: celebrate 2s ease-in-out !important;
+    }
+
+    @keyframes celebrate {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+    }
+    </style>
+    """
+
+def get_expert_login_theme():
+    """Tema de login ESPECIALISTA com gradientes azuis da marca"""
+    return """
+    <style>
+    /* ================================
+       TEMA DE LOGIN - MARCA AZUL GRADIENTE
+       ================================ */
+
+    /* VARIÁVEIS DA MARCA */
+    :root {
+        --brand-blue: #00d4ff;
+        --brand-blue-dark: #0099ff;
+        --brand-gradient: linear-gradient(135deg, #00d4ff 0%, #0099ff 100%);
+        --brand-gradient-hover: linear-gradient(135deg, #00b8e6 0%, #007acc 100%);
+        --bg-dark: #0a0a0a;
+        --bg-card: rgba(15, 15, 15, 0.95);
+        --bg-input: rgba(20, 20, 20, 0.9);
+        --text-white: #ffffff;
+        --text-gray: rgba(255, 255, 255, 0.7);
+        --border-brand: #00d4ff;
+        --shadow-brand: 0 8px 32px rgba(0, 212, 255, 0.3);
+        --shadow-hover: 0 12px 48px rgba(0, 212, 255, 0.4);
+    }
+
+    /* ESTRUTURA BASE */
+    .stApp {
+        background: var(--bg-dark) !important;
+        color: var(--text-white) !important;
+    }
+
+    /* OCULTAR ELEMENTOS STREAMLIT */
+    header[data-testid="stHeader"],
+    [data-testid="stToolbar"],
+    [data-testid="stDecoration"],
+    [data-testid="stSidebar"],
+    section[data-testid="stSidebar"],
+    .stMainMenu,
+    .stAppDeployButton,
+    button[title="View fullscreen"] {
+        display: none !important;
+    }
+
+    /* CONTAINER PRINCIPAL */
+    .block-container {
+        background: var(--bg-card) !important;
+        border: 2px solid var(--border-brand) !important;
+        border-radius: 20px !important;
+        box-shadow: var(--shadow-brand) !important;
+        backdrop-filter: blur(20px) !important;
+        max-width: 600px !important;
+        padding: 2.5rem !important;
+        margin: 2rem auto !important;
+    }
+
+    /* ================================
+       TABS (ABAS LOGIN/CADASTRO) - CORRIGIDO
+       ================================ */
+    .stTabs [data-baseweb="tab-list"],
+    .stTabs div[role="tablist"] {
+        background: rgba(0, 0, 0, 0.4) !important;
+        border: 2px solid var(--brand-blue) !important;
+        border-radius: 15px !important;
+        padding: 8px !important;
+        margin-bottom: 2rem !important;
+    }
+
+    .stTabs [data-baseweb="tab"],
+    .stTabs button[role="tab"] {
+        background: transparent !important;
+        color: var(--text-gray) !important;
+        border: 1px solid transparent !important;
+        border-radius: 10px !important;
+        padding: 12px 24px !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+        margin: 0 4px !important;
+    }
+
+    .stTabs [data-baseweb="tab"]:hover,
+    .stTabs button[role="tab"]:hover {
+        background: rgba(0, 212, 255, 0.2) !important;
+        color: var(--brand-blue) !important;
+        border-color: var(--brand-blue) !important;
+        transform: translateY(-2px) !important;
+    }
+
+    .stTabs [data-baseweb="tab"][aria-selected="true"],
+    .stTabs button[role="tab"][aria-selected="true"] {
+        background: var(--brand-gradient) !important;
+        color: var(--text-white) !important;
+        border-color: var(--brand-blue) !important;
+        box-shadow: var(--shadow-brand) !important;
+        transform: translateY(-2px) !important;
+    }
+
+    /* ================================
+       INPUTS (EMAIL, SENHA, USUÁRIO) - CORRIGIDO
+       ================================ */
+    
+    /* Seletores mais específicos para inputs do Streamlit */
+    .stTextInput > div > div > input,
+    .stPasswordInput > div > div > input,
+    div[data-testid="textInput"] input,
+    div[data-testid="passwordInput"] input,
+    input[type="text"],
+    input[type="email"], 
+    input[type="password"] {
+        background: var(--bg-input) !important;
+        border: 2px solid var(--brand-blue) !important;
+        border-radius: 12px !important;
+        color: var(--text-white) !important;
+        padding: 16px 20px !important;
+        font-size: 16px !important;
+        font-weight: 500 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+    }
+
+    .stTextInput > div > div > input::placeholder,
+    .stPasswordInput > div > div > input::placeholder,
+    input::placeholder {
+        color: var(--text-gray) !important;
+        font-style: italic !important;
+    }
+
+    .stTextInput > div > div > input:focus,
+    .stPasswordInput > div > div > input:focus,
+    input:focus {
+        border: 2px solid var(--brand-blue) !important;
+        box-shadow: 0 0 0 4px rgba(0, 212, 255, 0.3), inset 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+        transform: scale(1.02) !important;
+        outline: none !important;
+        background: rgba(0, 212, 255, 0.05) !important;
+    }
+
+    .stTextInput label,
+    .stPasswordInput label,
+    label {
+        color: var(--brand-blue) !important;
+        font-weight: 600 !important;
+        font-size: 14px !important;
+        margin-bottom: 8px !important;
+    }
+
+    /* ================================
+       BOTÕES (LOGIN, CADASTRO) - CORRIGIDO
+       ================================ */
+    
+    /* Seletores mais específicos para botões do Streamlit */
+    .stButton > button,
+    .stFormSubmitButton > button,
+    button[kind="primary"],
+    button[kind="secondary"],
+    div[data-testid="stButton"] button,
+    button[type="submit"] {
+        background: var(--brand-gradient) !important;
+        border: 2px solid var(--brand-blue) !important;
+        border-radius: 12px !important;
+        color: var(--text-white) !important;
+        padding: 16px 32px !important;
+        font-size: 16px !important;
+        font-weight: 700 !important;
+        width: 100% !important;
+        transition: all 0.3s ease !important;
+        box-shadow: var(--shadow-brand) !important;
+        text-transform: uppercase !important;
+        letter-spacing: 1px !important;
+        cursor: pointer !important;
+    }
+
+    .stButton > button:hover,
+    .stFormSubmitButton > button:hover,
+    button:hover {
+        background: var(--brand-gradient-hover) !important;
+        transform: translateY(-3px) scale(1.02) !important;
+        box-shadow: var(--shadow-hover) !important;
+        border-color: var(--brand-blue) !important;
+    }
+
+    .stButton > button:active,
+    button:active {
+        transform: translateY(-1px) scale(0.98) !important;
+        background: var(--brand-gradient) !important;
+    }
+
+    /* ================================
+       ALERTAS E AVISOS MELHORADOS
+       ================================ */
+    .stAlert {
+        border-radius: 12px !important;
+        border-width: 2px !important;
+        border-style: solid !important;
+        padding: 16px 20px !important;
+        margin: 16px 0 !important;
+        font-weight: 600 !important;
+        backdrop-filter: blur(10px) !important;
+    }
+
+    /* Sucesso - Azul da marca */
+    .stSuccess,
+    [data-testid="stAlert"]:has([data-testid="successIcon"]) {
+        background: rgba(0, 212, 255, 0.15) !important;
+        border-color: var(--brand-blue) !important;
+        color: var(--text-white) !important;
+        box-shadow: 0 4px 20px rgba(0, 212, 255, 0.2) !important;
+    }
+
+    .stSuccess [data-testid="successIcon"],
+    [data-testid="stAlert"] [data-testid="successIcon"] {
+        color: var(--brand-blue) !important;
+    }
+
+    /* Erro - Vermelho claro */
+    .stError,
+    [data-testid="stAlert"]:has([data-testid="errorIcon"]) {
+        background: rgba(255, 107, 107, 0.15) !important;
+        border-color: #ff6b6b !important;
+        color: var(--text-white) !important;
+        box-shadow: 0 4px 20px rgba(255, 107, 107, 0.2) !important;
+    }
+
+    .stError [data-testid="errorIcon"],
+    [data-testid="stAlert"] [data-testid="errorIcon"] {
+        color: #ff6b6b !important;
+    }
+
+    /* Warning - Amarelo */
+    .stWarning,
+    [data-testid="stAlert"]:has([data-testid="warningIcon"]) {
+        background: rgba(255, 193, 7, 0.15) !important;
+        border-color: #ffc107 !important;
+        color: var(--text-white) !important;
+        box-shadow: 0 4px 20px rgba(255, 193, 7, 0.2) !important;
+    }
+
+    .stWarning [data-testid="warningIcon"],
+    [data-testid="stAlert"] [data-testid="warningIcon"] {
+        color: #ffc107 !important;
+    }
+
+    /* Info - Azul da marca */
+    .stInfo,
+    [data-testid="stAlert"]:has([data-testid="infoIcon"]) {
+        background: rgba(0, 212, 255, 0.2) !important;
+        border-color: var(--brand-blue) !important;
+        color: var(--text-white) !important;
+        box-shadow: 0 4px 20px rgba(0, 212, 255, 0.25) !important;
+    }
+
+    .stInfo [data-testid="infoIcon"],
+    [data-testid="stAlert"] [data-testid="infoIcon"] {
+        color: var(--brand-blue) !important;
+    }
+
+    /* ================================
+       CARDS INFORMATIVOS (💡)
+       ================================ */
+    .element-container:has(p:contains("💡")),
+    .stMarkdown:has(p:contains("💡")),
+    [data-testid="stMarkdownContainer"]:has(p:contains("💡")),
+    div:has(p:contains("💡")) {
+        background: rgba(0, 212, 255, 0.15) !important;
+        border: 2px solid var(--brand-blue) !important;
+        border-radius: 16px !important;
+        padding: 20px !important;
+        margin: 20px 0 !important;
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        box-shadow: var(--shadow-brand) !important;
+        backdrop-filter: blur(15px) !important;
+    }
+
+    /* TEXTO DENTRO DOS CARDS INFORMATIVOS */
+    .element-container:has(p:contains("💡")) p,
+    .stMarkdown:has(p:contains("💡")) p,
+    [data-testid="stMarkdownContainer"]:has(p:contains("💡")) p,
+    div:has(p:contains("💡")) p {
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        margin: 0 !important;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    /* TEXTO COM EMOJI 💡 ESPECÍFICO */
+    p:contains("💡"),
+    div p:contains("💡"),
+    [data-testid="stMarkdownContainer"] p:contains("💡") {
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5) !important;
+        background: rgba(0, 212, 255, 0.15) !important;
+        border: 2px solid var(--brand-blue) !important;
+        border-radius: 16px !important;
+        padding: 20px !important;
+        margin: 20px 0 !important;
+        box-shadow: var(--shadow-brand) !important;
+        backdrop-filter: blur(15px) !important;
+    }
+
+    .element-container:has(p:contains("💡")):hover,
+    .stMarkdown:has(p:contains("💡")):hover,
+    p:contains("💡"):hover {
+        transform: translateY(-2px) !important;
+        box-shadow: var(--shadow-hover) !important;
+        background: rgba(0, 212, 255, 0.2) !important;
+    }
+
+    /* ================================
+       ANIMAÇÕES E EFEITOS
+       ================================ */
+    @keyframes fadeInUp {
+        0% {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .block-container {
+        animation: fadeInUp 0.6s ease-out !important;
+    }
+
+    /* Efeito de brilho nos inputs */
+    .stTextInput > div > div > input:focus::before,
+    .stPasswordInput > div > div > input:focus::before {
+        content: '';
+        position: absolute;
+        top: -2px;
+        left: -2px;
+        right: -2px;
+        bottom: -2px;
+        background: var(--brand-gradient);
+        border-radius: 12px;
+        z-index: -1;
+        opacity: 0.3;
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 0.6; }
+    }
+
+    /* ================================
+       RESPONSIVIDADE
+       ================================ */
+    @media (max-width: 768px) {
+        .block-container {
+            margin: 1rem !important;
+            padding: 1.5rem !important;
+        }
+        
+        .stButton > button {
+            padding: 14px 24px !important;
+            font-size: 14px !important;
+        }
+        
+        .stTextInput > div > div > input,
+        .stPasswordInput > div > div > input {
+            padding: 14px 16px !important;
+            font-size: 14px !important;
+        }
+    }
+    </style>
+    """
+
+def get_enhanced_cards_theme():
+    """CSS específico para melhorar a visibilidade dos cards informativos"""
+    return """
+    <style>
+    /* CARDS INFORMATIVOS - SOLUÇÃO ELEGANTE E ESPECÍFICA */
+    
+    /* Identifica especificamente elementos st.info e similares */
+    .stAlert[data-baseweb="notification"],
+    div[data-testid="stAlert"] {
+        border-radius: 16px !important;
+        border-width: 2px !important;
+        padding: 1.25rem !important;
+        margin: 1.5rem 0 !important;
+        backdrop-filter: blur(10px) !important;
+        font-weight: 600 !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
     }
     
-    .stButton button:hover {
+    /* Alertas de informação - Azul da marca */
+    .stAlert[data-baseweb="notification"]:has([data-testid="infoIcon"]),
+    div[data-testid="stAlert"]:has([data-testid="infoIcon"]),
+    .stInfo {
+        background: rgba(0, 212, 255, 0.2) !important;
+        border-color: #00d4ff !important;
+        color: #ffffff !important;
+        box-shadow: 0 4px 20px rgba(0, 212, 255, 0.25) !important;
+    }
+    
+    /* Força branco APENAS nos alertas de info */
+    .stAlert[data-baseweb="notification"]:has([data-testid="infoIcon"]) *,
+    div[data-testid="stAlert"]:has([data-testid="infoIcon"]) *,
+    .stInfo * {
+        color: #ffffff !important;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+    }
+    
+    .stAlert[data-baseweb="notification"]:has([data-testid="infoIcon"]) svg,
+    div[data-testid="stAlert"]:has([data-testid="infoIcon"]) svg,
+    .stInfo svg,
+    .stInfo [data-testid="infoIcon"] {
+        color: #00d4ff !important;
+    }
+    
+    /* Alertas de sucesso - Também azul da marca */
+    .stAlert[data-baseweb="notification"]:has([data-testid="successIcon"]),
+    div[data-testid="stAlert"]:has([data-testid="successIcon"]),
+    .stSuccess {
+        background: rgba(0, 212, 255, 0.15) !important;
+        border-color: #00d4ff !important;
+        color: #ffffff !important;
+        box-shadow: 0 4px 20px rgba(0, 212, 255, 0.2) !important;
+    }
+    
+    .stAlert[data-baseweb="notification"]:has([data-testid="successIcon"]) *,
+    div[data-testid="stAlert"]:has([data-testid="successIcon"]) *,
+    .stSuccess * {
+        color: #ffffff !important;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+    }
+    
+    .stAlert[data-baseweb="notification"]:has([data-testid="successIcon"]) svg,
+    div[data-testid="stAlert"]:has([data-testid="successIcon"]) svg,
+    .stSuccess svg,
+    .stSuccess [data-testid="successIcon"] {
+        color: #00d4ff !important;
+    }
+    
+    /* Alertas de erro - Vermelho claro */
+    .stAlert[data-baseweb="notification"]:has([data-testid="errorIcon"]),
+    div[data-testid="stAlert"]:has([data-testid="errorIcon"]),
+    .stError {
+        background: rgba(255, 107, 107, 0.15) !important;
+        border-color: #ff6b6b !important;
+        color: #ffffff !important;
+        box-shadow: 0 4px 20px rgba(255, 107, 107, 0.2) !important;
+    }
+    
+    .stAlert[data-baseweb="notification"]:has([data-testid="errorIcon"]) *,
+    div[data-testid="stAlert"]:has([data-testid="errorIcon"]) *,
+    .stError * {
+        color: #ffffff !important;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+    }
+    
+    .stAlert[data-baseweb="notification"]:has([data-testid="errorIcon"]) svg,
+    div[data-testid="stAlert"]:has([data-testid="errorIcon"]) svg,
+    .stError svg,
+    .stError [data-testid="errorIcon"] {
+        color: #ff6b6b !important;
+    }
+    
+    /* Alertas de warning - Amarelo */
+    .stAlert[data-baseweb="notification"]:has([data-testid="warningIcon"]),
+    div[data-testid="stAlert"]:has([data-testid="warningIcon"]),
+    .stWarning {
+        background: rgba(255, 193, 7, 0.15) !important;
+        border-color: #ffc107 !important;
+        color: #ffffff !important;
+        box-shadow: 0 4px 20px rgba(255, 193, 7, 0.2) !important;
+    }
+    
+    .stAlert[data-baseweb="notification"]:has([data-testid="warningIcon"]) *,
+    div[data-testid="stAlert"]:has([data-testid="warningIcon"]) *,
+    .stWarning * {
+        color: #ffffff !important;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+    }
+    
+    .stAlert[data-baseweb="notification"]:has([data-testid="warningIcon"]) svg,
+    div[data-testid="stAlert"]:has([data-testid="warningIcon"]) svg,
+    .stWarning svg,
+    .stWarning [data-testid="warningIcon"] {
+        color: #ffc107 !important;
+    }
+    
+    /* Hover effects apenas nos alertas */
+    .stAlert[data-baseweb="notification"]:hover,
+    div[data-testid="stAlert"]:hover {
         transform: translateY(-2px) !important;
-        box-shadow: 0 8px 25px rgba(0, 212, 255, 0.4) !important;
+        box-shadow: 0 12px 48px rgba(0, 212, 255, 0.3) !important;
+    }
+    
+    /* Melhorar expanders de planos */
+    .streamlit-expanderHeader {
+        background: rgba(0, 212, 255, 0.1) !important;
+        border: 1px solid rgba(0, 212, 255, 0.3) !important;
+        border-radius: 12px !important;
+        padding: 1rem 1.5rem !important;
+        color: #00d4ff !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .streamlit-expanderHeader:hover {
+        background: rgba(0, 212, 255, 0.2) !important;
+        border-color: #00d4ff !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 20px rgba(0, 212, 255, 0.2) !important;
+    }
+    
+    .streamlit-expanderContent {
+        background: rgba(20, 20, 20, 0.95) !important;
+        border: 1px solid rgba(0, 212, 255, 0.2) !important;
+        border-top: none !important;
+        border-radius: 0 0 12px 12px !important;
+        padding: 1.5rem !important;
+        color: #ffffff !important;
+        backdrop-filter: blur(10px) !important;
+    }
+    
+    /* Melhorar alertas padrão do Streamlit */
+    .stAlert {
+        border-radius: 16px !important;
+        border-width: 2px !important;
+        padding: 1.25rem !important;
+        margin: 1.5rem 0 !important;
+        backdrop-filter: blur(10px) !important;
+        font-weight: 500 !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
+    }
+    
+    /* Alertas de informação */
+    .stAlert[data-baseweb="notification"]:has([data-testid="infoIcon"]),
+    .stInfo {
+        background: rgba(0, 212, 255, 0.25) !important;
+        border-color: #00d4ff !important;
+        color: #ffffff !important;
+    }
+    
+    .stAlert[data-baseweb="notification"]:has([data-testid="infoIcon"]) svg,
+    .stInfo svg {
+        color: #00d4ff !important;
+    }
+    
+    /* Alertas de sucesso - também usar azul padrão */
+    .stAlert[data-baseweb="notification"]:has([data-testid="successIcon"]),
+    .stSuccess {
+        background: rgba(0, 212, 255, 0.2) !important;
+        border-color: #00d4ff !important;
+        color: #ffffff !important;
+    }
+    
+    .stAlert[data-baseweb="notification"]:has([data-testid="successIcon"]) svg,
+    .stSuccess svg {
+        color: #00d4ff !important;
+    }
+    
+    /* Alertas de erro */
+    .stAlert[data-baseweb="notification"]:has([data-testid="errorIcon"]),
+    .stError {
+        background: rgba(255, 99, 99, 0.2) !important;
+        border-color: #ff6363 !important;
+        color: #ffffff !important;
+    }
+    
+    .stAlert[data-baseweb="notification"]:has([data-testid="errorIcon"]) svg,
+    .stError svg {
+        color: #ff6363 !important;
+    }
+    
+    /* Alertas de warning */
+    .stAlert[data-baseweb="notification"]:has([data-testid="warningIcon"]),
+    .stWarning {
+        background: rgba(255, 193, 7, 0.2) !important;
+        border-color: #ffc107 !important;
+        color: #ffffff !important;
+    }
+    
+    .stAlert[data-baseweb="notification"]:has([data-testid="warningIcon"]) svg,
+    .stWarning svg {
+        color: #ffc107 !important;
+    }
+    
+    /* Melhorar expanders de planos */
+    .streamlit-expanderHeader {
+        background: rgba(0, 212, 255, 0.1) !important;
+        border: 1px solid rgba(0, 212, 255, 0.3) !important;
+        border-radius: 12px !important;
+        padding: 1rem 1.5rem !important;
+        color: #00d4ff !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .streamlit-expanderHeader:hover {
+        background: rgba(0, 212, 255, 0.2) !important;
+        border-color: #00d4ff !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 20px rgba(0, 212, 255, 0.2) !important;
+    }
+    
+    .streamlit-expanderContent {
+        background: rgba(20, 20, 20, 0.95) !important;
+        border: 1px solid rgba(0, 212, 255, 0.2) !important;
+        border-top: none !important;
+        border-radius: 0 0 12px 12px !important;
+        padding: 1.5rem !important;
+        color: #ffffff !important;
+        backdrop-filter: blur(10px) !important;
     }
     </style>
     """
@@ -1677,3 +2549,196 @@ def apply_chart_container_style():
 def apply_deepseek_theme():
     """Aplica o tema DeepSeek escuro por padrão"""
     st.markdown(DEEPSEEK_DARK_THEME, unsafe_allow_html=True)
+
+def fix_alert_text_visibility():
+    """Corrige APENAS a visibilidade do texto em alertas - não mexe no resto do tema"""
+    alert_fix_css = """
+    <style>
+    /* CORREÇÃO ESPECÍFICA PARA TEXTO INVISÍVEL EM ALERTAS */
+    [data-testid="stAlert"]:has([data-testid="infoIcon"]) *,
+    [data-testid="stAlert"]:has([data-testid="successIcon"]) *,
+    [data-testid="stAlert"]:has([data-testid="warningIcon"]) *,
+    [data-testid="stAlert"]:has([data-testid="errorIcon"]) * {
+        color: #ffffff !important;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8) !important;
+    }
+    </style>
+    """
+    st.markdown(alert_fix_css, unsafe_allow_html=True)
+
+def get_plans_page_theme():
+    """CSS específico para página de planos - preserva layout personalizado"""
+    return """
+    <style>
+    /* APENAS CORES DO TEMA - SEM QUEBRAR LAYOUT DOS CARDS */
+    .stApp {
+        background: #0a0a0a !important;
+        color: #e5e7eb !important;
+    }
+    
+    .block-container {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+    
+    /* Preserva os cards customizados da página de planos */
+    div[style*="border: 3px solid"] {
+        background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%) !important;
+        backdrop-filter: blur(10px) !important;
+    }
+    
+    /* Sidebar tema escuro */
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0f0f0f 0%, #1a1a1a 100%) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+    
+    section[data-testid="stSidebar"] * {
+        color: #e5e7eb !important;
+    }
+    
+    /* Botões do Streamlit com tema azul */
+    .stButton > button {
+        background: linear-gradient(135deg, #00d4ff 0%, #0099ff 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3) !important;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 25px rgba(0, 212, 255, 0.5) !important;
+    }
+    
+    /* Tabs styling */
+    .stTabs [data-baseweb="tab-list"] {
+        background: rgba(20, 20, 20, 0.8) !important;
+        border-radius: 10px !important;
+        padding: 5px !important;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background: transparent !important;
+        color: #e5e7eb !important;
+        border-radius: 8px !important;
+        border: none !important;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #00d4ff 0%, #0099ff 100%) !important;
+        color: white !important;
+    }
+    
+    /* Metrics styling */
+    [data-testid="metric-container"] {
+        background: rgba(20, 20, 20, 0.6) !important;
+        border: 1px solid rgba(0, 212, 255, 0.2) !important;
+        border-radius: 10px !important;
+        padding: 1rem !important;
+        backdrop-filter: blur(10px) !important;
+    }
+    
+    /* Alertas com texto visível */
+    [data-testid*="Alert"] * {
+        color: white !important;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.8) !important;
+    }
+    </style>
+    """
+
+def apply_plans_page_theme():
+    """Aplica tema específico para página de planos preservando layout"""
+    st.markdown("""
+    <style>
+    /* TEMA ESCURO - APENAS CORES, SEM QUEBRAR LAYOUT */
+    .stApp {
+        background: #0a0a0a !important;
+        color: #e5e7eb !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important;
+    }
+    
+    /* SIDEBAR ESCURO */
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0f0f0f 0%, #1a1a1a 100%) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+    
+    section[data-testid="stSidebar"] * {
+        color: #e5e7eb !important;
+    }
+    
+    /* BOTÕES STREAMLIT */
+    .stButton > button {
+        background: linear-gradient(135deg, #00d4ff 0%, #0099ff 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3) !important;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 25px rgba(0, 212, 255, 0.5) !important;
+    }
+    
+    /* TABS */
+    .stTabs [data-baseweb="tab-list"] {
+        background: rgba(20, 20, 20, 0.8) !important;
+        border-radius: 10px !important;
+        padding: 5px !important;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background: transparent !important;
+        color: #e5e7eb !important;
+        border-radius: 8px !important;
+        border: none !important;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #00d4ff 0%, #0099ff 100%) !important;
+        color: white !important;
+    }
+    
+    /* REMOVE ELEMENTOS STREAMLIT */
+    [data-testid="stToolbar"], 
+    [data-testid="stDecoration"], 
+    [data-testid="stStatusWidget"], 
+    .stMainMenu, 
+    button[title="View fullscreen"], 
+    button[data-testid="baseButton-headerNoPadding"], 
+    header[data-testid="stHeader"],
+    .stAppDeployButton {
+        display: none !important;
+    }
+    
+    /* CRÍTICO: NÃO MEXER NO BLOCK-CONTAINER PARA PRESERVAR CARDS */
+    
+    /* ALERTAS LEGÍVEIS */
+    [data-testid*="Alert"] * {
+        color: white !important;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.8) !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+def fix_alert_visibility():
+    """CSS simples para alertas com texto branco legível"""
+    st.markdown("""
+    <style>
+    /* Força texto branco em TODOS os alertas */
+    [data-testid*="Alert"],
+    [data-testid*="Alert"] *,
+    .stAlert,
+    .stAlert * {
+        color: white !important;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.8) !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)

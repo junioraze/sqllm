@@ -7,7 +7,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from utils import create_styled_download_button, generate_excel_bytes, generate_csv_bytes
-from subscription_manager import check_feature_permission
+from subscription_system_db import SubscriptionSystem
 from datetime import datetime
 # Importações removidas - tema universal não requer funções específicas
 
@@ -746,7 +746,7 @@ def refine_with_gemini(
     
     if export_requested:
         # Verifica permissão para exportação
-        has_permission, permission_message = check_feature_permission('excel_export')
+        has_permission, permission_message = SubscriptionSystem.check_feature_permission('excel_export')
         
         if not has_permission:
             # Substitui os links de exportação por mensagem de upgrade
