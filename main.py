@@ -28,6 +28,17 @@ from utils import (
 from rate_limit import RateLimiter
 from logger import log_interaction
 
+# Importações do sistema de pagamentos e configurações
+from config_menu import render_config_menu, apply_user_preferences, initialize_user_config, check_feature_access
+from payment_ui import render_payment_page, check_feature_access_ui
+from payment_handler import check_user_subscription
+from subscription_manager import (
+    get_user_subscription_info, check_query_permission, check_feature_permission,
+    apply_subscription_restrictions, initialize_subscription_system, 
+    render_upgrade_prompt, increment_user_usage
+)
+from subscription_debug import render_subscription_debug_panel, quick_debug_setup
+
 # Configuração do rate limit (100 requisições por dia)
 rate_limiter = RateLimiter(max_requests_per_day=MAX_RATE_LIMIT)
 
@@ -57,22 +68,90 @@ if not st.session_state.authenticated:
     if st.button("🚀 Entrar", use_container_width=True):
         if login == creds["login"] and password == creds["password"]:
             st.session_state.authenticated = True
+            # Inicializa o email do usuário para o sistema de assinatura
+            st.session_state.user_email = login
+            # Inicializa configurações do usuário
+            initialize_user_config()
             st.rerun()
         else:
             st.error("❌ Usuário ou senha inválidos.")
     st.stop()
 
-# Seletor de tema no sidebar
-theme_mode = render_theme_selector()
+# Inicializa configurações do usuário se autenticado
+initialize_user_config()
 
-# Aplica o tema
-apply_selected_theme(theme_mode)
+# Inicializa sistema de assinatura
+initialize_subscription_system()
 
-# Indicador de uso no estilo DeepSeek
+# Aplica preferências do usuário (incluindo tema)
+apply_user_preferences()
+
+# Sistema de navegação principal
+with st.sidebar:
+    st.markdown("### 🧭 Navegação")
+    
+    if "nav_page" not in st.session_state:
+        st.session_state.nav_page = "chat"
+    
+    # Navegação em linha com botões compactos
+    nav_col1, nav_col2 = st.columns(2)
+    
+    with nav_col1:
+        if st.button("💬", key="nav_chat", 
+                    type="primary" if st.session_state.nav_page == "chat" else "secondary"):
+            st.session_state.nav_page = "chat"
+            st.rerun()
+    
+    with nav_col2:
+        if st.button("💳", key="nav_payment", 
+                    type="primary" if st.session_state.nav_page == "payment" else "secondary"):
+            st.session_state.nav_page = "payment"
+            st.rerun()
+
+# Menu de configurações no sidebar
+render_config_menu()
+
+# Sistema de debug para assinatura (se habilitado)
+quick_debug_setup()
+render_subscription_debug_panel()
+
+# Indicador de uso integrado com sistema de assinatura
 usage_data = rate_limiter.get_current_usage()
-st.markdown(create_usage_indicator(usage_data['current'], usage_data['max']), unsafe_allow_html=True)
+subscription_info = get_user_subscription_info()
 
-# Container principal para todo o conteúdo
+# Se o usuário está logado, usa indicador completo com info de plano e uso do session_state
+user_email = st.session_state.get('user_email', '')
+if user_email:
+    # Usa subscription_manager para uso real, não rate_limiter
+    from subscription_manager import get_daily_usage_session
+    current_usage_count = get_daily_usage_session(user_email)
+    
+    # Cria dados de uso para o indicador
+    usage_data_integrated = {
+        'current': current_usage_count,
+        'max': subscription_info['daily_limit']
+    }
+    
+    st.sidebar.markdown(create_usage_indicator(
+        current_usage_count, 
+        subscription_info['daily_limit'], 
+        subscription_info
+    ), unsafe_allow_html=True)
+else:
+    # Usuário anônimo - usa rate limiter global
+    st.sidebar.markdown(create_usage_indicator(
+        usage_data['current'], 
+        usage_data['max']
+    ), unsafe_allow_html=True)
+
+# Renderiza página baseada na seleção
+current_page = st.session_state.get("nav_page", "chat")
+
+if current_page == "payment":
+    render_payment_page()
+    st.stop()
+
+# Container principal para todo o conteúdo do CHAT
 with st.container():
     
     # Título principal com tema DeepSeek
@@ -135,33 +214,40 @@ with st.container():
         )
 
 # Container fixo para o input (fora do content-container)
-st.markdown('<div class="fixed-bottom">', unsafe_allow_html=True)
 prompt = st.chat_input(format_text_with_ia_highlighting("Faça sua pergunta..."), key="mobile_input")
-st.markdown('</div>', unsafe_allow_html=True)
 
 # Captura novo input
 if prompt:
-    # Verifica o rate limit antes de processar
-    if rate_limiter.check_limit():
-        limit_msg = format_text_with_ia_highlighting("Limite diário de requisições atingido. Tente novamente amanhã.")
-        st.session_state.chat_history.append({
-            "role": "assistant",
-            "content": limit_msg
-        })
-        st.rerun()
-    else:
-        # Incrementa o contador
-        rate_limiter.increment()
-        # Adiciona a pergunta ao histórico
-        st.session_state.chat_history.append({"role": "user", "content": prompt})
+    # Verifica permissão para nova query usando o sistema integrado de assinatura
+    can_proceed, message = check_query_permission()
+    
+    if not can_proceed:
+        # Exibe mensagem apropriada baseada no tipo de usuário
+        user_email = st.session_state.get('user_email', '')
+        if user_email:
+            # Usuário logado - sugere upgrade
+            st.warning(message)
+            render_upgrade_prompt()
+        else:
+            # Usuário anônimo - sugere login
+            st.info(message)
+            render_upgrade_prompt('wait')
+        st.stop()
+    
+    # Se chegou até aqui, pode prosseguir - incrementa contadores
+    rate_limiter.increment()  # Rate limiter tradicional
+    increment_user_usage()    # session_state usage específico do usuário
+    
+    # Adiciona a pergunta ao histórico
+    st.session_state.chat_history.append({"role": "user", "content": prompt})
 
-        # Mostra animação de typing
-        with st.chat_message("assistant"):
-            typing_placeholder = st.empty()
-            typing_placeholder.markdown(show_typing_animation(), unsafe_allow_html=True)
+    # Mostra animação de typing
+    with st.chat_message("assistant"):
+        typing_placeholder = st.empty()
+        typing_placeholder.markdown(show_typing_animation(), unsafe_allow_html=True)
 
-        # Processa a mensagem usando o handler limpo
-        from message_handler import MessageHandler
-        handler = MessageHandler(st.session_state.model, rate_limiter, creds["login"])
-        handler.process_message(prompt, typing_placeholder)
+    # Processa a mensagem usando o handler limpo
+    from message_handler import MessageHandler
+    handler = MessageHandler(st.session_state.model, rate_limiter, st.session_state.get('user_email', creds["login"]))
+    handler.process_message(prompt, typing_placeholder)
 

@@ -1436,11 +1436,44 @@ def apply_selected_theme(theme_mode=None):
     
     return theme_mode
 
-def create_usage_indicator(current, max_requests):
-    """Cria o indicador de uso/rate limit"""
+def create_usage_indicator(current, max_requests, subscription_info=None):
+    """Cria o indicador de uso/rate limit integrado com sistema de assinatura"""
     percentage = (current / max_requests) * 100
     color = "#22c55e" if percentage < 70 else "#f59e0b" if percentage < 90 else "#ef4444"
     
+    # Se tem informações de assinatura, usa o indicador mais completo
+    if subscription_info:
+        plan_colors = {
+            'free': '#6b7280',      # Cinza
+            'basic': '#3b82f6',     # Azul
+            'premium': '#8b5cf6',   # Roxo
+            'enterprise': '#f59e0b'  # Dourado
+        }
+        
+        plan_icons = {
+            'free': '🆓',
+            'basic': '📊', 
+            'premium': '⭐',
+            'enterprise': '👑'
+        }
+        
+        plan_color = plan_colors.get(subscription_info['status'], '#6b7280')
+        plan_icon = plan_icons.get(subscription_info['status'], '🆓')
+        
+        return f"""
+        <div class="usage-indicator" style="background: linear-gradient(135deg, {plan_color}15, {plan_color}05); border-left: 3px solid {plan_color};">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="color: {plan_color}; font-weight: 600; font-size: 12px;">
+                    {plan_icon} {subscription_info['description']}
+                </span>
+                <span style="color: {color}; font-weight: 500;">
+                    📊 {current}/{max_requests}
+                </span>
+            </div>
+        </div>
+        """
+    
+    # Fallback para indicador simples
     return f"""
     <div class="usage-indicator">
         <span style="color: {color};">📊 {current}/{max_requests} requisições</span>

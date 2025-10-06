@@ -7,6 +7,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from utils import create_styled_download_button, generate_excel_bytes, generate_csv_bytes
+from subscription_manager import check_feature_permission
 from datetime import datetime
 # Importações removidas - tema universal não requer funções específicas
 
@@ -387,60 +388,84 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
             print(f"❌ Tipo '{chart_type}' não suportado")
             return None
 
-        # LAYOUT UNIVERSAL ELEGANTE
+        # DETECTA O TEMA ATUAL PARA CORES ADAPTÁVEIS
+        current_theme = st.session_state.get('theme_mode', 'escuro')
+        
+        if current_theme == 'escuro':
+            # Cores para tema escuro - alta visibilidade
+            font_color = "#e5e7eb"
+            title_color = "#f9fafb"
+            grid_color = "rgba(156, 163, 175, 0.4)"
+            line_color = "#9ca3af"
+            legend_bg = "rgba(31, 41, 55, 0.9)"
+            legend_border = "rgba(156, 163, 175, 0.8)"
+            hover_bg = "rgba(31, 41, 55, 0.95)"
+            hover_text = "#f9fafb"
+        else:
+            # Cores para tema claro - alta legibilidade
+            font_color = "#374151"
+            title_color = "#1f2937"
+            grid_color = "rgba(156, 163, 175, 0.3)"
+            line_color = "#d1d5db"
+            legend_bg = "rgba(255, 255, 255, 0.9)"
+            legend_border = "rgba(209, 213, 219, 0.8)"
+            hover_bg = "rgba(255, 255, 255, 0.95)"
+            hover_text = "#1f2937"
+
+        # LAYOUT ADAPTÁVEL AO TEMA
         fig.update_layout(
             # Fundo transparente - adapta-se ao tema do container
             plot_bgcolor="rgba(0,0,0,0)",
             paper_bgcolor="rgba(0,0,0,0)",
             
-            # Tipografia moderna
+            # Tipografia adaptável
             font=dict(
                 family="Inter, 'Segoe UI', system-ui, sans-serif",
                 size=13,
-                color="#374151"  # Cinza neutro legível em ambos os temas
+                color=font_color
             ),
             
             # Margem otimizada
             margin=dict(l=60, r=60, t=40, b=60),
             height=400,
             
-            # Eixos com estilo universal
+            # Eixos adaptativos
             xaxis=dict(
                 title=dict(
                     text=x_axis.replace('_', ' ').title(),
-                    font=dict(size=14, color="#1f2937")
+                    font=dict(size=14, color=title_color)
                 ),
-                tickfont=dict(size=12, color="#374151"),
-                gridcolor="rgba(156, 163, 175, 0.3)",
+                tickfont=dict(size=12, color=font_color),
+                gridcolor=grid_color,
                 gridwidth=1,
                 showgrid=True,
                 zeroline=False,
-                linecolor="#d1d5db",
+                linecolor=line_color,
                 linewidth=1
             ),
             
             yaxis=dict(
                 title=dict(
                     text=y_axis.replace('_', ' ').title(),
-                    font=dict(size=14, color="#1f2937")
+                    font=dict(size=14, color=title_color)
                 ),
-                tickfont=dict(size=12, color="#374151"),
-                gridcolor="rgba(156, 163, 175, 0.3)",
+                tickfont=dict(size=12, color=font_color),
+                gridcolor=grid_color,
                 gridwidth=1,
                 showgrid=True,
                 zeroline=True,
-                zerolinecolor="rgba(156, 163, 175, 0.5)",
+                zerolinecolor=grid_color,
                 zerolinewidth=1,
-                linecolor="#d1d5db",
+                linecolor=line_color,
                 linewidth=1
             ),
             
-            # Legenda elegante
+            # Legenda adaptável
             legend=dict(
-                bgcolor="rgba(255, 255, 255, 0.9)",
-                bordercolor="rgba(209, 213, 219, 0.8)",
+                bgcolor=legend_bg,
+                bordercolor=legend_border,
                 borderwidth=1,
-                font=dict(size=12, color="#374151"),
+                font=dict(size=12, color=font_color),
                 orientation="v",
                 yanchor="top",
                 y=1,
@@ -450,11 +475,11 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
             
             showlegend=bool(color),
             
-            # Hover moderno
+            # Hover adaptável
             hoverlabel=dict(
-                bgcolor="rgba(255, 255, 255, 0.95)",
-                bordercolor="rgba(209, 213, 219, 0.8)",
-                font=dict(size=12, color="#1f2937")
+                bgcolor=hover_bg,
+                bordercolor=legend_border,
+                font=dict(size=12, color=hover_text)
             )
         )
 
@@ -720,20 +745,38 @@ def refine_with_gemini(
     export_info = {}
     
     if export_requested:
-        # Gerar Excel
-        excel_bytes = generate_excel_bytes(data)
-        if excel_bytes:
-            excel_filename = f"dados_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
-            excel_link = create_styled_download_button(excel_bytes, excel_filename, "Excel")
-            export_links.append(excel_link)
-            export_info['excel'] = excel_filename
+        # Verifica permissão para exportação
+        has_permission, permission_message = check_feature_permission('excel_export')
         
-        # Gerar CSV
-        csv_bytes = generate_csv_bytes(data)
-        if csv_bytes:
-            csv_filename = f"dados_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
-            csv_link = create_styled_download_button(csv_bytes, csv_filename, "CSV")
-            export_links.append(csv_link)
+        if not has_permission:
+            # Substitui os links de exportação por mensagem de upgrade
+            export_links.append(f"""
+            <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; margin: 8px 0;">
+                <div style="color: #92400e; font-weight: 500;">📊 Exportação Restrita</div>
+                <div style="color: #78350f; font-size: 14px; margin: 4px 0;">{permission_message}</div>
+                <a href="#" onclick="document.querySelector('[data-testid=\\"nav_payment\\"]').click(); return false;" 
+                   style="color: #f59e0b; font-weight: 500; text-decoration: none;">
+                   📈 Fazer Upgrade →
+                </a>
+            </div>
+            """)
+            export_info['restriction'] = "upgrade_required"
+        else:
+            # Gerar Excel
+            excel_bytes = generate_excel_bytes(data)
+            if excel_bytes:
+                excel_filename = f"dados_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+                excel_link = create_styled_download_button(excel_bytes, excel_filename, "Excel")
+                export_links.append(excel_link)
+                export_info['excel'] = excel_filename
+            
+            # Gerar CSV
+            csv_bytes = generate_csv_bytes(data)
+            if csv_bytes:
+                csv_filename = f"dados_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+                csv_link = create_styled_download_button(csv_bytes, csv_filename, "CSV")
+                export_links.append(csv_link)
+                export_info['csv'] = csv_filename
             export_info['csv'] = csv_filename
 
     tech_details = {
