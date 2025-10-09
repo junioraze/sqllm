@@ -45,6 +45,10 @@ def render_auth_system():
     st.markdown(get_expert_login_theme(), unsafe_allow_html=True)
     st.markdown(get_enhanced_cards_theme(), unsafe_allow_html=True)
     
+    # CORREÇÃO: Aplica cores de input específica para data-baseweb="input"
+    from deepseek_theme import fix_baseweb_input_dark_theme
+    fix_baseweb_input_dark_theme()
+    
     # Título com tema integrado
     st.markdown("""
         <div style="text-align: center; margin: 2rem 0;">

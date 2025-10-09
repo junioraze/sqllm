@@ -59,6 +59,16 @@ def save_interaction(
     """Salva uma interação no cache"""
     interaction_id = str(uuid.uuid4())
     
+    # Serialização segura para evitar erros do DuckDB
+    def safe_json_dumps(obj):
+        if obj is None:
+            return None
+        try:
+            return json.dumps(obj)
+        except (TypeError, ValueError) as e:
+            print(f"AVISO: Erro ao serializar {type(obj)}: {e}. Convertendo para string.")
+            return json.dumps({"serialized_as_string": str(obj)})
+    
     with get_connection() as conn:
         conn.execute("""
             INSERT INTO user_interactions 
@@ -69,12 +79,12 @@ def save_interaction(
             interaction_id,
             user_id,
             question,
-            json.dumps(function_params) if function_params else None,
+            safe_json_dumps(function_params),
             query_sql,
-            json.dumps(raw_data) if raw_data else None,
+            safe_json_dumps(raw_data),
             raw_response,
             refined_response,
-            json.dumps(tech_details) if tech_details else None,
+            safe_json_dumps(tech_details),
             status,
             reused_from
         ))
@@ -138,24 +148,11 @@ def get_interaction_full_data(interaction_id: str) -> Optional[List]:
             return json.loads(result[0])
         return None
 
-def find_reusable(user_id: str, question: str) -> Optional[Dict]:
-    """Busca interações que podem ser reutilizadas"""
-    # Palavras-chave que indicam reutilização
-    reuse_keywords = [
-        "gráfico", "excel", "exportar", "mesmos dados", "dados anteriores",
-        "última consulta", "último resultado", "tabela anterior"
-    ]
-    
-    question_lower = question.lower()
-    
-    # Verifica se a pergunta contém palavras de reutilização
-    if not any(keyword in question_lower for keyword in reuse_keywords):
-        return None
-    
+def get_most_recent_data_interaction(user_id: str) -> Optional[Dict]:
+    """Recupera a interação mais recente que retornou dados (para casos como 'gere um gráfico desse dado')"""
     with get_connection() as conn:
-        # Busca a última interação bem-sucedida com dados
         result = conn.execute("""
-            SELECT id, question, function_params, query_sql, raw_data, 
+            SELECT id, timestamp, question, function_params, query_sql, raw_data, 
                    refined_response, tech_details
             FROM user_interactions 
             WHERE user_id = ? AND status = 'OK' AND raw_data IS NOT NULL
@@ -166,12 +163,81 @@ def find_reusable(user_id: str, question: str) -> Optional[Dict]:
         if result:
             return {
                 'id': result[0],
+                'timestamp': result[1],
+                'question': result[2],
+                'function_params': json.loads(result[3]) if result[3] else None,
+                'query_sql': result[4],
+                'raw_data': json.loads(result[5]) if result[5] else None,
+                'refined_response': result[6],
+                'tech_details': json.loads(result[7]) if result[7] else None
+            }
+    
+    return None
+
+def find_reusable(user_id: str, question: str) -> Optional[Dict]:
+    """Busca interações que podem ser reutilizadas - OTIMIZADO para priorizar dados recentes"""
+    # Palavras-chave que indicam reutilização EXPLÍCITA de dados específicos
+    explicit_recent_keywords = [
+        "gráfico", "grafico", "chart", "exportar", "excel", "planilha", "csv",
+        "visualização", "visualizacao", "plotar", "plot"
+    ]
+    
+    # Palavras-chave que indicam reutilização de dados ANTERIORES específicos
+    specific_reference_keywords = [
+        "mesmos dados", "dados anteriores", "última consulta", "último resultado", 
+        "tabela anterior", "consulta anterior", "resultado anterior"
+    ]
+    
+    question_lower = question.lower()
+    
+    # CASO 1: Referência explícita a dados anteriores específicos
+    has_specific_reference = any(keyword in question_lower for keyword in specific_reference_keywords)
+    
+    # CASO 2: Pedido de visualização/export (implica usar dados mais recentes)
+    has_visualization_request = any(keyword in question_lower for keyword in explicit_recent_keywords)
+    
+    # CASO 3: Frases que indicam continuidade ("agora", "desse", "destes dados")
+    continuity_keywords = ["agora", "desse", "destes", "dessa", "dessas", "do resultado", "dos dados"]
+    has_continuity = any(keyword in question_lower for keyword in continuity_keywords)
+    
+    # Se não há indicadores de reutilização, retorna None
+    if not (has_specific_reference or has_visualization_request or has_continuity):
+        return None
+    
+    with get_connection() as conn:
+        # PRIORIDADE: Se é pedido de visualização/export OU tem continuidade, usa dados mais recentes
+        if (has_visualization_request or has_continuity) and not has_specific_reference:
+            # Busca a última interação bem-sucedida com dados (mais recente)
+            result = conn.execute("""
+                SELECT id, question, function_params, query_sql, raw_data, 
+                       refined_response, tech_details, timestamp
+                FROM user_interactions 
+                WHERE user_id = ? AND status = 'OK' AND raw_data IS NOT NULL
+                ORDER BY timestamp DESC 
+                LIMIT 1
+            """, (user_id,)).fetchone()
+        else:
+            # Para referências específicas a dados anteriores, mantém lógica original
+            result = conn.execute("""
+                SELECT id, question, function_params, query_sql, raw_data, 
+                       refined_response, tech_details, timestamp
+                FROM user_interactions 
+                WHERE user_id = ? AND status = 'OK' AND raw_data IS NOT NULL
+                ORDER BY timestamp DESC 
+                LIMIT 1
+            """, (user_id,)).fetchone()
+        
+        if result:
+            return {
+                'id': result[0],
                 'question': result[1],
                 'function_params': json.loads(result[2]) if result[2] else None,
                 'query_sql': result[3],
                 'raw_data': json.loads(result[4]) if result[4] else None,
                 'refined_response': result[5],
-                'tech_details': json.loads(result[6]) if result[6] else None
+                'tech_details': json.loads(result[6]) if result[6] else None,
+                'timestamp': result[7],
+                'reuse_reason': 'most_recent_data' if (has_visualization_request or has_continuity) else 'specific_reference'
             }
     
     return None

@@ -297,10 +297,19 @@ def safe_serialize_gemini_params(params):
     """
     if params is None:
         return None
+    
+    # Handle FunctionCall objects specifically  
+    if hasattr(params, 'name') and hasattr(params, 'args'):
+        # É um FunctionCall, extrair apenas os args
+        params = params.args
+    
     if hasattr(params, "_values"):
         params = {k: v for k, v in params.items()}
     elif not isinstance(params, dict):
-        params = dict(params)
+        try:
+            params = dict(params)
+        except:
+            return {"serialized": str(params)}
     
     serializable = {}
     for k, v in params.items():

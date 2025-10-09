@@ -1,53 +1,330 @@
-# 🤖 SQLLM - Sistema de Análise de Dados com IA
+# 🚀 SQLLM - Sistema de Análise de Dados com IA# 🚀 SQLLM - Sistema de Análise de Dados com IA
 
-Sistema avançado de análise de dados utilizando inteligência artificial (Gemini) com interface Streamlit, sistema de autenticação, planos de assinatura e geração automática de consultas SQL.
 
-## 📋 Índice
 
-- [Visão Geral](#-visão-geral)
-- [Arquitetura do Sistema](#-arquitetura-do-sistema)
-- [Estrutura de Arquivos](#-estrutura-de-arquivos)
-- [Componentes Principais](#-componentes-principais)
-- [Fluxo de Dados](#-fluxo-de-dados)
-- [Sistema de Autenticação](#-sistema-de-autenticação)
-- [Sistema de Assinaturas](#-sistema-de-assinaturas)
-- [Interface e Temas](#-interface-e-temas)
-- [Configuração e Deploy](#-configuração-e-deploy)
-- [Desenvolvimento](#-desenvolvimento)
+Sistema avançado de análise de dados que converte linguagem natural em consultas SQL usando IA (Google Gemini) com interface web Streamlit.Sistema avançado de análise de dados que converte linguagem natural em consultas SQL usando IA (Google Gemini) com interface web Streamlit.
 
----
 
-## 🎯 Visão Geral
 
-O SQLLM é uma aplicação web que permite aos usuários analisar dados através de consultas em linguagem natural, convertidas automaticamente em SQL pela IA do Google Gemini. O sistema inclui autenticação de usuários, planos de assinatura com diferentes limites e uma interface moderna e responsiva.
+## ✨ Principais Funcionalidades## ✨ Principais Funcionalidades
 
-### � Funcionalidades Principais
 
-- **Análise de Dados por IA**: Conversão de linguagem natural para SQL
-- **Sistema de Autenticação**: Login/registro seguro com DuckDB
-- **Planos de Assinatura**: Free, Premium, Enterprise com limites diferentes
-- **Interface Moderna**: Tema escuro customizável, design responsivo
-- **Cache Inteligente**: Sistema de cache para otimização de performance
-- **Rate Limiting**: Controle de uso por usuário e plano
-- **Exportação de Dados**: Excel, CSV e outros formatos
 
----
+- **🤖 IA Conversacional**: Converte perguntas em linguagem natural para SQL- **🤖 IA Conversacional**: Converte perguntas em linguagem natural para SQL
 
-## 🏗️ Arquitetura do Sistema
+- **🔄 Sistema RAG Duplo**: - **� Sistema RAG Duplo**: 
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   FRONTEND      │    │    BACKEND      │    │    DATABASE     │
-│   (Streamlit)   │    │   (Python)      │    │   (DuckDB)      │
-├─────────────────┤    ├─────────────────┤    ├─────────────────┤
-│ • Interface UI  │◄──►│ • Lógica de     │◄──►│ • Dados de      │
-│ • Autenticação  │    │   Negócio       │    │   Usuários      │
-│ • Planos        │    │ • API Gemini    │    │ • Assinaturas   │
-│ • Dashboards    │    │ • Rate Limiting │    │ • Cache Queries │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                        │                        │
-         └────────────────────────┼────────────────────────┘
-                                  │
+  - **Business RAG**: Contexto de negócio e metadados  - **Business RAG**: Contexto de negócio e metadados
+
+  - **SQL Pattern RAG**: Padrões e templates SQL otimizados  - **SQL Pattern RAG**: Padrões e templates SQL otimizados
+
+- **📊 Visualizações Inteligentes**: Gráficos automáticos baseados nos dados- **📊 Visualizações Inteligentes**: Gráficos automáticos baseados nos dados
+
+- **♻️ Reutilização Inteligente**: Detecta quando pode reutilizar dados anteriores- **♻️ Reutilização Inteligente**: Detecta quando pode reutilizar dados anteriores
+
+- **🎨 Interface Moderna**: Tema dark/light responsivo- **🎨 Interface Moderna**: Tema dark/light responsivo
+
+- **👥 Sistema de Usuários**: Autenticação e controle de acesso- **👥 Sistema de Usuários**: Autenticação e controle de acesso
+
+- **📈 Rate Limiting**: Controle de uso por usuário- **📈 Rate Limiting**: Controle de uso por usuário
+
+- **💾 Cache Inteligente**: Otimização de performance- **💾 Cache Inteligente**: Otimização de performance
+
+
+
+## 🏗️ Arquitetura do Sistema## 🏗️ Arquitetura do Sistema
+
+
+
+``````
+
+┌─────────────────────────────────────────────────────────────┐┌─────────────────────────────────────────────────────────────┐
+
+│                        FRONTEND                             ││                        FRONTEND                             │
+
+│                     (Streamlit)                             ││                     (Streamlit)                             │
+
+├─────────────────────────────────────────────────────────────┤├─────────────────────────────────────────────────────────────┤
+
+│                    MESSAGE HANDLER                          ││                    MESSAGE HANDLER                          │
+
+│            (Orquestração e Fluxo Principal)                 ││            (Orquestração e Fluxo Principal)                 │
+
+├─────────────────────────────────────────────────────────────┤├─────────────────────────────────────────────────────────────┤
+
+│              SISTEMA RAG DUPLO                              ││              SISTEMA RAG DUPLO                              │
+
+│  ┌─────────────────────┐  ┌─────────────────────────────┐  ││  ┌─────────────────────┐  ┌─────────────────────────────┐  │
+
+│  │   BUSINESS RAG      │  │    SQL PATTERN RAG         │  ││  │   BUSINESS RAG      │  │    SQL PATTERN RAG         │  │
+
+│  │ • Metadados         │  │ • Templates SQL            │  ││  │ • Metadados         │  │ • Templates SQL            │  │
+
+│  │ • Regras Negócio    │  │ • Padrões BigQuery         │  ││  │ • Regras Negócio    │  │ • Padrões BigQuery         │  │
+
+│  │ • Contexto Campos   │  │ • Estruturas CTE           │  ││  │ • Contexto Campos   │  │ • Estruturas CTE           │  │
+
+│  └─────────────────────┘  └─────────────────────────────┘  ││  └─────────────────────┘  └─────────────────────────────┘  │
+
+├─────────────────────────────────────────────────────────────┤├─────────────────────────────────────────────────────────────┤
+
+│                     GEMINI HANDLER                          ││                     GEMINI HANDLER                          │
+
+│              (Google Gemini 2.0-flash-exp)                 ││              (Google Gemini 2.0-flash-exp)                 │
+
+├─────────────────────────────────────────────────────────────┤├─────────────────────────────────────────────────────────────┤
+
+│                    DATABASE LAYER                           ││                    DATABASE LAYER                           │
+
+│           (BigQuery + DuckDB Cache + SQLite)                ││           (BigQuery + DuckDB Cache + SQLite)                │
+
+└─────────────────────────────────────────────────────────────┘└─────────────────────────────────────────────────────────────┘
+
+``````
+
+
+
+## 📁 Estrutura de Arquivos Principais## 📁 Estrutura de Arquivos Principais
+
+
+
+``````
+
+sqllm/sqllm/
+
+├── main.py                     # 🎯 Interface principal Streamlit├── main.py                     # 🎯 Interface principal Streamlit
+
+├── message_handler.py          # 🔄 Orquestração do fluxo completo├── message_handler.py          # 🔄 Orquestração do fluxo completo
+
+├── gemini_handler.py           # 🤖 Integração com Google Gemini├── gemini_handler.py           # 🤖 Integração com Google Gemini
+
+├── business_metadata_rag.py    # 📋 RAG para metadados de negócio├── business_metadata_rag.py    # 📋 RAG para metadados de negócio
+
+├── sql_pattern_rag.py          # 🔧 RAG para padrões SQL├── sql_pattern_rag.py          # 🔧 RAG para padrões SQL
+
+├── database.py                 # 💾 Operações de banco de dados├── database.py                 # 💾 Operações de banco de dados
+
+├── config.py                  # ⚙️ Configurações do sistema├── authentication.py           # 🔐 Sistema de autenticação
+
+├── requirements.txt           # 📦 Dependências Python├── rate_limit.py              # ⏱️ Controle de taxa de uso
+
+└── README.md                  # 📖 Esta documentação├── config.py                  # ⚙️ Configurações do sistema
+
+```├── requirements.txt           # 📦 Dependências Python
+
+└── README.md                  # 📖 Esta documentação
+
+## 🚀 Como Executar```
+
+
+
+### 1. Pré-requisitos## 🚀 Como Executar
+
+```bash
+
+python 3.11+### 1. Pré-requisitos
+
+pip install -r requirements.txt```bash
+
+```python 3.11+
+
+pip install -r requirements.txt
+
+### 2. Configuração```
+
+1. **Configure as credenciais**:
+
+   - `credentials.json` - Google Cloud/BigQuery### 2. Configuração
+
+   - `client_config.json` - OAuth Google1. **Configure as credenciais**:
+
+   - Configure `GOOGLE_API_KEY` para Gemini   - `credentials.json` - Google Cloud/BigQuery
+
+   - `client_config.json` - OAuth Google
+
+2. **Configure o banco**:   - Configure `GOOGLE_API_KEY` para Gemini
+
+   - O sistema usa DuckDB para cache e SQLite para usuários
+
+   - Configuração automática na primeira execução2. **Configure o banco**:
+
+   - O sistema usa DuckDB para cache e SQLite para usuários
+
+### 3. Executar   - Configuração automática na primeira execução
+
+```bash
+
+streamlit run main.py### 3. Executar
+
+``````bash
+
+streamlit run main.py
+
+## 🔧 Sistema RAG Duplo```
+
+
+
+### 📊 Business RAG## 🔧 Sistema RAG Duplo
+
+- **Função**: Fornece contexto de negócio específico
+
+- **Dados**: Metadados de tabelas, regras de negócio, descrições de campos### 📊 Business RAG
+
+- **Otimização**: Retrieval baseado na pergunta do usuário- **Função**: Fornece contexto de negócio específico
+
+- **Arquivo**: `business_metadata_rag.py`- **Dados**: Metadados de tabelas, regras de negócio, descrições de campos
+
+- **Otimização**: Retrieval baseado na pergunta do usuário
+
+### 🔍 SQL Pattern RAG  - **Arquivo**: `business_metadata_rag.py`
+
+- **Função**: Fornece padrões SQL e templates BigQuery
+
+- **Dados**: Estruturas CTE, window functions, agregações complexas### 🔍 SQL Pattern RAG  
+
+- **Otimização**: Seleção baseada no tipo de análise detectado- **Função**: Fornece padrões SQL e templates BigQuery
+
+- **Arquivo**: `sql_pattern_rag.py`- **Dados**: Estruturas CTE, window functions, agregações complexas
+
+- **Otimização**: Seleção baseada no tipo de análise detectado
+
+## 🔄 Fluxo de Processamento- **Arquivo**: `sql_pattern_rag.py`
+
+
+
+```## 🔄 Fluxo de Processamento
+
+1. 📝 Usuário faz pergunta
+
+    ↓```
+
+2. 🔍 Message Handler verifica reutilização1. 📝 Usuário faz pergunta
+
+    ↓    ↓
+
+3. 🤖 Se nova consulta → RAG Duplo + Gemini2. 🔍 Message Handler verifica reutilização
+
+    ↓    ↓
+
+4. 📊 Execução SQL no BigQuery3. 🤖 Se nova consulta → RAG Duplo + Gemini
+
+    ↓    ↓
+
+5. 📈 Análise final + visualizações4. 📊 Execução SQL no BigQuery
+
+    ↓    ↓
+
+6. 💾 Cache para reutilização futura5. 📈 Análise final + visualizações
+
+```    ↓
+
+6. 💾 Cache para reutilização futura
+
+## ⚡ Principais Otimizações```
+
+
+
+- **🎯 RAG Contextual**: Só busca metadados relevantes à pergunta## ⚡ Principais Otimizações
+
+- **♻️ Reutilização Inteligente**: Detecta quando pode usar dados anteriores  
+
+- **💰 Economia de Tokens**: Redução de 80% no uso da API- **🎯 RAG Contextual**: Só busca metadados relevantes à pergunta
+
+- **⚡ Cache Multinível**: DuckDB + memória para performance- **♻️ Reutilização Inteligente**: Detecta quando pode usar dados anteriores  
+
+- **🔧 Prompts Otimizados**: Instruções específicas para cada tipo de análise- **💰 Economia de Tokens**: Redução de 80% no uso da API
+
+- **⚡ Cache Multinível**: DuckDB + memória para performance
+
+## 🛠️ Desenvolvimento- **🔧 Prompts Otimizados**: Instruções específicas para cada tipo de análise
+
+
+
+### Adicionar Nova Tabela## 🛠️ Desenvolvimento
+
+1. Configure em `config.py` → `TABLES_CONFIG`
+
+2. Execute o sistema - RAG detecta automaticamente### Adicionar Nova Tabela
+
+3. Teste com perguntas sobre a nova tabela1. Configure em `config.py` → `TABLES_CONFIG`
+
+2. Execute o sistema - RAG detecta automaticamente
+
+### Adicionar Novo Padrão SQL3. Teste com perguntas sobre a nova tabela
+
+1. Adicione em `sql_patterns.json` 
+
+2. Inclua trigger words e template### Adicionar Novo Padrão SQL
+
+3. Sistema detecta automaticamente o padrão1. Adicione em `sql_patterns.json` 
+
+2. Inclua trigger words e template
+
+## 📊 Métricas e Monitoramento3. Sistema detecta automaticamente o padrão
+
+
+
+- **Uso de Tokens**: Tracking automático via `ai_metrics.py`## 📊 Métricas e Monitoramento
+
+- **Performance**: Logs de timing em cada etapa
+
+- **Rate Limiting**: Controle por usuário e endpoint- **Uso de Tokens**: Tracking automático via `ai_metrics.py`
+
+- **Cache Hit Rate**: Métricas de eficiência do cache- **Performance**: Logs de timing em cada etapa
+
+- **Rate Limiting**: Controle por usuário e endpoint
+
+## 🔒 Segurança- **Cache Hit Rate**: Métricas de eficiência do cache
+
+
+
+- **Autenticação**: Sistema completo de login/registro## 🔒 Segurança
+
+- **Rate Limiting**: Proteção contra abuso
+
+- **Sanitização SQL**: Prevenção de SQL injection- **Autenticação**: Sistema completo de login/registro
+
+- **Controle de Acesso**: Permissões por usuário- **Rate Limiting**: Proteção contra abuso
+
+- **Sanitização SQL**: Prevenção de SQL injection
+
+## 🎨 Interface- **Controle de Acesso**: Permissões por usuário
+
+
+
+- **Tema Adaptativo**: Dark/light mode## 🎨 Interface
+
+- **Responsive Design**: Funciona em mobile/desktop  
+
+- **Componentes Modernos**: Cards, animações, feedback visual- **Tema Adaptativo**: Dark/light mode
+
+- **Exportação**: Excel, CSV, JSON- **Responsive Design**: Funciona em mobile/desktop  
+
+- **Componentes Modernos**: Cards, animações, feedback visual
+
+---- **Exportação**: Excel, CSV, JSON
+
+
+
+## 📞 Suporte---
+
+
+
+Para dúvidas ou problemas:## 📞 Suporte
+
+1. Verifique os logs do Streamlit
+
+2. Confirme configuração das credenciaisPara dúvidas ou problemas:
+
+3. Teste conexão com BigQuery1. Verifique os logs do Streamlit
+
+2. Confirme configuração das credenciais
+
+**Versão**: 2.0  3. Teste conexão com BigQuery
+
+**Última Atualização**: Outubro 2025
+**Versão**: 2.0  
+**Última Atualização**: Outubro 2025
                     ┌─────────────────┐
                     │  EXTERNAL APIs  │
                     ├─────────────────┤

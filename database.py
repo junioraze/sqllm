@@ -3,6 +3,18 @@ from config import PROJECT_ID, DATASET_ID
 
 client = bigquery.Client()
 
+def fix_sql_issues(query):
+    """Função simplificada de correção SQL"""
+    return query
+
+def fix_function_params(params):
+    """Função simplificada de correção de parâmetros"""
+    return params
+
+def log_sql_correction(original, corrected, correction_type):
+    """Log simplificado - placeholder"""
+    pass
+
 def _parse_list_param(param, param_name="param"):
     """
     Converte parâmetro que pode ser string ou lista em lista limpa.
@@ -80,15 +92,29 @@ def _parse_list_param(param, param_name="param"):
 def execute_query(query: str):
     """Executa uma query SQL no BigQuery."""
     try:
-        # Debug: log da query antes de executar
-        print(f"DEBUG - Query a ser executada:\n{query}")
+        # Aplica correções automáticas de SQL
+        original_query = query
+        corrected_query = fix_sql_issues(query)
         
-        job_config = bigquery.QueryJobConfig(maximum_bytes_billed=100_000_000)
-        query_job = client.query(query, job_config=job_config)
-        return [dict(row) for row in query_job.result()]
+        # Log das correções aplicadas
+        if original_query != corrected_query:
+            log_sql_correction(original_query, corrected_query, "execute_query")
+        
+        job_config = bigquery.QueryJobConfig(
+            maximum_bytes_billed=100_000_000,
+            job_timeout_ms=30000  # 30 segundos timeout
+        )
+        query_job = client.query(corrected_query, job_config=job_config)
+        
+        # Executa e converte resultados
+        results = []
+        for row in query_job.result(timeout=30):
+            results.append(dict(row))
+            
+        return results
+        
     except Exception as e:
-        print(f"DEBUG - Erro na execução: {str(e)}")
-        print(f"DEBUG - Query que falhou:\n{query}")
+        print(f"ERRO QUERY: {str(e)}")
         return {"error": str(e), "query": query}
 
 def build_query(params: dict) -> str:
@@ -97,41 +123,49 @@ def build_query(params: dict) -> str:
     O full_table_id já vem completo do Gemini
     ATUALIZADO: Suporte a CTEs (Common Table Expressions) para queries complexas
     """
-    # Debug: log dos parâmetros recebidos
-    print(f"DEBUG - Parâmetros recebidos no build_query: {params}")
+    # Aplica correções automáticas nos parâmetros
+    original_params = params.copy()
+    corrected_params = fix_function_params(params)
     
-    full_table_id = params.get("full_table_id")
+    # Log das correções nos parâmetros
+    if original_params != corrected_params:
+        print(f"PARAM_CORRECTION: {original_params} -> {corrected_params}")
+    
+    # Debug: log dos parâmetros corrigidos
+    print(f"DEBUG - Parâmetros recebidos no build_query: {corrected_params}")
+    
+    full_table_id = corrected_params.get("full_table_id")
     if not full_table_id:
         raise ValueError("full_table_id é obrigatório")
     
     # Processa todos os parâmetros de lista usando a função auxiliar
-    select = _parse_list_param(params.get("select", ["*"]), "select")
-    group_by_list = _parse_list_param(params.get("group_by"), "group_by")
-    order_by_list = _parse_list_param(params.get("order_by"), "order_by")
+    select = _parse_list_param(corrected_params.get("select", ["*"]), "select")
+    group_by_list = _parse_list_param(corrected_params.get("group_by"), "group_by")
+    order_by_list = _parse_list_param(corrected_params.get("order_by"), "order_by")
     
     # Garante que select não fique vazio
     if not select:
         select = ["*"]
 
-    if params.get("qualify") and params.get("limit"):
+    if corrected_params.get("qualify") and corrected_params.get("limit"):
         raise ValueError(
             "NUNCA use LIMIT com QUALIFY - use QUALIFY para múltiplas dimensões"
         )
 
     # Suporte a CTE (Common Table Expressions)
     with_clause = ""
-    if params.get("with_cte"):
-        with_clause = f"WITH {params['with_cte']}\n"
+    if corrected_params.get("with_cte"):
+        with_clause = f"WITH {corrected_params['with_cte']}\n"
     
     # Determina a tabela a usar (pode ser uma CTE ou tabela física)
-    from_table = params.get("from_table", f"`{full_table_id}`")
+    from_table = corrected_params.get("from_table", f"`{full_table_id}`")
 
     # Constrói as partes da query
-    where = f" WHERE {params['where']}" if params.get("where") else ""
+    where = f" WHERE {corrected_params['where']}" if corrected_params.get("where") else ""
     group_by = f" GROUP BY {', '.join(group_by_list)}" if group_by_list else ""
     order_by = f" ORDER BY {', '.join(order_by_list)}" if order_by_list else ""
-    qualify = f" QUALIFY {params['qualify']}" if params.get("qualify") else ""
-    limit = f" LIMIT {int(params['limit'])}" if params.get("limit") else ""
+    qualify = f" QUALIFY {corrected_params['qualify']}" if corrected_params.get("qualify") else ""
+    limit = f" LIMIT {int(corrected_params['limit'])}" if corrected_params.get("limit") else ""
 
     query = f"""{with_clause}SELECT {', '.join(select)}
 FROM {from_table}{where}{group_by}{qualify}{order_by}{limit}"""

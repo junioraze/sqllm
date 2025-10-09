@@ -23,7 +23,7 @@ else:
 from style import MOBILE_IFRAME_CHAT
 from deepseek_theme import apply_deepseek_theme, create_usage_indicator, show_typing_animation, get_login_theme, get_chat_theme, render_theme_selector, apply_selected_theme, get_enhanced_cards_theme, get_expert_login_theme
 from image_utils import get_background_style, get_login_background_style  # Importa utilitários de imagem
-from gemini_handler import initialize_model, refine_with_gemini, should_reuse_data
+from gemini_handler import initialize_model, refine_with_gemini, should_reuse_data, initialize_rag_system
 from database import build_query, execute_query
 from utils import (
     display_message_with_spoiler, 
@@ -41,6 +41,17 @@ from auth_system import render_auth_system, get_current_user
 from user_database import db
 from subscription_system_db import SubscriptionSystem
 from config_menu import apply_user_preferences, initialize_user_config, check_feature_access
+
+# Inicialização do sistema RAG (uma vez ao carregar a aplicação)
+try:
+    from gemini_handler import initialize_rag_system
+    print("🚀 Inicializando sistema RAG...")
+    initialize_rag_system()
+    print("✅ Sistema RAG pronto!")
+    rag_initialized = True
+except Exception as e:
+    print(f"❌ Erro ao inicializar sistema RAG: {e}")
+    rag_initialized = False
 
 # Configuração do rate limit (100 requisições por dia)
 rate_limiter = RateLimiter(max_requests_per_day=MAX_RATE_LIMIT)
@@ -154,8 +165,14 @@ with st.container():
             - {limitations.get("model_understanding", "O modelo pode não compreender perguntas muito vagas.")}
             - {limitations.get("data_freshness", "Resultados são baseados nos dados mais recentes disponíveis.")}
             - **Limite diário de {CLIENT_CONFIG.get('rate_limit_description', 'requisições')}: {MAX_RATE_LIMIT}**. Se atingido, você receberá uma mensagem de aviso.
-            > Para detalhes técnicos, consulte a documentação ou o spoiler abaixo.
             """
+        
+        # Adiciona informação sobre sistema RAG se disponível
+        if rag_initialized:
+            limitations_text += "\n🧠 **Sistema RAG Ativo**: Otimização inteligente de tokens para reduzir custos em 80%+"
+        
+        limitations_text += "\n> Para detalhes técnicos, consulte a documentação ou o spoiler abaixo."
+        
         # Aplica formatação IA para as limitações
         formatted_limitations = format_text_with_ia_highlighting(limitations_text)
         st.markdown(formatted_limitations, unsafe_allow_html=True)

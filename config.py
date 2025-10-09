@@ -191,7 +191,29 @@ INSTRUÇÕES PARA ANÁLISE DE DADOS:
    FROM periodo_atual LEFT JOIN periodo_anterior ON campo_comum
    ```
 
-   **CTE TIPO 3 - FILTRO + ANÁLISE MÚLTIPLA**:
+   **CTE TIPO 3 - COMPARAÇÃO ENTRE ANOS (UNION ALL)**:
+   ```
+   WITH ano_2024 AS (
+     SELECT campo, COUNT(*) AS metrica 
+     FROM tabela 
+     WHERE EXTRACT(YEAR FROM data) = 2024 
+     GROUP BY campo 
+     QUALIFY ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC) <= 5
+   ),
+   ano_2025 AS (
+     SELECT campo, COUNT(*) AS metrica 
+     FROM tabela 
+     WHERE EXTRACT(YEAR FROM data) = 2025 
+     GROUP BY campo 
+     QUALIFY ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC) <= 5
+   )
+   SELECT '2024' AS ano, campo, metrica FROM ano_2024
+   UNION ALL
+   SELECT '2025' AS ano, campo, metrica FROM ano_2025
+   ORDER BY ano, metrica DESC
+   ```
+
+   **CTE TIPO 4 - FILTRO + ANÁLISE MÚLTIPLA**:
    ```
    WITH base_filtrada AS (
      SELECT ... WHERE critérios_específicos
@@ -241,14 +263,38 @@ def build_tables_instruction():
     tables_instruction = ""
     for table_name, table_config in TABLES_CONFIG.items():
         tables_instruction += f"\n### Tabela: {table_name}\n"
-        tables_instruction += f"Descrição: {table_config['description']}\n"
         
-        # Lidar com fields_description como array ou string
-        fields_desc = table_config['fields_description']
-        if isinstance(fields_desc, list):
-            tables_instruction += "\n".join(fields_desc) + "\n"
+        # Compatibilidade com formato v2 e formato antigo
+        if 'metadata' in table_config:
+            # Formato v2
+            tables_instruction += f"Descrição: {table_config['metadata']['description']}\n"
+            tables_instruction += f"Tabela BigQuery: {table_config['metadata']['bigquery_table']}\n"
+            
+            # Adiciona regras críticas se existirem
+            if 'business_rules' in table_config and 'critical_rules' in table_config['business_rules']:
+                tables_instruction += "\nRegras Críticas:\n"
+                for rule in table_config['business_rules']['critical_rules']:
+                    tables_instruction += f"- {rule['rule']}: {rule['context']}\n"
+            
+            # Adiciona exemplos de campos se existirem
+            if 'fields' in table_config:
+                tables_instruction += "\nCampos Principais:\n"
+                for category, fields in table_config['fields'].items():
+                    if isinstance(fields, list):
+                        for field in fields:
+                            if isinstance(field, dict) and 'name' in field:
+                                tables_instruction += f"- {field['name']}: {field.get('description', '')}\n"
         else:
-            tables_instruction += f"{fields_desc}\n"
+            # Formato antigo
+            tables_instruction += f"Descrição: {table_config.get('description', 'Sem descrição')}\n"
+            
+            # Lidar com fields_description como array ou string
+            if 'fields_description' in table_config:
+                fields_desc = table_config['fields_description']
+                if isinstance(fields_desc, list):
+                    tables_instruction += "\n".join(fields_desc) + "\n"
+                else:
+                    tables_instruction += f"{fields_desc}\n"
     
     return tables_instruction
 

@@ -11,7 +11,7 @@ from typing import Tuple, Dict, Optional, Any
 from datetime import datetime
 
 from cache_db import get_user_history, get_interaction_full_data, save_interaction, log_error
-from gemini_handler import should_reuse_data, refine_with_gemini
+from gemini_handler import should_reuse_data, refine_with_gemini_rag, initialize_rag_system
 from database import build_query, execute_query
 from utils import (
     safe_serialize_gemini_params, 
@@ -23,6 +23,10 @@ from utils import (
 from config import STANDARD_ERROR_MESSAGE, PROJECT_ID, DATASET_ID, TABLES_CONFIG
 from logger import log_interaction
 from deepseek_theme import show_typing_animation, show_dynamic_processing_animation, get_step_display_info
+
+# Sistema RAG obrigatório
+from business_metadata_rag import business_rag
+from ai_metrics import ai_metrics
 
 
 class MessageHandler:
@@ -106,14 +110,91 @@ class MessageHandler:
             self._end_timing("processo_completo")
                 
         except Exception as e:
+            print(f"🔥 HANDLER - ERRO CAPTURADO: {e}")
+            import traceback
+            print(f"🔥 HANDLER - TRACEBACK: {traceback.format_exc()}")
             self.flow_path.append("erro_geral")
             self._handle_error(typing_placeholder, prompt, str(e), traceback.format_exc())
 
     def _check_reuse_opportunity(self, prompt: str) -> Tuple[bool, Dict]:
-        """Etapa 1: Verificar se pode reutilizar dados anteriores"""
+        """Etapa 1: Verificar se pode reutilizar dados anteriores - OTIMIZADO COM DETECÇÃO INTELIGENTE"""
         self.flow_path.append("verificando_reuso")
         
         try:
+            # 🚀 OTIMIZAÇÃO CRÍTICA: Verificação inteligente antes de consultar Gemini
+            
+            # Palavras-chave que SEMPRE indicam reuso (referências explícitas)
+            EXPLICIT_REUSE_KEYWORDS = [
+                'mesmos dados', 'dados anteriores', 'última consulta', 'último resultado', 
+                'consulta anterior', 'resultado anterior', 'tabela anterior',
+                'anterior', 'ultimo', 'última', 'mesmo', 'mesma',
+                'agora', 'agr', 'então', 'entao', 'e agora', 'e agr',
+                'com isso', 'com esse', 'com esses', 'com os dados'
+            ]
+            
+            # Palavras-chave que podem indicar reuso MAS precisam de contexto
+            POTENTIAL_REUSE_KEYWORDS = [
+                'gráfico', 'grafico', 'chart', 'visualização', 'visualizacao', 
+                'plotar', 'plot', 'curva', 'linha',
+                'exportar', 'excel', 'planilha', 'csv', 'baixar', 'download'
+            ]
+            
+            prompt_lower = prompt.lower()
+            
+            # Verifica reuso explícito (sempre procede com verificação)
+            has_explicit_reuse = any(keyword in prompt_lower for keyword in EXPLICIT_REUSE_KEYWORDS)
+            
+            if has_explicit_reuse:
+                self.flow_path.append("reuso_explicito_detectado")
+                # Procede com verificação completa
+            else:
+                # Verifica se é pedido de gráfico/export MAS com nova consulta completa
+                has_potential_reuse = any(keyword in prompt_lower for keyword in POTENTIAL_REUSE_KEYWORDS)
+                
+                if has_potential_reuse:
+                    # ANÁLISE INTELIGENTE: verifica se é reuso real ou nova consulta com gráfico
+                    
+                    # Indicadores de NOVA CONSULTA (mesmo com palavra gráfico/export):
+                    # - Menciona dados específicos (vendas, produtos, etc.)
+                    # - Menciona filtros temporais (2024, janeiro, etc.)
+                    # - Menciona agregações (top 5, total, soma, etc.)
+                    # - Menciona dimensões (por região, por produto, etc.)
+                    
+                    NEW_QUERY_INDICATORS = [
+                        # Dados/métricas específicas
+                        'vendas', 'receita', 'faturamento', 'lucro', 'margem',
+                        'produtos', 'clientes', 'pedidos', 'transações',
+                        
+                        # Filtros temporais
+                        '2024', '2025', '2023', 'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+                        'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
+                        'trimestre', 'semestre', 'ano', 'mês', 'semana',
+                        
+                        # Agregações
+                        'top', 'maior', 'menor', 'total', 'soma', 'média', 'contagem',
+                        'ranking', 'melhor', 'pior', 'máximo', 'mínimo',
+                        
+                        # Dimensões
+                        'por região', 'por estado', 'por cidade', 'por produto', 'por categoria',
+                        'por vendedor', 'por cliente', 'por canal', 'por loja'
+                    ]
+                    
+                    has_new_query_indicators = any(indicator in prompt_lower for indicator in NEW_QUERY_INDICATORS)
+                    
+                    if has_new_query_indicators:
+                        # É uma nova consulta completa que inclui gráfico/export
+                        self.flow_path.append("nova_consulta_com_grafico_detectada")
+                        return False, {"reason": "Nova consulta completa detectada (inclui especificação de dados + visualização)"}
+                    else:
+                        # Pode ser reuso - palavra gráfico/export sem especificação de dados
+                        self.flow_path.append("possivel_reuso_detectado")
+                        # Procede com verificação
+                else:
+                    # Sem palavras-chave de reuso - claramente nova consulta
+                    self.flow_path.append("nova_consulta_detectada")
+                    return False, {"reason": "Nova consulta detectada - sem indicadores de reutilização"}
+            
+            # Se chegou aqui, há indicadores válidos - procede com verificação completa
             user_history = get_user_history(self.user_id)
             if not user_history:
                 self.flow_path.append("sem_historico")
@@ -147,6 +228,8 @@ class MessageHandler:
             
             self.flow_path.append("reuso_negado")
             return False, {}
+            
+            
             
         except Exception as e:
             self.flow_path.append("erro_verificacao_reuso")
@@ -217,8 +300,8 @@ class MessageHandler:
             
             # Refina resposta com base nos dados existentes
             self._start_timing("refinamento_gemini_reuso", typing_placeholder)
-            refined_response, tech_details = refine_with_gemini(
-                prompt, serializable_data, reused_params, reused_query
+            refined_response, tech_details = refine_with_gemini_rag(
+                self.model, prompt
             )
             self._end_timing("refinamento_gemini_reuso")
             
@@ -248,46 +331,43 @@ class MessageHandler:
             self._end_timing("finalizacao_reuso")
             
         except Exception as e:
-            self.flow_path.append("erro_reuso_fallback")
+            self.flow_path.append("erro_reuso")
             print(f"Erro na reutilização: {e}")
-            typing_placeholder.markdown(
-                "<div style='padding: 8px 12px; color: #f59e0b; font-size: 14px; opacity: 0.8;'>⚠️ Reutilização falhou, fazendo nova consulta...</div>", 
-                unsafe_allow_html=True
-            )
-            self._process_new_query_flow(typing_placeholder, prompt)
+            raise Exception(f"Falha na reutilização de dados: {e}")
 
     def _process_new_query_flow(self, typing_placeholder, prompt: str) -> None:
-        """Etapa 2b: Processar nova consulta SQL"""
-        self.flow_path.append("iniciando_nova_consulta")
+        """Etapa 2b: Processar nova consulta SQL usando sistema RAG otimizado"""
+        self.flow_path.append("iniciando_nova_consulta_rag")
         
-        try:
-            # Inicia conversa com histórico limpo
-            self._start_timing("preparando_conversa_gemini", typing_placeholder)
-            convo = self.model.start_chat(
-                history=[
-                    {"role": "model" if m["role"] == "assistant" else m["role"], "parts": [m["content"]]}
-                    for m in st.session_state.chat_history
-                    if m["role"] != "assistant" or not m.get("tech_details")
-                ]
-            )
-            self._end_timing("preparando_conversa_gemini")
-            
-            self.flow_path.append("enviando_para_gemini")
-            self._start_timing("envio_gemini_inicial", typing_placeholder)
-            response = convo.send_message(prompt)
-            self._end_timing("envio_gemini_inicial")
-            
-            self._handle_gemini_response(typing_placeholder, prompt, response)
-            
-        except Exception as e:
-            self.flow_path.append("erro_nova_consulta")
-            self._handle_error(typing_placeholder, prompt, f"Erro ao processar nova consulta: {str(e)}", traceback.format_exc())
+        # Usa sistema RAG diretamente
+        self._start_timing("processamento_rag", typing_placeholder)
+        self.flow_path.append("usando_sistema_rag")
+        
+        # Processa com RAG (função retorna diretamente function_call ou text)
+        response = refine_with_gemini_rag(self.model, prompt, self.user_id)
+        self._end_timing("processamento_rag")
+        
+        # Processa a resposta diretamente
+        self._handle_gemini_response(typing_placeholder, prompt, response)
 
     def _handle_gemini_response(self, typing_placeholder, prompt: str, response) -> None:
         """Etapa 3: Processar resposta do Gemini"""
         self.flow_path.append("processando_resposta_gemini")
         
         try:
+            # Para resposta no formato tuple (text, tech_details) - novo formato RAG
+            if isinstance(response, tuple):
+                text_response, tech_details = response
+                if text_response and not hasattr(text_response, 'name'):
+                    # É texto simples
+                    self._handle_text_response(typing_placeholder, prompt, text_response, tech_details)
+                    return
+                elif hasattr(text_response, 'name'):
+                    # É function call
+                    self._process_function_call(typing_placeholder, prompt, text_response)
+                    return
+            
+            # Formato antigo para compatibilidade
             # Verificação defensiva da resposta
             self._start_timing("validacao_resposta_gemini")
             if not response or not response.candidates:
@@ -321,7 +401,12 @@ class MessageHandler:
         try:
             self._start_timing("preparacao_parametros", typing_placeholder)
             params = function_call.args
+            
+            # Dupla serialização para garantir que não há FunctionCall
             serializable_params = safe_serialize_gemini_params(params)
+            # Força conversão completa removendo qualquer resíduo não serializável
+            serializable_params = safe_serialize_gemini_params(serializable_params)
+            
             self._end_timing("preparacao_parametros")
             
             # Validar full_table_id
@@ -343,7 +428,7 @@ class MessageHandler:
             raw_data = execute_query(query)
             self._end_timing("execucao_sql")
 
-            if "error" in raw_data:
+            if isinstance(raw_data, dict) and "error" in raw_data:
                 self._handle_query_error(typing_placeholder, prompt, raw_data, query, serializable_params)
                 return
             
@@ -356,11 +441,18 @@ class MessageHandler:
 
             self.flow_path.append("refinando_resposta_final")
             
-            # Refina a resposta com o Gemini
+            # Chama Gemini para análise final dos dados
             self._start_timing("refinamento_gemini_final", typing_placeholder)
-            refined_response, tech_details = refine_with_gemini(
-                prompt, serializable_data, serializable_params, query
+            
+            from gemini_handler import analyze_data_with_gemini
+            
+            refined_response, tech_details = analyze_data_with_gemini(
+                prompt=prompt,
+                data=serializable_data,
+                function_params=function_call.args if hasattr(function_call, 'args') else {},
+                query=query
             )
+                
             self._end_timing("refinamento_gemini_final")
             
             # Adiciona caminho de decisão aos detalhes técnicos
@@ -490,10 +582,13 @@ class MessageHandler:
     def _save_new_interaction(self, prompt: str, serializable_params: Dict, query: str, serializable_data: Any, refined_response: str, tech_details: Dict) -> None:
         """Salva nova interação no cache"""
         try:
+            # Garantir serialização final antes de salvar
+            final_params = safe_serialize_gemini_params(serializable_params)
+            
             save_interaction(
                 user_id=self.user_id,
                 question=prompt,
-                function_params=serializable_params,
+                function_params=final_params,
                 query_sql=query,
                 raw_data=serializable_data,
                 raw_response=None,
@@ -503,6 +598,13 @@ class MessageHandler:
             )
         except Exception as e:
             print(f"Erro ao salvar nova interação: {e}")
+            print(f"Tipo de serializable_params: {type(serializable_params)}")
+            if hasattr(serializable_params, '__dict__'):
+                print(f"Conteúdo de serializable_params: {serializable_params.__dict__}")
+            else:
+                print(f"Conteúdo de serializable_params: {serializable_params}")
+            import traceback
+            traceback.print_exc()
 
     def _save_reuse_interaction(self, prompt: str, reused_params: Dict, reused_query: str, refined_response: str, tech_details: Dict, reused_interaction: Dict) -> None:
         """Salva interação de reutilização no cache"""
@@ -637,3 +739,43 @@ class MessageHandler:
         except (ValueError, AttributeError) as e:
             print(f"Erro ao extrair texto da resposta: {e}")
             return "Resposta processada, mas não foi possível exibir o conteúdo completo."
+    
+    def _handle_text_response(self, typing_placeholder, prompt: str, text_response: str) -> None:
+        """Processa resposta em texto do modelo (sem function call)"""
+        self.flow_path.append("processando_resposta_texto")
+        
+        try:
+            # Remove animação
+            typing_placeholder.empty()
+            
+            # Salva interação sem dados tabulares
+            save_interaction(
+                user_id=self.user_id,
+                question=prompt,
+                function_params=None,
+                query_sql=None,
+                raw_data=None,
+                raw_response=text_response,
+                refined_response=text_response,
+                tech_details={"response_type": "text_only", "flow_path": " → ".join(self.flow_path)},
+                status="TEXT_RESPONSE"
+            )
+            
+            # Adiciona resposta ao histórico com formatação IA
+            formatted_response = format_text_with_ia_highlighting(text_response)
+            st.session_state.chat_history.append({
+                "role": "assistant", 
+                "content": formatted_response,
+                "tech_details": {
+                    "response_type": "text_only",
+                    "flow_path": " → ".join(self.flow_path),
+                    "total_time_ms": self._get_total_duration()
+                }
+            })
+            
+            # Força rerun para mostrar resposta
+            st.rerun()
+            
+        except Exception as e:
+            self.flow_path.append("erro_resposta_texto")
+            self._handle_error(typing_placeholder, prompt, f"Erro ao processar resposta texto: {str(e)}", traceback.format_exc())

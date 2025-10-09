@@ -10,3 +10,6 @@ plotly
 openpyxl
 duckdb
 mercadopago
+sentence-transformers
+numpy
+chromadb

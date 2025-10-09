@@ -10,7 +10,7 @@ DEEPSEEK_DARK_THEME = """
     --bg-primary: #0a0a0a;
     --bg-secondary: rgba(10, 10, 10, 0.98);
     --bg-tertiary: rgba(20, 20, 20, 0.8);
-    --bg-input: rgba(25, 25, 25, 0.9);
+    --bg-input: rgba(15, 15, 15, 0.95); /* Fundo mais escuro para contraste com texto branco */
     --bg-sidebar: linear-gradient(180deg, #0f0f0f 0%, #1a1a1a 100%);
     --bg-chat-input: rgba(10, 10, 10, 0.95);
     --bg-typing: rgba(25, 25, 25, 0.8);
@@ -328,7 +328,7 @@ input[type="email"] {
     background: var(--bg-input) !important;
     border: 1px solid var(--border-secondary) !important;
     border-radius: 12px !important;
-    color: var(--text-primary) !important;
+    color: var(--text-primary) !important; /* Usa cor específica para inputs */
     padding: 1rem 1.25rem !important;
     font-size: 1rem !important;
     line-height: 1.5 !important;
@@ -946,7 +946,7 @@ input[type="email"] {
     background: var(--bg-input) !important;
     border: 1px solid var(--border-secondary) !important;
     border-radius: 12px !important;
-    color: var(--text-primary) !important;
+    color: var(--text-primary) !important; /* Usa cor específica para inputs */
     padding: 1rem 1.25rem !important;
     font-size: 1rem !important;
     line-height: 1.5 !important;
@@ -1238,7 +1238,7 @@ def get_login_theme():
         --bg-primary: #0a0a0a;
         --bg-secondary: rgba(10, 10, 10, 0.98);
         --bg-tertiary: rgba(20, 20, 20, 0.8);
-        --bg-input: rgba(25, 25, 25, 0.9);
+        --bg-input: rgba(15, 15, 15, 0.95); /* CORRIGIDO: mesmo valor do tema principal */
         --text-primary: #e5e7eb;
         --text-secondary: rgba(229, 231, 235, 0.5);
         --text-accent: #00d4ff;
@@ -1579,7 +1579,7 @@ def get_expert_login_theme():
         --brand-gradient-hover: linear-gradient(135deg, #00b8e6 0%, #007acc 100%);
         --bg-dark: #0a0a0a;
         --bg-card: rgba(15, 15, 15, 0.95);
-        --bg-input: rgba(20, 20, 20, 0.9);
+        --bg-input: rgba(15, 15, 15, 0.95); /* CORRIGIDO: mesmo valor do tema principal */
         --text-white: #ffffff;
         --text-gray: rgba(255, 255, 255, 0.7);
         --border-brand: #00d4ff;
@@ -1679,6 +1679,25 @@ def get_expert_login_theme():
         font-weight: 500 !important;
         transition: all 0.3s ease !important;
         box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+    }
+
+    /* FORÇA MÁXIMA: Sobrescreve qualquer CSS do Streamlit */
+    .stApp input[type="text"],
+    .stApp input[type="email"], 
+    .stApp input[type="password"],
+    .stApp .stTextInput input,
+    .stApp .stPasswordInput input {
+        color: #ffffff !important;
+        background: rgba(15, 15, 15, 0.95) !important;
+    }
+
+    /* ESPECIFICIDADE MÁXIMA: Garante sobreposição */
+    .stApp section.main div.stTextInput div div input[type="text"],
+    .stApp section.main div.stPasswordInput div div input[type="password"],
+    .stApp section.main div.stTextInput div div input[type="email"] {
+        color: #ffffff !important;
+        background: rgba(15, 15, 15, 0.95) !important;
+        border: 2px solid #00d4ff !important;
     }
 
     .stTextInput > div > div > input::placeholder,
@@ -2550,21 +2569,7 @@ def apply_deepseek_theme():
     """Aplica o tema DeepSeek escuro por padrão"""
     st.markdown(DEEPSEEK_DARK_THEME, unsafe_allow_html=True)
 
-def fix_alert_text_visibility():
-    """Corrige APENAS a visibilidade do texto em alertas - não mexe no resto do tema"""
-    alert_fix_css = """
-    <style>
-    /* CORREÇÃO ESPECÍFICA PARA TEXTO INVISÍVEL EM ALERTAS */
-    [data-testid="stAlert"]:has([data-testid="infoIcon"]) *,
-    [data-testid="stAlert"]:has([data-testid="successIcon"]) *,
-    [data-testid="stAlert"]:has([data-testid="warningIcon"]) *,
-    [data-testid="stAlert"]:has([data-testid="errorIcon"]) * {
-        color: #ffffff !important;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8) !important;
-    }
-    </style>
-    """
-    st.markdown(alert_fix_css, unsafe_allow_html=True)
+
 
 def get_plans_page_theme():
     """CSS específico para página de planos - preserva layout personalizado"""
@@ -2741,4 +2746,192 @@ def fix_alert_visibility():
         text-shadow: 0 1px 2px rgba(0,0,0,0.8) !important;
     }
     </style>
+    """, unsafe_allow_html=True)
+
+
+
+def fix_baseweb_input_dark_theme():
+    """CORREÇÃO ESPECÍFICA: Foca APENAS em data-baseweb='input' + ANTI-AUTOPREENCHIMENTO"""
+    st.markdown("""
+    <style>
+    /* CORREÇÃO ULTRA-ESPECÍFICA PARA data-baseweb="input" NO TEMA ESCURO */
+    .stApp section.main div.block-container div[data-baseweb="input"]:not([data-theme="light"]),
+    .stApp section.main div.block-container div[data-baseweb="input"]:not([data-theme="light"]) input,
+    .stApp section.main div[data-baseweb="input"]:not([data-theme="light"]),
+    .stApp section.main div[data-baseweb="input"]:not([data-theme="light"]) input,
+    .stApp div[data-baseweb="input"]:not([data-theme="light"]),
+    .stApp div[data-baseweb="input"]:not([data-theme="light"]) input {
+        color: #ffffff !important;
+        background-color: rgba(15, 15, 15, 0.95) !important;
+        border: 2px solid #00d4ff !important;
+        caret-color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: none !important;
+    }
+    
+    /* GARANTIA ABSOLUTA PARA TEMA ESCURO */
+    body:not([data-theme="light"]) div[data-baseweb="input"],
+    body:not([data-theme="light"]) div[data-baseweb="input"] input,
+    html:not([data-theme="light"]) div[data-baseweb="input"],
+    html:not([data-theme="light"]) div[data-baseweb="input"] input {
+        color: #ffffff !important;
+        background-color: rgba(15, 15, 15, 0.95) !important;
+        caret-color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+    }
+    
+    /* ANTI-AUTOPREENCHIMENTO: CSS para combater estilos do navegador */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus,
+    input:-webkit-autofill:active,
+    div[data-baseweb="input"] input:-webkit-autofill,
+    div[data-baseweb="input"] input:-webkit-autofill:hover,
+    div[data-baseweb="input"] input:-webkit-autofill:focus,
+    div[data-baseweb="input"] input:-webkit-autofill:active {
+        -webkit-text-fill-color: #ffffff !important;
+        -webkit-box-shadow: 0 0 0 1000px rgba(15, 15, 15, 0.95) inset !important;
+        color: #ffffff !important;
+        background-color: rgba(15, 15, 15, 0.95) !important;
+        transition: background-color 5000s ease-in-out 0s !important;
+    }
+    
+    /* FORÇA ESPECÍFICA PARA ESTADOS DE AUTOPREENCHIMENTO */
+    input[data-baseweb="input"]:-webkit-autofill,
+    div[data-baseweb="input"] input:-webkit-autofill {
+        -webkit-text-fill-color: #ffffff !important;
+        -webkit-box-shadow: 0 0 0 1000px rgba(15, 15, 15, 0.95) inset !important;
+        color: #ffffff !important;
+    }
+    </style>
+    <script>
+    // JavaScript ANTI-AUTOPREENCHIMENTO + SUPER-ESPECÍFICO para data-baseweb="input"
+    function forceInputStylesBaseweb() {
+        // Força estilo em todos os elementos com data-baseweb="input"
+        const basewebInputs = document.querySelectorAll('[data-baseweb="input"]');
+        basewebInputs.forEach(function(element) {
+            // Força no elemento pai
+            element.style.setProperty('color', '#ffffff', 'important');
+            element.style.setProperty('background-color', 'rgba(15, 15, 15, 0.95)', 'important');
+            element.style.setProperty('caret-color', '#ffffff', 'important');
+            element.style.setProperty('-webkit-text-fill-color', '#ffffff', 'important');
+            
+            // Força em todos os inputs filhos
+            const childInputs = element.querySelectorAll('input');
+            childInputs.forEach(function(input) {
+                input.style.setProperty('color', '#ffffff', 'important');
+                input.style.setProperty('background-color', 'rgba(15, 15, 15, 0.95)', 'important');
+                input.style.setProperty('caret-color', '#ffffff', 'important');
+                input.style.setProperty('-webkit-text-fill-color', '#ffffff', 'important');
+                
+                // ANTI-AUTOPREENCHIMENTO: Remove estilos de autopreenchimento
+                if (input.matches(':-webkit-autofill')) {
+                    input.style.setProperty('-webkit-box-shadow', '0 0 0 1000px rgba(15, 15, 15, 0.95) inset', 'important');
+                    input.style.setProperty('transition', 'background-color 5000s ease-in-out 0s', 'important');
+                }
+            });
+        });
+        
+        // FORÇA TODOS OS INPUTS DE TEXTO/PASSWORD (incluindo autopreenchidos)
+        const allInputs = document.querySelectorAll('input[type="text"], input[type="email"], input[type="password"]');
+        allInputs.forEach(function(input) {
+            input.style.setProperty('color', '#ffffff', 'important');
+            input.style.setProperty('background-color', 'rgba(15, 15, 15, 0.95)', 'important');
+            input.style.setProperty('caret-color', '#ffffff', 'important');
+            input.style.setProperty('-webkit-text-fill-color', '#ffffff', 'important');
+            
+            // Anti-autopreenchimento
+            if (input.matches(':-webkit-autofill')) {
+                input.style.setProperty('-webkit-box-shadow', '0 0 0 1000px rgba(15, 15, 15, 0.95) inset', 'important');
+                input.style.setProperty('transition', 'background-color 5000s ease-in-out 0s', 'important');
+            }
+        });
+    }
+    
+    // DETECÇÃO DE AUTOPREENCHIMENTO: Monitora mudanças nos valores
+    function detectAutofill() {
+        const inputs = document.querySelectorAll('input[type="text"], input[type="email"], input[type="password"]');
+        inputs.forEach(function(input) {
+            // Se o input tem valor mas não foi focado pelo usuário
+            if (input.value && !input.hasAttribute('data-user-focused')) {
+                // Força estilo imediatamente
+                input.style.setProperty('color', '#ffffff', 'important');
+                input.style.setProperty('background-color', 'rgba(15, 15, 15, 0.95)', 'important');
+                input.style.setProperty('-webkit-text-fill-color', '#ffffff', 'important');
+                input.style.setProperty('-webkit-box-shadow', '0 0 0 1000px rgba(15, 15, 15, 0.95) inset', 'important');
+            }
+            
+            // Marca quando usuário interage
+            input.addEventListener('focus', function() {
+                this.setAttribute('data-user-focused', 'true');
+            });
+        });
+    }
+    
+    // APLICA MÚLTIPLAS VEZES PARA GARANTIR
+    setTimeout(forceInputStylesBaseweb, 10);   // Imediato
+    setTimeout(forceInputStylesBaseweb, 50);   // Rápido
+    setTimeout(forceInputStylesBaseweb, 200);  // Médio
+    setTimeout(forceInputStylesBaseweb, 500);  // Tardio
+    setTimeout(forceInputStylesBaseweb, 1000); // Muito tardio
+    setTimeout(forceInputStylesBaseweb, 2000); // Garantia
+    
+    // DETECTA AUTOPREENCHIMENTO PERIODICAMENTE
+    setTimeout(detectAutofill, 100);
+    setTimeout(detectAutofill, 300);
+    setTimeout(detectAutofill, 600);
+    setTimeout(detectAutofill, 1200);
+    
+    // Observer para mudanças dinâmicas
+    const observer = new MutationObserver(function(mutations) {
+        let hasBasewebInput = false;
+        mutations.forEach(function(mutation) {
+            mutation.addedNodes.forEach(function(node) {
+                if (node.nodeType === 1) {
+                    if (node.getAttribute && node.getAttribute('data-baseweb') === 'input') {
+                        hasBasewebInput = true;
+                    }
+                    const basewebElements = node.querySelectorAll ? node.querySelectorAll('[data-baseweb="input"]') : [];
+                    if (basewebElements.length > 0) {
+                        hasBasewebInput = true;
+                    }
+                }
+            });
+        });
+        
+        if (hasBasewebInput) {
+            setTimeout(forceInputStylesBaseweb, 10);
+            setTimeout(detectAutofill, 50);
+        }
+    });
+    
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['data-baseweb', 'value']
+    });
+    
+    // EVENTOS DE AUTOPREENCHIMENTO
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(forceInputStylesBaseweb, 100);
+        setTimeout(detectAutofill, 200);
+    });
+    
+    // LISTENER PARA MUDANÇAS DE INPUT (autopreenchimento)
+    document.addEventListener('input', function(e) {
+        if (e.target.tagName === 'INPUT') {
+            setTimeout(function() {
+                forceInputStylesBaseweb();
+            }, 10);
+        }
+    });
+    
+    // LISTENER PARA ANIMATIONSTART (detecta animações de autopreenchimento)
+    document.addEventListener('animationstart', function(e) {
+        if (e.animationName === 'autofill') {
+            setTimeout(forceInputStylesBaseweb, 10);
+        }
+    });
+    </script>
     """, unsafe_allow_html=True)

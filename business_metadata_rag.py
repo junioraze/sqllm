@@ -1,0 +1,468 @@
+"""
+Business Metadata RAG - Sistema de Recuperação de Metadados de Negócio
+Versão 2.0 - Estrutura JSON aprimorada
+"""
+
+import os
+import json
+import hashlib
+import duckdb
+import google.generativeai as genai
+from typing import List, Dict, Any, Optional
+from dataclasses import dataclass, field
+from datetime import datetime
+import math
+
+
+@dataclass
+class TableMetadata:
+    """Estrutura otimizada para metadados de tabela"""
+    table_name: str
+    table_id: str
+    bigquery_table: str
+    description: str
+    domain: str
+    
+    # Regras organizadas por prioridade
+    critical_rules: List[Dict[str, Any]] = field(default_factory=list)
+    query_rules: List[Dict[str, Any]] = field(default_factory=list)
+    
+    # Campos organizados por categoria
+    temporal_fields: List[Dict[str, Any]] = field(default_factory=list)
+    dimension_fields: List[Dict[str, Any]] = field(default_factory=list)
+    metric_fields: List[Dict[str, Any]] = field(default_factory=list)
+    filter_fields: List[Dict[str, Any]] = field(default_factory=list)
+    
+    # Exemplos organizados por tipo
+    usage_examples: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
+    
+    # Contexto otimizado para RAG
+    business_context: str = ""
+    full_content: str = ""
+    last_updated: datetime = field(default_factory=datetime.now)
+
+
+class BusinessMetadataRAGV2:
+    """Sistema RAG melhorado para metadados de negócio"""
+    
+    def __init__(self, config_path: str = "tables_config.json", cache_db_path: str = "cache.db"):
+        self.config_path = config_path
+        self.cache_db_path = cache_db_path
+        self.embedding_model = "text-embedding-004"
+        
+        # Configura Gemini (opcional para embeddings)
+        try:
+            api_key = os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
+            if not api_key:
+                try:
+                    from config import GOOGLE_API_KEY
+                    api_key = GOOGLE_API_KEY
+                except:
+                    pass
+            
+            if api_key:
+                genai.configure(api_key=api_key)
+                self._has_genai = True
+            else:
+                print("Aviso: Sem API key do Gemini, embeddings não funcionarão")
+                self._has_genai = False
+        except:
+            self._has_genai = False
+        
+        self._init_cache_db()
+    
+    def _init_cache_db(self):
+        """Inicializa banco de cache"""
+        with duckdb.connect(self.cache_db_path) as conn:
+            # Cache de metadados
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS business_metadata_v2 (
+                    table_name VARCHAR PRIMARY KEY,
+                    table_id VARCHAR NOT NULL,
+                    bigquery_table VARCHAR NOT NULL,
+                    description VARCHAR NOT NULL,
+                    domain VARCHAR NOT NULL,
+                    business_context TEXT NOT NULL,
+                    full_content TEXT NOT NULL,
+                    content_hash VARCHAR NOT NULL,
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Cache de embeddings
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS business_embeddings_v2 (
+                    id VARCHAR PRIMARY KEY,
+                    table_name VARCHAR NOT NULL,
+                    content_hash VARCHAR NOT NULL,
+                    embedding_json TEXT NOT NULL,
+                    similarity_threshold DOUBLE DEFAULT 0.7,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (table_name) REFERENCES business_metadata_v2(table_name)
+                )
+            """)
+    
+    def load_config(self) -> Dict[str, Any]:
+        """Carrega configuração do arquivo JSON"""
+        if not os.path.exists(self.config_path):
+            raise FileNotFoundError(f"Arquivo de configuração não encontrado: {self.config_path}")
+        
+        with open(self.config_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    
+    def extract_table_metadata(self) -> List[TableMetadata]:
+        """Extrai metadados das tabelas da configuração JSON"""
+        config = self.load_config()
+        metadata_list = []
+        
+        # Suporte para formatos v1 e v2
+        tables_data = config.get('tables', config)  # v1 tem 'tables', v2 tem tabelas direto
+        
+        for table_name, table_config in tables_data.items():
+            # Ignora chaves que não são tabelas
+            if not isinstance(table_config, dict):
+                continue
+                
+            metadata_section = table_config.get('metadata', {})
+            business_rules = table_config.get('business_rules', {})
+            fields = table_config.get('fields', {})
+            usage_examples = table_config.get('usage_examples', {})
+            
+            # Cria contexto de negócio otimizado
+            business_context = self._create_business_context(table_name, table_config)
+            
+            # Conteúdo completo para embedding
+            full_content = self._create_full_content(table_name, table_config)
+            
+            metadata = TableMetadata(
+                table_name=table_name,
+                table_id=metadata_section.get('table_id', table_name),
+                bigquery_table=metadata_section.get('bigquery_table', ''),
+                description=metadata_section.get('description', ''),
+                domain=metadata_section.get('domain', ''),
+                critical_rules=business_rules.get('critical_rules', []),
+                query_rules=business_rules.get('query_rules', []),
+                temporal_fields=fields.get('temporal', []),
+                dimension_fields=fields.get('dimensions', []),
+                metric_fields=fields.get('metrics', []),
+                filter_fields=fields.get('filters', []),
+                usage_examples=usage_examples,
+                business_context=business_context,
+                full_content=full_content,
+                last_updated=datetime.now()
+            )
+            
+            metadata_list.append(metadata)
+        
+        return metadata_list
+    
+    def _create_business_context(self, table_name: str, table_config: Dict[str, Any]) -> str:
+        """Cria contexto de negócio otimizado para o RAG"""
+        metadata = table_config.get('metadata', {})
+        business_rules = table_config.get('business_rules', {})
+        fields = table_config.get('fields', {})
+        
+        # Regras críticas
+        critical_rules = []
+        for rule in business_rules.get('critical_rules', []):
+            rule_text = rule.get('rule', rule.get('description', ''))
+            context = rule.get('context', '')
+            critical_rules.append(f"• {rule_text}: {context}")
+        
+        # Campos principais do formato v2
+        principal_fields = []
+        
+        # Campos temporais (formato v2)
+        for field in fields.get('temporal_fields', []):
+            name = field.get('name')
+            desc = field.get('description')
+            extracts = field.get('common_extracts', [])
+            principal_fields.append(f"• {name}: {desc}")
+            if extracts:
+                principal_fields.append(f"  Extrações: {', '.join(extracts[:3])}")
+        
+        # Campos de dimensão (formato v2)  
+        for field in fields.get('dimension_fields', []):
+            name = field.get('name')
+            desc = field.get('description')
+            pattern = field.get('search_pattern', '')
+            principal_fields.append(f"• {name}: {desc}")
+            if pattern:
+                principal_fields.append(f"  Padrão: {pattern}")
+        
+        # Campos métricos (formato v2)
+        for field in fields.get('metric_fields', []):
+            name = field.get('name')
+            desc = field.get('description')
+            priority = field.get('priority', '')
+            principal_fields.append(f"• {name}: {desc}")
+            if priority == 'alta':
+                principal_fields.append(f"  ⚠️ PRIORIDADE ALTA")
+        
+        context = f"""
+Tabela: {table_name} ({metadata.get('bigquery_table', table_name)})
+Descrição: {metadata.get('description', '')}
+Domínio: {metadata.get('domain', '')}
+
+=== REGRAS CRÍTICAS ===
+{chr(10).join(critical_rules[:8])}
+
+=== CAMPOS PRINCIPAIS ===
+{chr(10).join(principal_fields[:15])}
+""".strip()
+        
+        return context
+
+    def _create_full_content(self, table_name: str, table_config: Dict[str, Any]) -> str:
+        """Cria conteúdo completo para embedding"""
+        metadata = table_config.get('metadata', {})
+        business_rules = table_config.get('business_rules', {})
+        fields = table_config.get('fields', {})
+        usage_examples = table_config.get('usage_examples', {})
+        
+        # Extrai todas as regras
+        all_rules = []
+        for rule in business_rules.get('critical_rules', []):
+            all_rules.append(rule.get('description', ''))
+        for rule in business_rules.get('query_rules', []):
+            all_rules.append(rule.get('description', ''))
+        
+        # Extrai todos os campos
+        all_fields = []
+        for category_fields in fields.values():
+            if isinstance(category_fields, list):
+                for field in category_fields:
+                    if isinstance(field, dict):
+                        all_fields.append(f"{field.get('field', '')} {field.get('description', '')}")
+        
+        # Extrai exemplos
+        all_examples = []
+        for category_examples in usage_examples.values():
+            if isinstance(category_examples, list):
+                for example in category_examples:
+                    if isinstance(example, dict):
+                        all_examples.append(example.get('description', ''))
+        
+        content = f"""
+        Tabela: {table_name}
+        Descrição: {metadata.get('description', '')}
+        Domínio: {metadata.get('domain', '')}
+        
+        Regras: {' '.join(all_rules)}
+        
+        Campos: {' '.join(all_fields)}
+        
+        Exemplos: {' '.join(all_examples)}
+        """.strip()
+        
+        return content
+    
+    def _generate_embedding(self, text: str) -> List[float]:
+        """Gera embedding para um texto"""
+        if not self._has_genai:
+            return []
+            
+        try:
+            result = genai.embed_content(
+                model=f"models/{self.embedding_model}",
+                content=text,
+                task_type="retrieval_document"
+            )
+            return result['embedding']
+        except Exception as e:
+            print(f"Erro ao gerar embedding: {e}")
+            return []
+    
+    def _cosine_similarity(self, a: List[float], b: List[float]) -> float:
+        """Calcula similaridade cosseno entre dois vetores"""
+        if not a or not b or len(a) != len(b):
+            return 0.0
+        
+        dot_product = sum(x * y for x, y in zip(a, b))
+        norm1 = math.sqrt(sum(x * x for x in a))
+        norm2 = math.sqrt(sum(x * x for x in b))
+        
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+        
+        return dot_product / (norm1 * norm2)
+    
+    def store_metadata(self, metadata: TableMetadata) -> bool:
+        """Armazena metadados no cache"""
+        try:
+            content_hash = hashlib.md5(metadata.full_content.encode()).hexdigest()
+            
+            with duckdb.connect(self.cache_db_path) as conn:
+                # Verifica se já existe e se precisa atualizar
+                existing = conn.execute(
+                    "SELECT content_hash FROM business_metadata_v2 WHERE table_name = ?",
+                    [metadata.table_name]
+                ).fetchone()
+                
+                if existing and existing[0] == content_hash:
+                    return True  # Não mudou, não precisa atualizar
+                
+                # Remove registros antigos
+                conn.execute("DELETE FROM business_embeddings_v2 WHERE table_name = ?", [metadata.table_name])
+                conn.execute("DELETE FROM business_metadata_v2 WHERE table_name = ?", [metadata.table_name])
+                
+                # Insere metadados
+                conn.execute("""
+                    INSERT INTO business_metadata_v2 
+                    (table_name, table_id, bigquery_table, description, domain, business_context, full_content, content_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, [
+                    metadata.table_name, metadata.table_id, metadata.bigquery_table,
+                    metadata.description, metadata.domain, metadata.business_context,
+                    metadata.full_content, content_hash
+                ])
+                
+                # Gera e armazena embedding
+                embedding = self._generate_embedding(metadata.full_content)
+                if embedding:
+                    embedding_id = f"{metadata.table_name}_{content_hash}"
+                    conn.execute("""
+                        INSERT INTO business_embeddings_v2 
+                        (id, table_name, content_hash, embedding_json)
+                        VALUES (?, ?, ?, ?)
+                    """, [
+                        embedding_id, metadata.table_name, content_hash, json.dumps(embedding)
+                    ])
+                
+                return True
+                
+        except Exception as e:
+            print(f"Erro ao armazenar metadados para {metadata.table_name}: {e}")
+            return False
+    
+    def update_metadata_cache(self):
+        """Atualiza cache completo de metadados"""
+        try:
+            metadata_list = self.extract_table_metadata()
+            
+            with duckdb.connect(self.cache_db_path) as conn:
+                for metadata in metadata_list:
+                    success = self.store_metadata(metadata)
+                    status = "[OK]" if success else "[ERRO]"
+                    print(f"{status} {metadata.table_name}")
+                
+                print(f"[OK] Cache atualizado para {len(metadata_list)} tabelas")
+                
+        except Exception as e:
+            print(f"Erro ao atualizar cache: {e}")
+    
+    def retrieve_relevant_context(self, user_query: str, max_results: int = 3, similarity_threshold: float = 0.3) -> List[str]:
+        """Recupera contexto relevante baseado na consulta do usuário"""
+        try:
+            # Gera embedding da consulta
+            query_embedding = self._generate_embedding(user_query)
+            if not query_embedding:
+                return []
+            
+            contexts = []
+            
+            with duckdb.connect(self.cache_db_path) as conn:
+                # Busca embeddings e metadados
+                results = conn.execute("""
+                    SELECT m.table_name, m.business_context, e.embedding_json
+                    FROM business_metadata_v2 m
+                    JOIN business_embeddings_v2 e ON m.table_name = e.table_name
+                    ORDER BY m.table_name
+                """).fetchall()
+                
+                similarities = []
+                for table_name, business_context, embedding_json in results:
+                    try:
+                        stored_embedding = json.loads(embedding_json)
+                        similarity = self._cosine_similarity(query_embedding, stored_embedding)
+                        
+                        if similarity >= similarity_threshold:
+                            similarities.append((similarity, table_name, business_context))
+                    except:
+                        continue
+                
+                # Ordena por similaridade
+                similarities.sort(reverse=True)
+                
+                # Retorna os mais relevantes
+                for similarity, table_name, business_context in similarities[:max_results]:
+                    contexts.append(f"=== {table_name} ===\\n{business_context}")
+            
+            return contexts
+            
+        except Exception as e:
+            print(f"Erro ao recuperar contexto: {e}")
+            return []
+
+
+def get_optimized_business_context(user_query: str, max_results: int = 2) -> str:
+    """Função de conveniência para obter contexto otimizado"""
+    try:
+        rag = BusinessMetadataRAGV2()
+        
+        # Verifica se há cache válido
+        with duckdb.connect(rag.cache_db_path) as conn:
+            count = conn.execute("SELECT COUNT(*) FROM business_metadata_v2").fetchone()[0]
+            
+            if count == 0:
+                print("Cache vazio, atualizando...")
+                rag.update_metadata_cache()
+        
+        contexts = rag.retrieve_relevant_context(user_query, max_results)
+        
+        if not contexts:
+            # Fallback: retorna contexto da primeira tabela disponível
+            with duckdb.connect(rag.cache_db_path) as conn:
+                fallback_result = conn.execute("""
+                    SELECT table_name, business_context
+                    FROM business_metadata_v2
+                    LIMIT 1
+                """).fetchone()
+                
+                if fallback_result:
+                    table_name, business_context = fallback_result
+                    contexts = [f"=== {table_name} ===\n{business_context}"]
+                else:
+                    return "Nenhum contexto relevante encontrado."
+        
+        # Estimativa de tokens (aproximadamente 4 caracteres por token)
+        full_context = "\\n\\n".join(contexts)
+        estimated_tokens = len(full_context) // 4
+        
+        result = f"""=== METADADOS RELEVANTES PARA SUA CONSULTA ===
+
+{chr(10).join(contexts)}
+
+=== EXEMPLOS RELEVANTES ===
+1. Para consultas com múltiplas dimensões, use QUALIFY com ROW_NUMBER()
+2. Para comparações temporais, use EXTRACT(YEAR/MONTH FROM nf_dtemis)
+3. SEMPRE use 'nf_vl' para valores monetários
+4. Para buscas de texto, use UPPER(campo) LIKE UPPER('%valor%')
+
+Tokens estimados: {estimated_tokens}
+Tabelas relevantes: {', '.join([ctx.split('===')[1].strip() for ctx in contexts if '===' in ctx])}
+"""
+        
+        return result
+        
+    except Exception as e:
+        return f"Erro ao obter contexto: {e}"
+
+
+# Instância global para uso no sistema
+business_rag = BusinessMetadataRAGV2()
+
+def setup_business_rag():
+    """Inicializa o sistema RAG de negócios"""
+    print("🔄 Inicializando Business RAG v2...")
+    business_rag.update_metadata_cache()
+    print("✅ Business RAG v2 inicializado!")
+
+
+if __name__ == "__main__":
+    # Teste básico
+    rag = BusinessMetadataRAGV2()
+    rag.update_metadata_cache()
+    
+    context = get_optimized_business_context("vendas por vendedor")
+    print(context)
