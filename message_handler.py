@@ -94,6 +94,7 @@ class MessageHandler:
             # Etapa 1: Verificar oportunidade de reutilização
             self._start_timing("verificacao_reuso", typing_placeholder)
             should_reuse, reuse_data = self._check_reuse_opportunity(prompt)
+            should_reuse, reuse_data = False, False # REVER
             self._end_timing("verificacao_reuso")
             
             if should_reuse and reuse_data:

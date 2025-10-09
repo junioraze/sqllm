@@ -22,37 +22,27 @@ from ai_metrics import ai_metrics
 
 def initialize_model():
     """
-    Inicializa o modelo Gemini com sistema RAG otimizado
+    Inicializa o modelo Gemini com sistema RAG otimizado.
     """
-    
+
     # Instrução base otimizada (sem metadados fixos para economizar tokens)
-    base_instruction = f"""
-Você é um assistente de dados especializado em análise de negócios.
-
-REGRAS ABSOLUTAS:
-1. SEMPRE use a função query_business_data para consultar dados
-2. NUNCA mostre a consulta SQL diretamente ao usuário
-3. Para análises temporais: use EXTRACT() explicitamente no SELECT
-4. Use APENAS as tabelas disponíveis no sistema
-5. Para perguntas com "E" ou múltiplas intenções, use CTE (WITH)
-6. Para rankings, use QUALIFY com ROW_NUMBER() OVER()
-7. Para campos de texto, use LIKE e UPPER() para buscas
-8. Sempre inclua PROJECT_ID e DATASET_ID: {PROJECT_ID}.{DATASET_ID}.tabela
-9. SEMPRE use aliases descritivos no SELECT: AS mes, AS valor_total, AS quantidade
-
-OBRIGATÓRIO PARA GRÁFICOS:
-- EXTRACT(MONTH FROM nf_dtemis) AS mes
-- SUM(nf_vl) AS valor_total  
-- COUNT(*) AS quantidade
-- EXTRACT(YEAR FROM nf_dtemis) AS ano
-
-ESTRATÉGIA CTE PARA CONSULTAS COMPLEXAS:
-- QUANDO USAR: Toda pergunta com múltiplas intenções (contém "E", "MAIS", "TAMBÉM")
-- ESTRUTURA: CTE identifica subset → SELECT principal usa CTE para análise
-- EXEMPLO: "top 5 modelos E evolução" = CTE(top 5) + SELECT(evolução dos top 5)
-
-O sistema fornecerá contexto específico baseado na sua pergunta para otimizar tokens.
-    """.strip()
+    base_instruction = (
+        "Você é um assistente de dados especializado em análise de negócios.\n"
+        "\nREGRAS ABSOLUTAS:\n"
+        "1. SEMPRE use a função query_business_data para consultar dados\n"
+        "2. NUNCA mostre a consulta SQL diretamente ao usuário\n"
+        "3. Para análises temporais: use EXTRACT() explicitamente no SELECT + PARSE_DATE('%d/%m/%Y', dt_do_contexto) garantindo que qualquer data no formato de STRING não gere erro\n"
+        "4. Use APENAS as tabelas disponíveis no sistema\n"
+        "5. Para perguntas com 'E' ou múltiplas intenções, use CTE (WITH)\n"
+        "6. Para rankings, use QUALIFY com ROW_NUMBER() OVER()\n"
+        "OBRIGATÓRIO PARA GRÁFICOS:\n"
+        "- EXTRACT(MONTH FROM PARSE_DATE('%d/%m/%Y', dt_do_contexto)) AS mes\n"
+        "\nESTRATÉGIA CTE PARA CONSULTAS COMPLEXAS:\n"
+        "- QUANDO USAR: Toda pergunta com múltiplas intenções (contém 'E', 'MAIS', 'TAMBÉM')\n"
+        "- ESTRUTURA: CTE identifica subset → SELECT principal usa CTE para análise\n"
+        "- EXEMPLO: 'top 5 modelos E evolução' = CTE(top 5) + SELECT(evolução dos top 5)\n"
+        "\nO sistema fornecerá contexto específico baseado na sua pergunta para otimizar tokens."
+    )
     
     # Mapeamento de tabelas disponíveis
     full_table_mapping = {}
@@ -61,8 +51,7 @@ O sistema fornecerá contexto específico baseado na sua pergunta para otimizar 
     for table_name, config in TABLES_CONFIG.items():
         full_table_id = f"{PROJECT_ID}.{DATASET_ID}.{table_name}"
         full_table_mapping[full_table_id] = table_name
-    
-    # Função de consulta otimizada
+
     query_func = FunctionDeclaration(
         name="query_business_data",
         description=tables_description,
@@ -71,39 +60,38 @@ O sistema fornecerá contexto específico baseado na sua pergunta para otimizar 
             "properties": {
                 "full_table_id": {
                     "type": "string",
-                    "description": f"ID completo da tabela no BigQuery (PROJECT.DATASET.TABLE). Opções disponíveis: {', '.join(full_table_mapping.keys())}",
-                    "enum": list(full_table_mapping.keys())
+                    "description": f"ID completo da tabela no BigQuery (PROJECT.DATASET.TABLE). Opções disponíveis: {', '.join(full_table_mapping.keys())}"
                 },
-                "with_cte": {
+                "cte": {
                     "type": "string",
                     "description": "CTE (Common Table Expression) para consultas complexas. Use para perguntas com múltiplas intenções."
                 },
                 "select": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Campos para SELECT com ALIASES obrigatórios para gráficos. Use AS mes, AS valor_total, AS quantidade. Exemplo: ['EXTRACT(MONTH FROM nf_dtemis) AS mes', 'SUM(nf_vl) AS valor_total']",
+                    "description": "Campos para SELECT com ALIASES obrigatórios para gráficos. Use AS mes, AS valor_total, AS quantidade. Exemplo: ['EXTRACT(MONTH FROM nf_dtemis) AS mes', 'SUM(nf_vl) AS valor_total']"
                 },
                 "where": {
                     "type": "string",
-                    "description": "Condições WHERE (SQL puro)",
+                    "description": "Condições WHERE (SQL puro)"
                 },
                 "group_by": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Campos para GROUP BY (DEVEM estar no SELECT)",
+                    "description": "Campos para GROUP BY (DEVEM estar no SELECT)"
                 },
                 "order_by": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Campos para ORDER BY",
+                    "description": "Campos para ORDER BY"
                 },
                 "qualify": {
                     "type": "string",
-                    "description": "QUALIFY (para windows functions - ROW_NUMBER, RANK, etc.)",
+                    "description": "QUALIFY (para windows functions - ROW_NUMBER, RANK, etc.)"
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "LIMIT (número máximo de registros). NUNCA use junto com QUALIFY",
+                    "description": "LIMIT (número máximo de registros). NUNCA use junto com QUALIFY"
                 }
             },
             "required": ["full_table_id", "select"]
@@ -113,7 +101,7 @@ O sistema fornecerá contexto específico baseado na sua pergunta para otimizar 
     model = genai.GenerativeModel(
         model_name="gemini-2.0-flash-exp",
         generation_config={
-            "temperature": 0,
+            "temperature": 0.2,
             "top_p": 0.95,
             "top_k": 40,
             "max_output_tokens": 8192,
@@ -132,15 +120,14 @@ def refine_with_gemini_rag(model, user_question: str, user_id: str = "default"):
     
     # Inicia sessão de métricas
     session_id = ai_metrics.start_session(user_id)
-    
     try:
         # Obtém contexto otimizado do RAG de negócios
         rag_context = get_optimized_business_context(user_question)
-        
+
         # Obtém orientações SQL específicas
         from sql_pattern_rag import get_sql_guidance_for_query
         sql_guidance = get_sql_guidance_for_query(user_question)
-        
+
         # Cria prompt otimizado com ambos os contextos
         optimized_prompt = f"""
 {user_question}
@@ -173,18 +160,17 @@ REGRAS PARA COMPARAÇÕES TEMPORAIS:
 - Exemplo para "Compare vendas entre 2023 e 2024": SELECT EXTRACT(MONTH FROM nf_dtemis) AS mes, EXTRACT(YEAR FROM nf_dtemis) AS ano, SUM(nf_vl) AS valor_total
 - Para qualquer análise temporal que envolva múltiplos anos: OBRIGATÓRIO incluir ano na seleção
 """
-        
+
         # Processa com Gemini
         try:
             response = model.generate_content(optimized_prompt)
         except Exception as e:
             print(f"ERRO GEMINI: {e}")
             return f"Erro ao processar consulta: {str(e)}", None
-        
+
         # Extrai resposta - verificação simples
         if hasattr(response, 'candidates') and response.candidates:
             candidate = response.candidates[0]
-            
             # Verifica se tem texto direto
             if hasattr(candidate, 'content') and candidate.content:
                 if hasattr(candidate.content, 'parts') and candidate.content.parts:
@@ -361,8 +347,10 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
     REGRAS PARA GRÁFICOS (se solicitado):
     - Para dados temporais (mês/ano): GRAPH-TYPE: line | X-AXIS: [coluna_tempo] | Y-AXIS: [métrica] | COLOR: [dimensão_comparação]
     - Para dados categóricos: GRAPH-TYPE: bar | X-AXIS: [categoria] | Y-AXIS: [valor]
-    - SEMPRE configure adequadamente baseado nos dados fornecidos
-    
+    - Para cor sempre use 
+    - O parâmetro 'color' do gráfico deve ser sempre o nome de uma coluna da consulta, ou None se não houver coluna adequada.
+    - Exemplos de uso correto: color='ano' (se existir coluna 'ano')
+    - color normalmente é atribuido a coluna que serve como uma segunda dimensão ou se só tiver uma dimensão ela mesma.
     REGRA PARA EXPORTAÇÃO (se solicitada):
     - Inclua: EXPORT-INFO: FORMATO: excel
     

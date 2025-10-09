@@ -20,7 +20,6 @@ else:
     if 'page_label' not in st.session_state:
         st.session_state.page_label = "🤖 Agente"
 
-from style import MOBILE_IFRAME_CHAT
 from deepseek_theme import apply_deepseek_theme, create_usage_indicator, show_typing_animation, get_login_theme, get_chat_theme, render_theme_selector, apply_selected_theme, get_enhanced_cards_theme, get_expert_login_theme
 from image_utils import get_background_style, get_login_background_style  # Importa utilitários de imagem
 from gemini_handler import initialize_model, refine_with_gemini, should_reuse_data, initialize_rag_system

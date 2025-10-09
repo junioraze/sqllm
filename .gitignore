@@ -17,6 +17,6 @@ venv/
 cache.db
 # Ignore DuckDB files   
 *.duckdb
-# Ignore SQL files      
 *.db
 *.wal
+# Ignore SQL files      

@@ -2,6 +2,37 @@ import duckdb
 import json
 from datetime import datetime
 
+# test_rag.py
+from business_metadata_rag import BusinessMetadataRAGV2
+
+def test_rag_system():
+    rag = BusinessMetadataRAGV2()
+    
+    print("=== TESTE DE CARREGAMENTO ===")
+    metadata_list = rag.extract_table_metadata()
+    print(f"Tabelas carregadas: {len(metadata_list)}")
+    for metadata in metadata_list:
+        print(f"- {metadata.table_name}: {metadata.domain}")
+    
+    print("\n=== TESTE DE CONSULTAS ===")
+    test_queries = [
+        "vendas de veículos",
+        "contratos de consórcio ativos", 
+        "histórico de vendas de cotas",
+        "dados financeiros e orçamento"
+    ]
+    
+    for query in test_queries:
+        print(f"\n--- Consulta: '{query}' ---")
+        contexts = rag.retrieve_relevant_context(query, similarity_threshold=0.3)
+        if contexts:
+            for context in contexts:
+                table_name = context.split('===')[1].strip()
+                print(f"Tabela relevante: {table_name}")
+        else:
+            print("Nenhum contexto relevante encontrado")
+
+
 def query_cache():
     """Executa consultas úteis no cache DuckDB"""
     
@@ -394,6 +425,6 @@ def query_cache():
         import traceback
         print("🐛 Detalhes do erro:")
         traceback.print_exc()
-
+    
 if __name__ == "__main__":
-    query_cache()
+    test_rag_system()

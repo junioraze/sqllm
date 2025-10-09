@@ -70,80 +70,57 @@ class SQLPatternRAG:
             print(f"❌ Erro ao carregar padrões SQL: {e}")
             self.patterns = {}
     
-    def identify_sql_pattern(self, user_query: str) -> List[Tuple[str, float]]:
+    def identify_sql_pattern(self, user_query: str, min_score: float = 1.5) -> List[Tuple[str, float]]:
         """
-        Identifica quais padrões SQL são mais relevantes para a pergunta
-        
-        Args:
-            user_query (str): Pergunta do usuário
-            
-        Returns:
-            List[Tuple[str, float]]: Lista de (pattern_id, score) ordenada por relevância
+        Identifica padrões SQL mais relevantes para a pergunta, com score mínimo mais restritivo
         """
         query_lower = user_query.lower()
         pattern_scores = []
-        
         for pattern_id, pattern in self.patterns.items():
             score = 0.0
-            
             # Score baseado em keywords
             for keyword in pattern.keywords:
                 if keyword.lower() in query_lower:
                     score += 1.0
-            
             # Score baseado em use cases
             for use_case in pattern.use_cases:
-                # Calcula similaridade simples baseada em palavras comuns
                 use_case_words = set(use_case.lower().split())
                 query_words = set(query_lower.split())
                 common_words = use_case_words.intersection(query_words)
                 if common_words:
                     score += len(common_words) * 0.5
-            
-            # Normalize score
-            if score > 0:
+            # Score mínimo mais restritivo
+            if score >= min_score:
                 pattern_scores.append((pattern_id, score))
-        
-        # Ordena por score (maior primeiro)
         pattern_scores.sort(key=lambda x: x[1], reverse=True)
         return pattern_scores
     
-    def get_sql_guidance(self, user_query: str, top_k: int = 3) -> str:
+    def get_sql_guidance(self, user_query: str, top_k: int = 2, min_score: float = 1.5) -> str:
         """
         Retorna orientações SQL específicas para a pergunta do usuário
         
         Args:
             user_query (str): Pergunta do usuário
             top_k (int): Número máximo de padrões a retornar
-            
+            min_score (float): Score mínimo para considerar padrão relevante
         Returns:
             str: Contexto SQL formatado para o Gemini
         """
-        # Identifica padrões relevantes
-        relevant_patterns = self.identify_sql_pattern(user_query)
-        
+        relevant_patterns = self.identify_sql_pattern(user_query, min_score=min_score)
         if not relevant_patterns:
             return self._get_general_sql_guidance()
-        
-        # Monta contexto
         context_parts = []
         context_parts.append("ORIENTAÇÕES SQL ESPECÍFICAS PARA SUA PERGUNTA:")
         context_parts.append("")
-        
-        # Adiciona padrões mais relevantes
         for i, (pattern_id, score) in enumerate(relevant_patterns[:top_k]):
             pattern = self.patterns[pattern_id]
-            
             context_parts.append(f"{i+1}. PADRÃO: {pattern.description.upper()}")
             context_parts.append(f"   Tipo: {pattern.pattern_type}")
             context_parts.append(f"   Template: {pattern.sql_template}")
             context_parts.append(f"   Exemplo: {pattern.example}")
             context_parts.append("")
-        
-        # Adiciona práticas gerais do BigQuery
         context_parts.append("PRÁTICAS RECOMENDADAS BIGQUERY:")
         context_parts.extend(self._get_bigquery_best_practices())
-        
         return "\n".join(context_parts)
     
     def _get_general_sql_guidance(self) -> str:
