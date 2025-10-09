@@ -3,9 +3,12 @@
 
 import streamlit as st
 import re
+import json
+import os
 from typing import Tuple, Dict, Optional
 from user_database import db
 from deepseek_theme import get_login_theme, get_enhanced_cards_theme, get_expert_login_theme
+from config import is_empresarial_mode
 
 class AuthSystem:
     @staticmethod
@@ -34,8 +37,78 @@ class AuthSystem:
             return False, "Nome de usuário deve conter apenas letras, números, _ ou -"
         return True, "Nome de usuário válido"
 
+def setup_empresarial_plan(user_id):
+    """Configura plano empresarial com limite de 100 consultas"""
+    try:
+        # Verifica se plano empresarial já existe
+        plans = db.get_available_plans()
+        empresarial_plan = None
+        for plan in plans:
+            if plan['plan_id'] == 'empresarial':
+                empresarial_plan = plan
+                break
+        
+        # Se não existe, cria o plano empresarial
+        if not empresarial_plan:
+            db.create_plan(
+                plan_id='empresarial',
+                name='Empresarial',
+                description='Plano empresarial com 100 consultas diárias',
+                price=0,
+                daily_limit=100,
+                features='["100 consultas por dia", "Acesso completo", "Interface simplificada"]',
+                priority_support=True
+            )
+            print("✅ Plano empresarial criado")
+        
+        # Atribui plano empresarial ao usuário
+        db.assign_plan_to_user(user_id, 'empresarial')
+        print(f"✅ Plano empresarial atribuído ao usuário {user_id}")
+        
+    except Exception as e:
+        print(f"❌ Erro ao configurar plano empresarial: {e}")
+
+def ensure_empresarial_user():
+    """Garante que o usuário empresarial existe (mas não faz login automático)"""
+    if not is_empresarial_mode():
+        return
+        
+    try:
+        with open("credentials.json", "r", encoding="utf-8") as f:
+            credentials = json.load(f)
+        
+        email = credentials.get("login", "admin@empresa.com")
+        password = credentials.get("password", "123456")
+        
+        # Verifica se usuário já existe
+        existing_user = db.get_user_by_email(email)
+        if not existing_user:
+            # Cria usuário empresarial
+            username = email.split("@")[0]  # Usa parte do email como username
+            success, result = db.create_user(username, email, password)
+            if success:
+                # Busca o usuário criado para obter o ID
+                created_user = db.get_user_by_email(email)
+                if created_user:
+                    print(f"✅ Usuário empresarial criado: {email}")
+                    # Cria e atribui plano empresarial com limite de 100
+                    setup_empresarial_plan(created_user['id'])
+            else:
+                print(f"❌ Erro ao criar usuário: {result}")
+        else:
+            # Verifica se já tem plano empresarial
+            subscription = db.get_user_subscription(existing_user['id'])
+            if not subscription or subscription['plan_id'] != 'empresarial':
+                setup_empresarial_plan(existing_user['id'])
+        
+    except Exception as e:
+        print(f"❌ Erro ao configurar usuário empresarial: {e}")
+
 def render_auth_system():
     """Renderiza sistema de autenticação"""
+    
+    # Garante que usuário empresarial existe (se estiver no modo empresarial)
+    ensure_empresarial_user()
     
     # Se já está autenticado, não mostra tela de login
     if st.session_state.get('authenticated', False):
@@ -68,21 +141,26 @@ def render_auth_system():
         </div>
     """, unsafe_allow_html=True)
     
-    # Tabs para Login e Registro
-    if st.session_state.get('redirect_to_login', False):
-        st.session_state['redirect_to_login'] = False
-        default_tab = 0  # Login tab
-        st.success("🎉 Conta criada! Faça login com suas credenciais:")
-    else:
-        default_tab = 0
-    
-    tab1, tab2 = st.tabs(["🔑 Login", "👤 Criar Conta"])
-    
-    with tab1:
+    # MODO EMPRESARIAL: Apenas tela de login, sem cadastro
+    if is_empresarial_mode():
+        st.subheader("🔑 Login Empresarial")
         render_login_form()
-    
-    with tab2:
-        render_register_form()
+    else:
+        # MODO NORMAL: Tabs para Login e Registro
+        if st.session_state.get('redirect_to_login', False):
+            st.session_state['redirect_to_login'] = False
+            default_tab = 0  # Login tab
+            st.success("🎉 Conta criada! Faça login com suas credenciais:")
+        else:
+            default_tab = 0
+        
+        tab1, tab2 = st.tabs(["🔑 Login", "👤 Criar Conta"])
+        
+        with tab1:
+            render_login_form()
+        
+        with tab2:
+            render_register_form()
     
     return False
 
@@ -91,7 +169,7 @@ def render_login_form():
     st.subheader("Fazer Login")
     
     with st.form("login_form"):
-        username = st.text_input("Nome de usuário:", placeholder="Digite seu nome de usuário")
+        username = st.text_input("Nome de usuário ou Email:", placeholder="Digite seu nome de usuário ou email")
         password = st.text_input("Senha:", type="password", placeholder="Digite sua senha")
         submit_login = st.form_submit_button("🔑 Entrar", use_container_width=True)
         
@@ -113,7 +191,7 @@ def render_login_form():
                 st.success(f"✅ Bem-vindo, {user_data['username']}!")
                 st.rerun()
             else:
-                st.error("❌ Nome de usuário ou senha incorretos")
+                st.error("❌ Nome de usuário/email ou senha incorretos")
 
 def render_register_form():
     """Formulário de registro"""
@@ -141,8 +219,6 @@ def render_register_form():
                 for feature in features:
                     st.write(f"• {feature}")
         
-        st.info("💡 Você começará com o plano **Gratuito** e poderá fazer upgrade a qualquer momento!")
-        
         submit_register = st.form_submit_button("👤 Criar Conta", use_container_width=True)
         
         if submit_register:
@@ -152,18 +228,18 @@ def render_register_form():
                 return
             
             if password != confirm_password:
-                st.error("❌ As senhas não coincidem")
+                st.error("❌ As senhas não conferem")
+                return
+            
+            # Valida email
+            if not AuthSystem.validate_email(email):
+                st.error("❌ Formato de email inválido")
                 return
             
             # Valida username
             valid_username, username_msg = AuthSystem.validate_username(username)
             if not valid_username:
                 st.error(f"❌ {username_msg}")
-                return
-            
-            # Valida email
-            if not AuthSystem.validate_email(email):
-                st.error("❌ Email inválido")
                 return
             
             # Valida senha
@@ -176,23 +252,11 @@ def render_register_form():
             success, message = db.create_user(username, email, password)
             
             if success:
-                st.success(f"✅ {message}")
                 st.success("🎉 Conta criada com sucesso!")
-                st.balloons()
-                
-                # Aguarda um momento e redireciona para a aba de login
-                st.info("🔄 Redirecionando para login...")
                 st.session_state['redirect_to_login'] = True
                 st.rerun()
             else:
                 st.error(f"❌ {message}")
-
-def logout_user():
-    """Faz logout do usuário"""
-    for key in ['authenticated', 'user_id', 'username', 'user_email']:
-        if key in st.session_state:
-            del st.session_state[key]
-    st.rerun()
 
 def get_current_user() -> Optional[Dict]:
     """Retorna dados do usuário atual"""
@@ -205,13 +269,20 @@ def get_current_user() -> Optional[Dict]:
         'email': st.session_state.get('user_email')
     }
 
+def logout_user():
+    """Faz logout do usuário"""
+    for key in ['authenticated', 'user_id', 'username', 'user_email', 'current_user']:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.rerun()
+
 def require_auth():
-    """Decorator para exigir autenticação"""
+    """Decorator para funções que precisam de autenticação"""
     def decorator(func):
         def wrapper(*args, **kwargs):
             if not st.session_state.get('authenticated', False):
                 st.error("❌ Você precisa estar logado para acessar esta funcionalidade")
-                return None
+                st.stop()
             return func(*args, **kwargs)
         return wrapper
     return decorator

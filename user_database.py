@@ -12,8 +12,21 @@ class UserDatabase:
     def __init__(self, db_path: str = "users_new.db"):
         """Inicializa conexão com DuckDB"""
         self.db_path = db_path
-        self.conn = duckdb.connect(db_path)
-        self._create_tables()
+        
+        # Garante que o diretório existe apenas se não for arquivo na raiz
+        if os.path.dirname(db_path):
+            os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
+        
+        try:
+            self.conn = duckdb.connect(db_path)
+            print(f"✅ Banco conectado: {os.path.abspath(db_path)}")
+            self._create_tables()
+        except Exception as e:
+            print(f"❌ Erro ao conectar com banco: {e}")
+            # Fallback para banco em memória
+            print("🔄 Usando banco em memória como fallback")
+            self.conn = duckdb.connect(":memory:")
+            self._create_tables()
 
     def _create_tables(self):
         """Cria as tabelas necessárias"""
@@ -161,16 +174,16 @@ class UserDatabase:
         except Exception as e:
             return False, f"Erro ao criar usuário: {str(e)}"
 
-    def authenticate_user(self, username: str, password: str) -> Tuple[bool, Optional[Dict]]:
-        """Autentica usuário"""
+    def authenticate_user(self, username_or_email: str, password: str) -> Tuple[bool, Optional[Dict]]:
+        """Autentica usuário por username ou email"""
         try:
             password_hash = self._hash_password(password)
             
             user = self.conn.execute("""
                 SELECT id, username, email, created_at, is_active
                 FROM users 
-                WHERE username = ? AND password_hash = ? AND is_active = true
-            """, [username, password_hash]).fetchone()
+                WHERE (username = ? OR email = ?) AND password_hash = ? AND is_active = true
+            """, [username_or_email, username_or_email, password_hash]).fetchone()
             
             if user:
                 return True, {
@@ -194,6 +207,27 @@ class UserDatabase:
                 FROM users 
                 WHERE username = ? AND is_active = true
             """, [username]).fetchone()
+            
+            if user:
+                return {
+                    'id': user[0],
+                    'username': user[1],
+                    'email': user[2],
+                    'created_at': user[3],
+                    'is_active': user[4]
+                }
+            return None
+        except:
+            return None
+
+    def get_user_by_email(self, email: str) -> Optional[Dict]:
+        """Obtém usuário pelo email"""
+        try:
+            user = self.conn.execute("""
+                SELECT id, username, email, created_at, is_active
+                FROM users 
+                WHERE email = ? AND is_active = true
+            """, [email]).fetchone()
             
             if user:
                 return {
@@ -326,7 +360,7 @@ class UserDatabase:
             plans = []
             for row in results:
                 plans.append({
-                    'id': row[0],
+                    'plan_id': row[0],  # Mudança: usando 'plan_id' em vez de 'id'
                     'name': row[1],
                     'description': row[2],
                     'price': row[3],
@@ -338,6 +372,19 @@ class UserDatabase:
             return plans
         except:
             return []
+
+    def create_plan(self, plan_id: str, name: str, description: str, price: float, 
+                   daily_limit: int, features: str, priority_support: bool = False) -> bool:
+        """Cria um novo plano de assinatura"""
+        try:
+            self.conn.execute("""
+                INSERT INTO subscription_plans (id, name, description, price, daily_limit, features, priority_support)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, [plan_id, name, description, price, daily_limit, features, priority_support])
+            return True
+        except Exception as e:
+            print(f"Erro ao criar plano: {e}")
+            return False
 
     def close(self):
         """Fecha conexão com banco"""

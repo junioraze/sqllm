@@ -4,6 +4,10 @@ from dotenv import load_dotenv
 
 load_dotenv(".env")
 
+def is_empresarial_mode():
+    """Verifica se está no modo empresarial"""
+    return os.getenv("EMPRESARIAL", "False").lower() == "true"
+
 def load_tables_config():
     """Carrega a configuração das tabelas do arquivo JSON"""
     try:

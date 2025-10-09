@@ -3,7 +3,7 @@ import os
 import json
 import traceback
 from cache_db import save_interaction, log_error, get_user_history, get_interaction_full_data
-from config import MAX_RATE_LIMIT, DATASET_ID, PROJECT_ID, TABLES_CONFIG, CLIENT_CONFIG, STANDARD_ERROR_MESSAGE
+from config import MAX_RATE_LIMIT, DATASET_ID, PROJECT_ID, TABLES_CONFIG, CLIENT_CONFIG, STANDARD_ERROR_MESSAGE, is_empresarial_mode
 
 # DEVE SER O PRIMEIRO COMANDO STREAMLIT (após importações)
 st.set_page_config(
@@ -100,42 +100,62 @@ with st.sidebar:
     current_theme = st.session_state.get('theme_mode', 'escuro')
     st.caption(f"💡 Tema {current_theme} ativo")
     
-    # 2. ASSINATURA
-    st.markdown("---")
-    st.markdown("### 💳 Assinatura")
+    # 2. ASSINATURA (só no modo não empresarial)
+    if not is_empresarial_mode():
+        st.markdown("---")
+        st.markdown("### 💳 Assinatura")
+        
+        current_user = get_current_user()
+        if current_user:
+            subscription_info = SubscriptionSystem.get_user_subscription_info(current_user['id'])
+            
+            # Mostra plano atual
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                st.write(f"**{subscription_info['name']}**")
+                st.write(f"R$ {subscription_info['price']:.2f}/mês")
+            with col2:
+                if st.button("⚙️", key="manage_plan", help="Gerenciar plano"):
+                    st.switch_page("pages/planos.py")
+            
+            # Botão de upgrade/planos
+            if subscription_info['plan_id'] == 'free':
+                if st.button("🚀 Fazer Upgrade", key="sidebar_upgrade", use_container_width=True):
+                    st.switch_page("pages/planos.py")
+            else:
+                if st.button("💎 Ver Planos", key="sidebar_plans", use_container_width=True):
+                    st.switch_page("pages/planos.py")
+
+            # 3. USO DIÁRIO (só no modo não empresarial)
+            st.markdown("### 📊 Uso Diário")
+            current_usage_count = SubscriptionSystem.get_daily_usage(current_user['id'])
+            st.markdown(create_usage_indicator(
+                current_usage_count, 
+                subscription_info['daily_limit'], 
+                subscription_info
+            ), unsafe_allow_html=True)
+        else:
+            st.error("❌ Sessão expirada. Faça login novamente.")
+            st.stop()
+    else:
+        # Modo empresarial: apenas indicador discreto de uso
+        st.markdown("---")
+        st.markdown("### 📊 Uso Diário")
+        current_user = get_current_user()
+        if current_user:
+            current_usage_count = SubscriptionSystem.get_daily_usage(current_user['id'])
+            subscription_info = SubscriptionSystem.get_user_subscription_info(current_user['id'])
+            st.write(f"**{current_usage_count} / {subscription_info['daily_limit']} consultas**")
+            progress = min(current_usage_count / subscription_info['daily_limit'], 1.0)
+            st.progress(progress)
+        else:
+            st.error("❌ Sessão expirada. Faça login novamente.")
+            st.stop()
     
+    # 4. USUÁRIO E LOGOUT
+    st.markdown("---")
     current_user = get_current_user()
     if current_user:
-        subscription_info = SubscriptionSystem.get_user_subscription_info(current_user['id'])
-        
-        # Mostra plano atual
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            st.write(f"**{subscription_info['name']}**")
-            st.write(f"R$ {subscription_info['price']:.2f}/mês")
-        with col2:
-            if st.button("⚙️", key="manage_plan", help="Gerenciar plano"):
-                st.switch_page("pages/planos.py")
-        
-        # Botão de upgrade/planos
-        if subscription_info['plan_id'] == 'free':
-            if st.button("🚀 Fazer Upgrade", key="sidebar_upgrade", use_container_width=True):
-                st.switch_page("pages/planos.py")
-        else:
-            if st.button("💎 Ver Planos", key="sidebar_plans", use_container_width=True):
-                st.switch_page("pages/planos.py")
-
-        # 3. USO DIÁRIO
-        st.markdown("### 📊 Uso Diário")
-        current_usage_count = SubscriptionSystem.get_daily_usage(current_user['id'])
-        st.markdown(create_usage_indicator(
-            current_usage_count, 
-            subscription_info['daily_limit'], 
-            subscription_info
-        ), unsafe_allow_html=True)
-        
-        # 4. USUÁRIO E LOGOUT (ÚNICO)
-        st.markdown("---")
         col1, col2 = st.columns([3, 1])
         with col1:
             st.write(f"👤 **{current_user['username']}**")
@@ -163,9 +183,11 @@ with st.container():
             - {limitations.get("single_query", "Apenas uma consulta por vez é permitida.")}
             - {limitations.get("temporal_comparisons", "Para comparações temporais, utilize perguntas claras.")}
             - {limitations.get("model_understanding", "O modelo pode não compreender perguntas muito vagas.")}
-            - {limitations.get("data_freshness", "Resultados são baseados nos dados mais recentes disponíveis.")}
-            - **Limite diário de {CLIENT_CONFIG.get('rate_limit_description', 'requisições')}: {MAX_RATE_LIMIT}**. Se atingido, você receberá uma mensagem de aviso.
-            """
+            - {limitations.get("data_freshness", "Resultados são baseados nos dados mais recentes disponíveis.")}"""
+        
+        # Adiciona limite apenas no modo não empresarial
+        if not is_empresarial_mode():
+            limitations_text += f"\n            - **Limite diário de {CLIENT_CONFIG.get('rate_limit_description', 'requisições')}: {MAX_RATE_LIMIT}**. Se atingido, você receberá uma mensagem de aviso."
         
         # Adiciona informação sobre sistema RAG se disponível
         if rag_initialized:
@@ -220,19 +242,29 @@ prompt = st.chat_input(format_text_with_ia_highlighting("Faça sua pergunta...")
 
 # Captura novo input
 if prompt:
-    # Verifica permissão para nova query usando o sistema DuckDB
+    # Verifica permissão para nova query
     current_user = get_current_user()
     if current_user:
-        can_proceed, message = SubscriptionSystem.check_query_permission(current_user['id'])
-        
-        if not can_proceed:
-            st.warning(message)
-            if st.button("💎 Ver Planos", key="upgrade_from_chat"):
-                st.switch_page("pages/planos.py")
-            st.stop()
-        
-        # Incrementa uso do usuário
-        SubscriptionSystem.increment_user_usage(current_user['id'])
+        if is_empresarial_mode():
+            # Modo empresarial: verifica limite mas não mostra planos
+            can_proceed, message = SubscriptionSystem.check_query_permission(current_user['id'])
+            if not can_proceed:
+                st.warning("⚠️ Limite diário de consultas atingido. Tente novamente amanhã.")
+                st.stop()
+            # Incrementa uso do usuário
+            SubscriptionSystem.increment_user_usage(current_user['id'])
+        else:
+            # Modo normal: verifica limite e oferece upgrade
+            can_proceed, message = SubscriptionSystem.check_query_permission(current_user['id'])
+            
+            if not can_proceed:
+                st.warning(message)
+                if st.button("💎 Ver Planos", key="upgrade_from_chat"):
+                    st.switch_page("pages/planos.py")
+                st.stop()
+            
+            # Incrementa uso do usuário
+            SubscriptionSystem.increment_user_usage(current_user['id'])
     else:
         st.error("❌ Usuário não autenticado")
         st.stop()
