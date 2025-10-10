@@ -26,7 +26,7 @@ def initialize_model():
     Inicializa o modelo Gemini com sistema RAG otimizado.
     """
 
-    # Instrução base reforçada para garantir function_call e uso correto do RAG
+    # Instrução base detalhada para garantir decomposição correta em CTEs e evitar erros de referência:
     base_instruction = (
         "Você é um ESPECIALISTA em SQL BigQuery para análise de dados empresariais.\n"
         "Sua missão é CONVERTER QUALQUER pergunta de negócio em uma function_call query_business_data, preenchendo TODOS os parâmetros necessários para executar a consulta no banco.\n"
@@ -49,8 +49,10 @@ def initialize_model():
         "   - SEMPRE use o campo de data correto (ex: dta_venda, data_venda, nf_dtemis, etc) da tabela/contexto em TODOS os SELECTs, GROUP BY e ORDER BY, tanto na CTE quanto no SELECT final. Nunca use campo de data genérico.\n"
         "   - NUNCA envie apenas o CTE sem o SELECT final completo e o FROM correto.\n"
         "   - NUNCA use o nome da tabela original no FROM quando houver CTE. O FROM deve SEMPRE envolver os aliases definidos na CTE.\n"
+        "   - REGRA FUNDAMENTAL PARA TRANSFORMAÇÕES: Sempre que precisar transformar campos (CAST, EXTRACT, PARSE, etc), crie uma CTE inicial (ex: cte_limpeza) apenas para limpeza/conversão dos campos. NUNCA misture transformação e análise na mesma CTE. A CTE de análise deve trabalhar apenas com os campos já limpos/convertidos. Isso evita erros de referência em PARTITION BY, GROUP BY e SELECT.\n"
+        "   - Quando usar PARTITION BY em funções de janela (ROW_NUMBER, RANK, etc), SEMPRE use a mesma expressão literal no GROUP BY (ex: EXTRACT(MONTH FROM dta_venda)), não apenas o alias.\n"
         "\nEXEMPLO DE TEMPLATE UNIVERSAL PARA COMPARAÇÃO ENTRE GRUPOS/CATEGORIAS:\n"
-        "WITH vendas_cidade AS (\n    SELECT EXTRACT(MONTH FROM dta_venda) AS mes, UPPER(cidade) AS cidade, SUM(val_total) AS valor_total\n    FROM glinhares.delivery.drvy_VeiculosVendas\n    WHERE EXTRACT(YEAR FROM dta_venda) = 2024 AND UPPER(cidade) IN ('CRATO', 'SALVADOR')\n    GROUP BY mes, cidade\n)\nSELECT v1.mes AS mes, v1.valor_total AS valor_crato, v2.valor_total AS valor_salvador\nFROM vendas_cidade v1 JOIN vendas_cidade v2 ON v1.mes = v2.mes\nWHERE v1.cidade = 'CRATO' AND v2.cidade = 'SALVADOR' AND v1.valor_total > v2.valor_total\nORDER BY v1.mes\n"
+        "WITH cte_limpeza AS (\n    SELECT EXTRACT(MONTH FROM dta_venda) AS mes, UPPER(modelo) AS modelo, val_total, QTE\n    FROM glinhares.delivery.drvy_VeiculosVendas\n    WHERE EXTRACT(YEAR FROM dta_venda) = 2024\n),\n vendas_modelo AS (\n    SELECT mes, modelo, SUM(val_total) AS valor_total, COUNT(QTE) AS quantidade_vendida,\n           ROW_NUMBER() OVER (PARTITION BY mes ORDER BY SUM(val_total) DESC) AS rn\n    FROM cte_limpeza\n    GROUP BY mes, modelo\n)\nSELECT mes, modelo, valor_total, quantidade_vendida\nFROM vendas_modelo WHERE rn <= 5 ORDER BY mes\n"
         "\nEXEMPLO ERRADO (NUNCA FAÇA!):\nSELECT EXTRACT(MONTH FROM dta_venda) AS mes, SUM(val_total) AS valor_total FROM vendas_cidade v1 JOIN vendas_cidade v2 ... -- ERRADO: está usando campo da tabela original e agregação após a CTE.\n"
         "\nSe a pergunta envolver múltiplos anos, inclua ano no SELECT, GROUP BY e ORDER BY.\n"
         "Se houver dúvida, consulte SEMPRE os exemplos e padrões do RAG e adapte para o contexto.\n"
@@ -688,7 +690,7 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
             'bgcolor': legend_bg,
             'bordercolor': legend_border,
             'borderwidth': 1,
-            'itemspacing': 20,
+            'indentation': 20,
             'font': {'size': 11, 'color': text_color}
         },
         'xaxis': {
