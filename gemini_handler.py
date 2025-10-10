@@ -364,8 +364,8 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
     - Para dados temporais (mês/ano): GRAPH-TYPE: line | X-AXIS: [coluna_tempo] | Y-AXIS: [métrica] | COLOR: [dimensão_comparação]
     - Para dados categóricos: GRAPH-TYPE: bar | X-AXIS: [categoria] | Y-AXIS: [valor]
     - Para cor sempre use 
-    - O parâmetro 'color' do gráfico deve ser sempre o nome de uma coluna da consulta, ou None se não houver coluna adequada.
-    - Exemplos de uso correto: color='ano' (se existir coluna 'ano')
+    - O parâmetro 'color' do gráfico deve ser sempre o nome de uma coluna EXISTENTE no resultado da consulta SQL. Se não houver coluna adequada, use None.
+    - Exemplos de uso correto: color='ano' (se existir coluna 'ano' no resultado)
     - color normalmente é atribuido a coluna que serve como uma segunda dimensão ou se só tiver uma dimensão ela mesma.
     REGRA PARA EXPORTAÇÃO (se solicitada):
     - Inclua: EXPORT-INFO: FORMATO: excel
@@ -682,12 +682,13 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
         'legend': {
             'orientation': 'h',
             'yanchor': 'bottom',
-            'y': -0.2,
+            'y': -0.5,
             'xanchor': 'center',
             'x': 0.5,
             'bgcolor': legend_bg,
             'bordercolor': legend_border,
             'borderwidth': 1,
+            'itemspacing': 20,
             'font': {'size': 11, 'color': text_color}
         },
         'xaxis': {
