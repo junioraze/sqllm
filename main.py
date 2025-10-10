@@ -41,6 +41,7 @@ from user_database import db
 from subscription_system_db import SubscriptionSystem
 from config_menu import apply_user_preferences, initialize_user_config, check_feature_access
 
+
 # Inicialização do sistema RAG (uma vez ao carregar a aplicação)
 try:
     from gemini_handler import initialize_rag_system
@@ -51,6 +52,15 @@ try:
 except Exception as e:
     print(f"❌ Erro ao inicializar sistema RAG: {e}")
     rag_initialized = False
+
+# Inicialização do cache de logs/erros (garante criação das tabelas)
+try:
+    from cache_db import init_cache_db
+    print("🔄 Inicializando cache_db...")
+    init_cache_db()
+    print("✅ cache_db inicializado!")
+except Exception as e:
+    print(f"❌ Erro ao inicializar cache_db: {e}")
 
 # Configuração do rate limit (100 requisições por dia)
 rate_limiter = RateLimiter(max_requests_per_day=MAX_RATE_LIMIT)

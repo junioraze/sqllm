@@ -268,21 +268,56 @@ def log_error(
     """Registra um erro no banco de dados"""
     error_id = str(uuid.uuid4())
     
-    with get_connection() as conn:
-        conn.execute("""
-            INSERT INTO log_erros 
-            (id, user_id, error_type, error_message, context, traceback)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            error_id,
-            user_id,
-            error_type,
-            error_message,
-            context,
-            traceback
-        ))
-    
-    return error_id
+    try:
+        with get_connection() as conn:
+            conn.execute("""
+                INSERT INTO log_erros 
+                (id, user_id, error_type, error_message, context, traceback)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                error_id,
+                user_id,
+                error_type,
+                error_message,
+                context,
+                traceback
+            ))
+        return error_id
+    except Exception as e:
+        # Se falhar por tabela inexistente, tenta criar e repetir
+        if "log_erros" in str(e) and ("does not exist" in str(e) or "no such table" in str(e)):
+            try:
+                with get_connection() as conn:
+                    conn.execute("""
+                        CREATE TABLE IF NOT EXISTS log_erros (
+                            id VARCHAR PRIMARY KEY,
+                            user_id VARCHAR NOT NULL,
+                            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            error_type VARCHAR,
+                            error_message TEXT,
+                            context TEXT,
+                            traceback TEXT
+                        )
+                    """)
+                    conn.execute("""
+                        INSERT INTO log_erros 
+                        (id, user_id, error_type, error_message, context, traceback)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (
+                        error_id,
+                        user_id,
+                        error_type,
+                        error_message,
+                        context,
+                        traceback
+                    ))
+                return error_id
+            except Exception as e2:
+                print(f"[log_error][FATAL] Falha ao criar tabela log_erros e registrar erro: {e2}")
+                return None
+        else:
+            print(f"[log_error][FATAL] Falha ao registrar erro: {e}")
+            return None
 
 def get_recent_errors(user_id: str, hours: int = 24) -> List[Dict]:
     """Recupera erros recentes do usuário"""
