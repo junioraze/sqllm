@@ -402,28 +402,41 @@ class MessageHandler:
         try:
             self._start_timing("preparacao_parametros", typing_placeholder)
             params = function_call.args
-            
+
             # Dupla serialização para garantir que não há FunctionCall
             serializable_params = safe_serialize_gemini_params(params)
-            # Força conversão completa removendo qualquer resíduo não serializável
             serializable_params = safe_serialize_gemini_params(serializable_params)
-            
+
             self._end_timing("preparacao_parametros")
-            
+
             # Validar full_table_id
             self._start_timing("validacao_table_id", typing_placeholder)
             full_table_id = serializable_params.get("full_table_id")
             if not self._validate_table_id(full_table_id, prompt, serializable_params):
                 return
             self._end_timing("validacao_table_id")
-            
+
             self.flow_path.append("construindo_query")
-            
+
             # Construir e executar query
             self._start_timing("construcao_query", typing_placeholder)
-            query = build_query(serializable_params)
+            try:
+                query = build_query(serializable_params)
+            except ValueError as ve:
+                # Erro específico de CTE sem from_table correto
+                error_msg = str(ve)
+                if "CTE" in error_msg and "from_table" in error_msg:
+                    typing_placeholder.empty()
+                    st.session_state.chat_history.append({
+                        "role": "assistant",
+                        "content": f"❌ Erro crítico: {error_msg}"
+                    })
+                    st.rerun()
+                    return
+                else:
+                    raise
             self._end_timing("construcao_query")
-            
+
             self.flow_path.append("executando_query")
             self._start_timing("execucao_sql", typing_placeholder)
             raw_data = execute_query(query)
@@ -432,30 +445,30 @@ class MessageHandler:
             if isinstance(raw_data, dict) and "error" in raw_data:
                 self._handle_query_error(typing_placeholder, prompt, raw_data, query, serializable_params)
                 return
-            
+
             self.flow_path.append("processando_dados")
-            
+
             # Converte os dados para formato serializável
             self._start_timing("serializacao_dados", typing_placeholder)
             serializable_data = safe_serialize_data(raw_data)
             self._end_timing("serializacao_dados")
 
             self.flow_path.append("refinando_resposta_final")
-            
+
             # Chama Gemini para análise final dos dados
             self._start_timing("refinamento_gemini_final", typing_placeholder)
-            
+
             from gemini_handler import analyze_data_with_gemini
-            
+
             refined_response, tech_details = analyze_data_with_gemini(
                 prompt=prompt,
                 data=serializable_data,
                 function_params=function_call.args if hasattr(function_call, 'args') else {},
                 query=query
             )
-                
+
             self._end_timing("refinamento_gemini_final")
-            
+
             # Adiciona caminho de decisão aos detalhes técnicos
             self._start_timing("preparando_tech_details_final", typing_placeholder)
             if tech_details is None:
@@ -466,22 +479,22 @@ class MessageHandler:
             self._end_timing("preparando_tech_details_final")
 
             self.flow_path.append("salvando_interacao")
-            
+
             # Salva a interação no cache
             self._start_timing("salvamento_interacao", typing_placeholder)
             self._save_new_interaction(prompt, serializable_params, query, serializable_data, refined_response, tech_details)
             self._end_timing("salvamento_interacao")
 
             self.flow_path.append("finalizando_nova_consulta")
-            
+
             # Finaliza resposta
             self._start_timing("finalizacao_nova_consulta", typing_placeholder)
             self._finalize_response(typing_placeholder, refined_response, tech_details)
             self._end_timing("finalizacao_nova_consulta")
-            
+
             # Log de sucesso
             self._log_success(prompt, serializable_params, query, serializable_data, refined_response, tech_details)
-            
+
         except Exception as e:
             self.flow_path.append("erro_function_call")
             self._handle_error(typing_placeholder, prompt, f"Erro no processamento da função: {str(e)}", traceback.format_exc())

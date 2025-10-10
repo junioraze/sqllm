@@ -64,18 +64,25 @@ class SQLPatternRAG:
                     use_cases=pattern_data['use_cases']
                 )
             
-            print(f"✅ Carregados {len(self.patterns)} padrões SQL")
+            print(f"Carregados {len(self.patterns)} padrões SQL")
             
         except Exception as e:
-            print(f"❌ Erro ao carregar padrões SQL: {e}")
+            print(f"Erro ao carregar padrões SQL: {e}")
             self.patterns = {}
     
     def identify_sql_pattern(self, user_query: str, min_score: float = 1.5) -> List[Tuple[str, float]]:
         """
-        Identifica padrões SQL mais relevantes para a pergunta, com score mínimo mais restritivo
+        Identifica padrões SQL mais relevantes para a pergunta, com score mínimo mais restritivo.
+        Reforça detecção de padrões de comparação entre grupos/categorias (ex: 'meses em que X > Y', 'quando Crato superou Salvador', etc.).
         """
         query_lower = user_query.lower()
         pattern_scores = []
+        # Heurística extra para comparação entre grupos/categorias
+        group_comp_keywords = [
+            'maior que', 'superou', 'foi maior que', 'comparar', 'em quais meses', 'quando', 'supera', '>', 'vs', 'versus', 'diferença entre', 'quanto a mais', 'quanto a menos', 'quanto maior', 'quanto menor', 'diferença percentual', 'razão entre', 'proporção entre', 'vezes maior', 'proporção', 'grupo', 'categoria', 'comparação entre grupos', 'comparação entre categorias'
+        ]
+        # Se detectar intenção de comparação entre grupos/categorias, força score alto nos padrões relevantes
+        is_group_comparison = any(kw in query_lower for kw in group_comp_keywords)
         for pattern_id, pattern in self.patterns.items():
             score = 0.0
             # Score baseado em keywords
@@ -89,6 +96,9 @@ class SQLPatternRAG:
                 common_words = use_case_words.intersection(query_words)
                 if common_words:
                     score += len(common_words) * 0.5
+            # Heurística: se for padrão de comparação entre grupos/categorias, força score
+            if is_group_comparison and pattern_id in ['group_comparison', 'group_difference', 'group_ratio']:
+                score += 2.5  # Garante score acima do min_score
             # Score mínimo mais restritivo
             if score >= min_score:
                 pattern_scores.append((pattern_id, score))

@@ -152,15 +152,25 @@ def build_query(params: dict) -> str:
             "NUNCA use LIMIT com QUALIFY - use QUALIFY para múltiplas dimensões"
         )
 
-    # Suporte a CTE (Common Table Expressions)
+    # Suporte a CTE (Common Table Expressions) - usa 'cte' se presente, sem duplicar 'WITH'
     with_clause = ""
-    if corrected_params.get("with_cte"):
-        with_clause = f"WITH {corrected_params['with_cte']}\n"
-    
-    # Determina a tabela a usar (pode ser uma CTE ou tabela física)
-    from_table = corrected_params.get("from_table", f"`{full_table_id}`")
+    cte = corrected_params.get("cte")
+    if cte:
+        # Remove prefixo 'WITH' se vier por engano
+        cte_clean = cte.strip()
+        if cte_clean.upper().startswith("WITH "):
+            cte_clean = cte_clean[5:].lstrip()
+        with_clause = f"WITH {cte_clean}\n"
 
-    # Constrói as partes da query
+
+    # Determina a tabela a usar (pode ser uma CTE/JOIN ou tabela física)
+    # O parâmetro 'from_table' deve SEMPRE ser passado explicitamente pelo handler/modelo.
+    from_table = corrected_params.get("from_table")
+    if not from_table or not str(from_table).strip():
+        raise ValueError("O parâmetro 'from_table' é obrigatório e deve ser passado explicitamente pelo modelo. Nunca deduza ou use a tabela original por padrão. Veja o padrão RAG e a instrução do handler.")
+
+
+    # Constrói as partes da query fielmente conforme os parâmetros
     where = f" WHERE {corrected_params['where']}" if corrected_params.get("where") else ""
     group_by = f" GROUP BY {', '.join(group_by_list)}" if group_by_list else ""
     order_by = f" ORDER BY {', '.join(order_by_list)}" if order_by_list else ""
@@ -169,6 +179,6 @@ def build_query(params: dict) -> str:
 
     query = f"""{with_clause}SELECT {', '.join(select)}
 FROM {from_table}{where}{group_by}{qualify}{order_by}{limit}"""
-    
+
     print(f"DEBUG - Query construída:\n{query}")
     return query.strip()

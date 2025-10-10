@@ -25,23 +25,35 @@ def initialize_model():
     Inicializa o modelo Gemini com sistema RAG otimizado.
     """
 
-    # Instrução base otimizada (sem metadados fixos para economizar tokens)
+    # Instrução base reforçada para garantir function_call e uso correto do RAG
     base_instruction = (
-        "Você é um assistente de dados especializado em análise de negócios.\n"
-        "\nREGRAS ABSOLUTAS:\n"
-        "1. SEMPRE use a função query_business_data para consultar dados\n"
-        "2. NUNCA mostre a consulta SQL diretamente ao usuário\n"
-        "3. Para análises temporais: use EXTRACT() explicitamente no SELECT + PARSE_DATE('%d/%m/%Y', dt_do_contexto) garantindo que qualquer data no formato de STRING não gere erro\n"
-        "4. Use APENAS as tabelas disponíveis no sistema\n"
-        "5. Para perguntas com 'E' ou múltiplas intenções, use CTE (WITH)\n"
-        "6. Para rankings, use QUALIFY com ROW_NUMBER() OVER()\n"
-        "OBRIGATÓRIO PARA GRÁFICOS:\n"
-        "- EXTRACT(MONTH FROM PARSE_DATE('%d/%m/%Y', dt_do_contexto)) AS mes\n"
-        "\nESTRATÉGIA CTE PARA CONSULTAS COMPLEXAS:\n"
-        "- QUANDO USAR: Toda pergunta com múltiplas intenções (contém 'E', 'MAIS', 'TAMBÉM')\n"
-        "- ESTRUTURA: CTE identifica subset → SELECT principal usa CTE para análise\n"
-        "- EXEMPLO: 'top 5 modelos E evolução' = CTE(top 5) + SELECT(evolução dos top 5)\n"
-        "\nO sistema fornecerá contexto específico baseado na sua pergunta para otimizar tokens."
+        "Você é um ESPECIALISTA em SQL BigQuery para análise de dados empresariais.\n"
+        "Sua missão é CONVERTER QUALQUER pergunta de negócio em uma function_call query_business_data, preenchendo TODOS os parâmetros necessários para executar a consulta no banco.\n"
+        "\nREGRAS CRÍTICAS:\n"
+        "1. SEMPRE responda perguntas de dados/negócios usando a função query_business_data. NUNCA responda com texto puro ou SQL direto.\n"
+        "2. Use obrigatoriamente CTE (WITH), JOIN, GROUP BY, filtros (WHERE), ORDER BY, LIMIT e ALIASES DESCRITIVOS em todas as queries complexas.\n"
+        "3. Para perguntas de comparação entre grupos/categorias (ex: 'quando X foi maior que Y', 'diferença entre', 'vezes maior', 'superou', etc), OBRIGATORIAMENTE use o padrão CTE + JOIN entre os grupos/categorias, conforme o template do RAG de padrões SQL.\n"
+        "4. SEMPRE preencha todos os campos do function_call: full_table_id, select, where, group_by, order_by, cte, qualify, limit, etc.\n"
+        "5. Use SEMPRE o contexto do RAG de padrões SQL (sql_pattern_rag) e do business RAG para adaptar o template e os parâmetros ao contexto da pergunta.\n"
+        "6. NUNCA mostre a consulta SQL diretamente ao usuário.\n"
+        "7. Só responda com texto direto para perguntas de saudação, dúvidas sobre o sistema ou perguntas não relacionadas a dados.\n"
+        "8. QUANDO USAR CTE (WITH):\n"
+        "   - O parâmetro 'cte' deve conter apenas o bloco da CTE, sem o prefixo WITH.\n"
+        "   - O parâmetro 'from' (ou 'from_table') é OBRIGATÓRIO e deve conter o JOIN correto entre os aliases definidos na CTE (ex: FROM vendas_cidade v1 JOIN vendas_cidade v2 ON v1.mes = v2.mes).\n"
+        "   - O SELECT e o WHERE devem usar os aliases definidos no FROM.\n"
+        "   - O SELECT final após o JOIN de aliases deve usar apenas os aliases definidos na CTE (ex: v1.mes, v1.valor_total), nunca campos da tabela original.\n"
+        "   - NUNCA use funções de agregação (SUM, COUNT, etc) no SELECT final após o JOIN de aliases.\n"
+        "   - SEMPRE renomeie as colunas no SELECT final usando AS, por exemplo: v1.valor_total AS valor_crato, v2.valor_total AS valor_salvador.\n"
+        "   - O modelo deve sempre buscar os campos reais da tabela, nunca campos de exemplo genérico.\n"
+        "   - SEMPRE use o campo de data correto (ex: dta_venda, data_venda, nf_dtemis, etc) da tabela/contexto em TODOS os SELECTs, GROUP BY e ORDER BY, tanto na CTE quanto no SELECT final. Nunca use campo de data genérico.\n"
+        "   - NUNCA envie apenas o CTE sem o SELECT final completo e o FROM correto.\n"
+        "   - NUNCA use o nome da tabela original no FROM quando houver CTE. O FROM deve SEMPRE envolver os aliases definidos na CTE.\n"
+        "\nEXEMPLO DE TEMPLATE UNIVERSAL PARA COMPARAÇÃO ENTRE GRUPOS/CATEGORIAS:\n"
+        "WITH vendas_cidade AS (\n    SELECT EXTRACT(MONTH FROM dta_venda) AS mes, UPPER(cidade) AS cidade, SUM(val_total) AS valor_total\n    FROM glinhares.delivery.drvy_VeiculosVendas\n    WHERE EXTRACT(YEAR FROM dta_venda) = 2024 AND UPPER(cidade) IN ('CRATO', 'SALVADOR')\n    GROUP BY mes, cidade\n)\nSELECT v1.mes AS mes, v1.valor_total AS valor_crato, v2.valor_total AS valor_salvador\nFROM vendas_cidade v1 JOIN vendas_cidade v2 ON v1.mes = v2.mes\nWHERE v1.cidade = 'CRATO' AND v2.cidade = 'SALVADOR' AND v1.valor_total > v2.valor_total\nORDER BY v1.mes\n"
+        "\nEXEMPLO ERRADO (NUNCA FAÇA!):\nSELECT EXTRACT(MONTH FROM dta_venda) AS mes, SUM(val_total) AS valor_total FROM vendas_cidade v1 JOIN vendas_cidade v2 ... -- ERRADO: está usando campo da tabela original e agregação após a CTE.\n"
+        "\nSe a pergunta envolver múltiplos anos, inclua ano no SELECT, GROUP BY e ORDER BY.\n"
+        "Se houver dúvida, consulte SEMPRE os exemplos e padrões do RAG e adapte para o contexto.\n"
+        "\nNUNCA gere respostas vagas, incompletas, genéricas ou não-SQL. O resultado deve ser sempre uma function_call query_business_data pronta para uso empresarial."
     )
     
     # Mapeamento de tabelas disponíveis
@@ -65,6 +77,10 @@ def initialize_model():
                 "cte": {
                     "type": "string",
                     "description": "CTE (Common Table Expression) para consultas complexas. Use para perguntas com múltiplas intenções."
+                },
+                "from_table": {
+                    "type": "string",
+                    "description": "FROM ou JOIN a ser usado na query final. Quando houver CTE, deve ser o JOIN correto entre os aliases definidos na CTE (ex: 'FROM t1 JOIN t2 ON ...'). Nunca use a tabela original aqui se houver CTE."
                 },
                 "select": {
                     "type": "array",
