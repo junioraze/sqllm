@@ -681,7 +681,7 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
         'legend': {
             'orientation': 'h',
             'yanchor': 'bottom',
-            'y': -0.5,
+            'y': -1.2,
             'xanchor': 'center',
             'x': 0.5,
             'bgcolor': legend_bg,

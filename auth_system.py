@@ -122,24 +122,37 @@ def render_auth_system():
     from deepseek_theme import fix_baseweb_input_dark_theme
     fix_baseweb_input_dark_theme()
     
-    # Título com tema integrado
-    st.markdown("""
-        <div style="text-align: center; margin: 2rem 0;">
-            <h1 style="
-                background: linear-gradient(135deg, #00d4ff 0%, #00a8cc 50%, #0066ff 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-                font-size: 3rem;
-                font-weight: 700;
-                margin-bottom: 0.5rem;
-                letter-spacing: -0.02em;
-            ">ViaQuest</h1>
-            <p style="color: rgba(229, 231, 235, 0.7); font-size: 1.1rem;">
-                Sistema de Análise de Dados Inteligente
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
+    # Título com logo centralizado em base64 (apenas na tela de login)
+    from image_utils import get_base64_image
+    logo_path = os.path.join(os.path.dirname(__file__), "etc", "desc_logo.jpg")
+    logo_b64 = get_base64_image(logo_path)
+    if logo_b64:
+        st.markdown(f"""
+            <div style='text-align: center; margin: 2rem 0;'>
+                <img src='data:image/jpeg;base64,{logo_b64}' alt='ViaQuest' style='max-width:340px; width:100%; height:auto; margin-bottom:0.5rem;'/>
+                <p style='color: rgba(229, 231, 235, 0.7); font-size: 1.1rem;'>
+                    Sistema de Análise de Dados Inteligente
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+            <div style='text-align: center; margin: 2rem 0;'>
+                <h1 style="
+                    background: linear-gradient(135deg, #00d4ff 0%, #00a8cc 50%, #0066ff 100%);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    background-clip: text;
+                    font-size: 3rem;
+                    font-weight: 700;
+                    margin-bottom: 0.5rem;
+                    letter-spacing: -0.02em;
+                ">ViaQuest</h1>
+                <p style='color: rgba(229, 231, 235, 0.7); font-size: 1.1rem;'>
+                    Sistema de Análise de Dados Inteligente
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
     
     # MODO EMPRESARIAL: Apenas tela de login, sem cadastro
     if is_empresarial_mode():
