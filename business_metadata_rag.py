@@ -389,7 +389,7 @@ def get_optimized_business_context(user_query: str, max_results: int = 2) -> str
         # Estimativa de tokens (aproximadamente 4 caracteres por token)
         full_context = "\n\n".join(contexts)
         estimated_tokens = len(full_context) // 4
-        result = f"""=== METADADOS RELEVANTES PARA SUA CONSULTA ===\n\n{chr(10).join(contexts)}\n\n=== EXEMPLOS RELEVANTES ===\n1. Para consultas com múltiplas dimensões, use QUALIFY com ROW_NUMBER()\n2. Para comparações temporais, use EXTRACT(YEAR/MONTH FROM nf_dtemis)\n3. SEMPRE use 'nf_vl' para valores monetários\n4. Para buscas de texto, use UPPER(campo) LIKE UPPER('%valor%')\n\nTokens estimados: {estimated_tokens}\nTabelas relevantes: {', '.join([ctx.split('===')[1].strip() for ctx in contexts if '===' in ctx])}\n"""
+        result = f"""=== METADADOS RELEVANTES PARA SUA CONSULTA ===\n\n{chr(10).join(contexts)}\n\n=== EXEMPLOS RELEVANTES ===\n1. Para consultas com múltiplas dimensões, use QUALIFY com ROW_NUMBER()\n2. Para comparações temporais, use EXTRACT(YEAR/MONTH FROM <<variavel_periodo>>)\n3. Para buscas de texto, use UPPER(campo) LIKE UPPER('%valor%')\n\nTokens estimados: {estimated_tokens}\nTabelas relevantes: {', '.join([ctx.split('===')[1].strip() for ctx in contexts if '===' in ctx])}\n"""
         return result
     except Exception as e:
         return f"Erro ao obter contexto: {e}"

@@ -88,7 +88,7 @@ def initialize_model():
                 "select": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Campos para SELECT com ALIASES obrigatórios para gráficos. Use AS mes, AS valor_total, AS quantidade. Exemplo: ['EXTRACT(MONTH FROM nf_dtemis) AS mes', 'SUM(nf_vl) AS valor_total']"
+                    "description": "Campos para SELECT com ALIASES obrigatórios para gráficos. Use AS mes, AS valor_total, AS quantidade. Exemplo: ['EXTRACT(MONTH FROM <<coluna_periodo>>) AS mes', 'SUM(<<coluna_de_valor>>) AS valor_total']"
                 },
                 "where": {
                     "type": "string",
