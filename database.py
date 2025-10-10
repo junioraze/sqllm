@@ -163,11 +163,17 @@ def build_query(params: dict) -> str:
         with_clause = f"WITH {cte_clean}\n"
 
 
-    # Determina a tabela a usar (pode ser uma CTE/JOIN ou tabela física)
-    # O parâmetro 'from_table' deve SEMPRE ser passado explicitamente pelo handler/modelo.
+    # Caminho único: se não houver CTE, usa full_table_id como from_table automaticamente
+    cte = corrected_params.get("cte")
     from_table = corrected_params.get("from_table")
-    if not from_table or not str(from_table).strip():
-        raise ValueError("O parâmetro 'from_table' é obrigatório e deve ser passado explicitamente pelo modelo. Nunca deduza ou use a tabela original por padrão. Veja o padrão RAG e a instrução do handler.")
+    if cte:
+        # Para queries com CTE, from_table é obrigatório e deve ser JOIN/alias
+        if not from_table or not str(from_table).strip():
+            raise ValueError("O parâmetro 'from_table' é obrigatório e deve ser passado explicitamente pelo modelo quando houver CTE. Nunca deduza ou use a tabela original por padrão. Veja o padrão RAG e a instrução do handler.")
+    else:
+        # Para queries simples, se from_table não vier, usa full_table_id
+        if not from_table or not str(from_table).strip():
+            from_table = full_table_id
 
 
     # Constrói as partes da query fielmente conforme os parâmetros
