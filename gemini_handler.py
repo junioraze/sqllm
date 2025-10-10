@@ -365,10 +365,7 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
     - Novamente ressaltando só crie a parametrização do gráfico se solicitado
     - Para dados temporais (mês/ano): GRAPH-TYPE: line | X-AXIS: [coluna_tempo] | Y-AXIS: [métrica] | COLOR: [dimensão_comparação]
     - Para dados categóricos: GRAPH-TYPE: bar | X-AXIS: [categoria] | Y-AXIS: [valor]
-    - Para cor sempre use 
-    - O parâmetro 'color' do gráfico deve ser sempre o nome de uma coluna EXISTENTE no resultado da consulta SQL. Se não houver coluna adequada, use None.
-    - Exemplos de uso correto: color='ano' (se existir coluna 'ano' no resultado)
-    - color normalmente é atribuido a coluna que serve como uma segunda dimensão ou se só tiver uma dimensão ela mesma.
+    - O parâmetro 'color' do gráfico deve ser, preferencialmente, uma dimensão categórica relevante para a análise (ex: modelo, cidade, categoria, produto, vendedor). Só use campos temporais (ano, mês) se não houver dimensão melhor disponível ou se for explicitamente solicitado. Nunca use um campo que não existe no resultado. Se não houver dimensão adequada, repita a coluna X ou use None.
     REGRA PARA EXPORTAÇÃO (se solicitada):
     - Inclua: EXPORT-INFO: FORMATO: excel
     
