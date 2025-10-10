@@ -10,6 +10,7 @@ import time
 from typing import Tuple, Dict, Optional, Any
 from datetime import datetime
 
+
 from cache_db import get_user_history, get_interaction_full_data, save_interaction, log_error
 from gemini_handler import should_reuse_data, refine_with_gemini_rag, initialize_rag_system
 from database import build_query, execute_query
@@ -346,6 +347,12 @@ class MessageHandler:
         
         # Processa com RAG (função retorna diretamente function_call ou text)
         response = refine_with_gemini_rag(self.model, prompt, self.user_id)
+        # Se resposta for tuple, armazena tech_details para uso posterior
+        if isinstance(response, tuple) and len(response) == 2:
+            _, tech_details = response
+            self._last_rag_tech_details = tech_details
+        else:
+            self._last_rag_tech_details = None
         self._end_timing("processamento_rag")
         
         # Processa a resposta diretamente
@@ -359,6 +366,21 @@ class MessageHandler:
             # Para resposta no formato tuple (text, tech_details) - novo formato RAG
             if isinstance(response, tuple):
                 text_response, tech_details = response
+                # Garante que prompt/token info esteja sempre em tech_details
+                if tech_details is not None:
+                    # Se não houver prompt/token info, tenta buscar do st.session_state
+                    if ("optimized_prompt" not in tech_details or "prompt_tokens" not in tech_details):
+                        # fallback defensivo: tenta buscar última interação
+                        last_interaction = None
+                        if hasattr(st.session_state, "chat_history") and st.session_state.chat_history:
+                            for msg in reversed(st.session_state.chat_history):
+                                if "tech_details" in msg and "optimized_prompt" in msg["tech_details"]:
+                                    last_interaction = msg["tech_details"]
+                                    break
+                        if last_interaction:
+                            for k in ["optimized_prompt", "prompt_tokens", "completion_tokens", "total_tokens"]:
+                                if k in last_interaction and k not in tech_details:
+                                    tech_details[k] = last_interaction[k]
                 if text_response and not hasattr(text_response, 'name'):
                     # É texto simples
                     self._handle_text_response(typing_placeholder, prompt, text_response, tech_details)
@@ -458,7 +480,15 @@ class MessageHandler:
             # Chama Gemini para análise final dos dados
             self._start_timing("refinamento_gemini_final", typing_placeholder)
 
+
             from gemini_handler import analyze_data_with_gemini
+
+            # Salva prompt/token info do refine_with_gemini_rag (se disponível)
+            initial_prompt_info = {}
+            if hasattr(self, "_last_rag_tech_details") and self._last_rag_tech_details:
+                for k in ["optimized_prompt", "prompt_tokens", "completion_tokens", "total_tokens", "rag_context", "sql_guidance", "model_used", "prompt_type", "function_call_name"]:
+                    if k in self._last_rag_tech_details:
+                        initial_prompt_info[k] = self._last_rag_tech_details[k]
 
             refined_response, tech_details = analyze_data_with_gemini(
                 prompt=prompt,
@@ -473,6 +503,10 @@ class MessageHandler:
             self._start_timing("preparando_tech_details_final", typing_placeholder)
             if tech_details is None:
                 tech_details = {}
+            # Merge prompt/token info if not present
+            for k, v in initial_prompt_info.items():
+                if k not in tech_details:
+                    tech_details[k] = v
             tech_details["flow_path"] = " → ".join(self.flow_path)
             tech_details["timing_info"] = self.timing_info.copy()
             tech_details["total_duration"] = self._get_total_duration()
@@ -560,22 +594,22 @@ class MessageHandler:
         })
         st.rerun()
 
-    def _process_direct_response(self, typing_placeholder, response) -> None:
+    def _process_direct_response(self, typing_placeholder, response, tech_details=None) -> None:
         """Processa resposta direta sem função"""
         self.flow_path.append("extraindo_texto_resposta")
-        
         typing_placeholder.empty()
-        
         # Extração segura do texto da resposta
         response_text = self._extract_response_text(response)
-        
         # Atualiza histórico
-        st.session_state.chat_history.append({
-            "role": "assistant", 
-            "content": format_text_with_ia_highlighting(response_text),
-            "tech_details": {"flow_path": " → ".join(self.flow_path)}
-        })
-        
+        message = {
+            "role": "assistant",
+            "content": format_text_with_ia_highlighting(response_text)
+        }
+        if tech_details:
+            message["tech_details"] = tech_details
+        else:
+            message["tech_details"] = {"flow_path": " → ".join(self.flow_path)}
+        st.session_state.chat_history.append(message)
         st.rerun()
 
     def _finalize_response(self, typing_placeholder, response_text: str, tech_details: Dict = None) -> None:

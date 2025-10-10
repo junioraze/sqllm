@@ -191,32 +191,24 @@ def create_tech_details_spoiler(tech_details: dict) -> str:
     # Performance e Timing (NOVO - Primeira seção)
     if tech_details.get("timing_info") or tech_details.get("total_duration"):
         content += format_text_with_ia_highlighting("**⏱️ Performance:**\n")
-        
         total_duration = tech_details.get("total_duration", 0)
         content += format_text_with_ia_highlighting(f"- **Duração Total: {total_duration:.2f}ms**\n\n")
-        
         timing_info = tech_details.get("timing_info", {})
         if timing_info:
             content += format_text_with_ia_highlighting("**📊 Detalhamento por Etapa:**\n")
             content += "| Etapa | Início | Duração (ms) |\n"
             content += "|-------|--------|-------------|\n"
-            
-            # Ordena por ordem de execução (timestamp de início)
             sorted_timings = sorted(timing_info.items(), key=lambda x: x[1].get('start', 0))
-            
             for step_name, timing_data in sorted_timings:
                 timestamp = timing_data.get('timestamp', 'N/A')
                 duration = timing_data.get('duration', 0)
-                
                 if duration is not None:
-                    if duration < 1000:  # Menos de 1 segundo
+                    if duration < 1000:
                         duration_formatted = f"{duration:.1f}ms"
-                    else:  # 1 segundo ou mais
+                    else:
                         duration_formatted = f"{duration/1000:.2f}s"
                 else:
                     duration_formatted = "Em andamento..."
-                
-                # Traduz nomes técnicos para nomes mais amigáveis
                 step_display_name = {
                     'processo_completo': '🔄 Processo Completo',
                     'verificacao_reuso': '🔍 Verificação de Reuso',
@@ -240,9 +232,28 @@ def create_tech_details_spoiler(tech_details: dict) -> str:
                     'exibindo_feedback_reuso': '💬 Feedback Reuso',
                     'preparando_dados_reuso': '📦 Preparando Dados Reuso'
                 }.get(step_name, step_name.replace('_', ' ').title())
-                
                 content += f"| {step_display_name} | {timestamp} | {duration_formatted} |\n"
-            
+            content += "\n"
+
+    # NOVO: Prompt e tokens usados
+    if tech_details.get("optimized_prompt") or tech_details.get("prompt_tokens"):
+        content += format_text_with_ia_highlighting("**📝 Prompt Gerado:**\n")
+        if tech_details.get("optimized_prompt"):
+            content += f"<details><summary>Ver prompt completo</summary>\n"
+            content += f"<pre style='font-size:0.95em;background:#222;color:#fff;padding:8px;border-radius:6px;white-space:pre-wrap;'>{tech_details['optimized_prompt']}</pre>\n"
+            content += "</details>\n"
+        # Tokens
+        prompt_tokens = tech_details.get("prompt_tokens")
+        completion_tokens = tech_details.get("completion_tokens")
+        total_tokens = tech_details.get("total_tokens")
+        if prompt_tokens is not None or completion_tokens is not None or total_tokens is not None:
+            content += format_text_with_ia_highlighting("**🔢 Uso de Tokens:**\n")
+            if prompt_tokens is not None:
+                content += f"- Prompt tokens: {prompt_tokens}\n"
+            if completion_tokens is not None:
+                content += f"- Completion tokens: {completion_tokens}\n"
+            if total_tokens is not None:
+                content += f"- Total tokens: {total_tokens}\n"
             content += "\n"
     
     # Árvore de decisão horizontal (caminho do fluxo)

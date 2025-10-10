@@ -6,6 +6,7 @@ Gemini Handler Limpo com Sistema RAG Puro
 import google.generativeai as genai
 from google.generativeai.types import Tool, FunctionDeclaration
 from config import MODEL_NAME, TABLES_CONFIG, PROJECT_ID, DATASET_ID
+from ai_metrics import TokenUsageMetric
 import re
 import json
 import pandas as pd
@@ -155,26 +156,10 @@ ORIENTAÇÕES SQL/BIGQUERY (baseado no tipo de análise):
 {sql_guidance}
 
 INSTRUÇÕES CRÍTICAS:
-- Se a pergunta for sobre dados/análise de negócios, use a função query_business_data
-- Use o CONTEXTO DE NEGÓCIO para entender campos, regras e dados específicos
-- Use as ORIENTAÇÕES SQL para escolher a estrutura e padrões SQL adequados
-- SEMPRE use aliases descritivos no SELECT para permitir gráficos corretos
-- Combine ambos os contextos para gerar SQL correto e eficiente
-- Se for uma pergunta geral (como cumprimentos, dúvidas simples), responda diretamente em texto
 
 ALIASES OBRIGATÓRIOS:
-- EXTRACT(MONTH FROM nf_dtemis) AS mes
-- SUM(nf_vl) AS valor_total
-- COUNT(*) AS quantidade
-- EXTRACT(YEAR FROM nf_dtemis) AS ano
 
 REGRAS PARA COMPARAÇÕES TEMPORAIS:
-- Para comparar entre anos: SEMPRE inclua mes E ano no SELECT
-- Use WHERE com IN para múltiplos anos: WHERE EXTRACT(YEAR FROM nf_dtemis) IN (2023, 2024)
-- GROUP BY deve incluir mes E ano para comparações
-- ORDER BY ano, mes para sequência cronológica
-- Exemplo para "Compare vendas entre 2023 e 2024": SELECT EXTRACT(MONTH FROM nf_dtemis) AS mes, EXTRACT(YEAR FROM nf_dtemis) AS ano, SUM(nf_vl) AS valor_total
-- Para qualquer análise temporal que envolva múltiplos anos: OBRIGATÓRIO incluir ano na seleção
 """
 
         # Processa com Gemini
@@ -197,11 +182,13 @@ REGRAS PARA COMPARAÇÕES TEMPORAIS:
                         response_text = part.text.strip()
                         
                         # Registra uso básico de tokens para texto
-                        from ai_metrics import TokenUsageMetric
+                        prompt_tokens = len(optimized_prompt.split())
+                        completion_tokens = len(response_text.split())
+                        total_tokens = prompt_tokens + completion_tokens
                         token_usage = TokenUsageMetric(
-                            prompt_tokens=len(optimized_prompt.split()),
-                            completion_tokens=len(response_text.split()),
-                            total_tokens=len(optimized_prompt.split()) + len(response_text.split()),
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            total_tokens=total_tokens,
                             estimated_cost_usd=0.001,
                             model_name="gemini-2.0-flash-exp",
                             prompt_type="rag_optimized",
@@ -216,11 +203,13 @@ REGRAS PARA COMPARAÇÕES TEMPORAIS:
                         function_call = part.function_call
                         
                         # Registra uso básico de tokens para function call
-                        from ai_metrics import TokenUsageMetric
+                        prompt_tokens = len(optimized_prompt.split())
+                        completion_tokens = 50
+                        total_tokens = prompt_tokens + completion_tokens
                         token_usage = TokenUsageMetric(
-                            prompt_tokens=len(optimized_prompt.split()),
-                            completion_tokens=50,
-                            total_tokens=len(optimized_prompt.split()) + 50,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            total_tokens=total_tokens,
                             estimated_cost_usd=0.001,
                             model_name="gemini-2.0-flash-exp",
                             prompt_type="rag_optimized",
@@ -235,7 +224,11 @@ REGRAS PARA COMPARAÇÕES TEMPORAIS:
                             "model_used": "gemini-2.0-flash-exp",
                             "prompt_type": "rag_optimized_with_sql",
                             "optimization_applied": True,
-                            "function_call_name": function_call.name if hasattr(function_call, 'name') else None
+                                    "function_call_name": function_call.name if hasattr(function_call, 'name') else None,
+                                    "optimized_prompt": optimized_prompt,
+                                    "prompt_tokens": prompt_tokens,
+                                    "completion_tokens": completion_tokens,
+                                    "total_tokens": total_tokens
                         }
                         
                         return function_call, tech_details
@@ -245,11 +238,13 @@ REGRAS PARA COMPARAÇÕES TEMPORAIS:
                 response_text = response.text.strip()
                 
                 # Registra uso básico de tokens
-                from ai_metrics import TokenUsageMetric
+                prompt_tokens = len(optimized_prompt.split())
+                completion_tokens = len(response_text.split())
+                total_tokens = prompt_tokens + completion_tokens
                 token_usage = TokenUsageMetric(
-                    prompt_tokens=len(optimized_prompt.split()),
-                    completion_tokens=len(response_text.split()),
-                    total_tokens=len(optimized_prompt.split()) + len(response_text.split()),
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=total_tokens,
                     estimated_cost_usd=0.001,
                     model_name="gemini-2.0-flash-exp",
                     prompt_type="rag_optimized",
@@ -264,7 +259,11 @@ REGRAS PARA COMPARAÇÕES TEMPORAIS:
                     "model_used": "gemini-2.0-flash-exp",
                     "prompt_type": "rag_optimized_with_sql",
                     "optimization_applied": True,
-                    "response_type": "text"
+                    "response_type": "text",
+                    "optimized_prompt": optimized_prompt,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens
                 }
                 
                 return response_text, tech_details
@@ -360,7 +359,8 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
     ### INSIGHTS E RECOMENDAÇÕES
     [Insights acionáveis baseados ESPECIFICAMENTE nos padrões dos dados]
     
-    REGRAS PARA GRÁFICOS (se solicitado):
+    REGRAS PARA GRÁFICOS (se e somente se solicitado):
+    - Novamente ressaltando só crie a parametrização do gráfico se solicitado
     - Para dados temporais (mês/ano): GRAPH-TYPE: line | X-AXIS: [coluna_tempo] | Y-AXIS: [métrica] | COLOR: [dimensão_comparação]
     - Para dados categóricos: GRAPH-TYPE: bar | X-AXIS: [categoria] | Y-AXIS: [valor]
     - Para cor sempre use 
