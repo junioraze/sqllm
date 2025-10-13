@@ -16,76 +16,41 @@ from utils import create_styled_download_button, generate_excel_bytes, generate_
 from datetime import datetime
 import time
 import os
-
+import streamlit as st
 # Sistema RAG obrigatório
 from business_metadata_rag import business_rag, get_optimized_business_context
 from ai_metrics import ai_metrics
+from prompt_rules import get_sql_functioncall_instruction, build_tables_fields_instruction, get_refine_analysis_instruction
 
 def initialize_model():
     """
     Inicializa o modelo Gemini com sistema RAG otimizado.
     """
 
-    # Instrução base detalhada para garantir decomposição correta em CTEs e evitar erros de referência:
-    base_instruction = (
-        "Você é um ESPECIALISTA em SQL BigQuery para análise de dados empresariais.\n"
-        "Sua missão é CONVERTER QUALQUER pergunta de negócio em uma function_call query_business_data, preenchendo TODOS os parâmetros necessários para executar a consulta no banco.\n"
-        "\nREGRAS CRÍTICAS:\n"
-        "1. SEMPRE responda perguntas de dados/negócios usando a função query_business_data. NUNCA responda com texto puro ou SQL direto.\n"
-        "2. Use obrigatoriamente CTE (WITH), JOIN, GROUP BY, filtros (WHERE), ORDER BY, LIMIT e ALIASES DESCRITIVOS em todas as queries complexas.\n"
-        "3. Para perguntas de comparação entre grupos/categorias (ex: 'quando X foi maior que Y', 'diferença entre', 'vezes maior', 'superou', etc), OBRIGATORIAMENTE use o padrão CTE + JOIN entre os grupos/categorias, conforme o template do RAG de padrões SQL.\n"
-        "4. SEMPRE preencha todos os campos do function_call: full_table_id, select, where, group_by, order_by, cte, qualify, limit, etc.\n"
-        "5. Use SEMPRE o contexto do RAG de padrões SQL (sql_pattern_rag) e do business RAG para adaptar o template e os parâmetros ao contexto da pergunta.\n"
-        "6. NUNCA mostre a consulta SQL diretamente ao usuário.\n"
-        "7. Só responda com texto direto para perguntas de saudação, dúvidas sobre o sistema ou perguntas não relacionadas a dados.\n"
-        "8. QUANDO USAR CTE (WITH):\n"
-        "   - O parâmetro 'cte' deve conter apenas o bloco da CTE, sem o prefixo WITH.\n"
-        "   - O parâmetro 'from' (ou 'from_table') é OBRIGATÓRIO e deve conter o JOIN correto entre os aliases definidos na CTE (ex: FROM vendas_cidade v1 JOIN vendas_cidade v2 ON v1.mes = v2.mes).\n"
-        "   - O SELECT e o WHERE devem usar os aliases definidos no FROM.\n"
-        "   - O SELECT final após o JOIN de aliases deve usar apenas os aliases definidos na CTE (ex: v1.mes, v1.valor_total), nunca campos da tabela original.\n"
-        "   - NUNCA use funções de agregação (SUM, COUNT, etc) no SELECT final após o JOIN de aliases.\n"
-        "   - SEMPRE renomeie as colunas no SELECT final usando AS, por exemplo: v1.valor_total AS valor_crato, v2.valor_total AS valor_salvador.\n"
-        "   - O modelo deve sempre buscar os campos reais da tabela, nunca campos de exemplo genérico.\n"
-        "   - SEMPRE use o campo de data correto (ex: dta_venda, data_venda, nf_dtemis, etc) da tabela/contexto em TODOS os SELECTs, GROUP BY e ORDER BY, tanto na CTE quanto no SELECT final. Nunca use campo de data genérico.\n"
-        "   - NUNCA envie apenas o CTE sem o SELECT final completo e o FROM correto.\n"
-        "   - NUNCA use o nome da tabela original no FROM quando houver CTE. O FROM deve SEMPRE envolver os aliases definidos na CTE.\n"
-        "   - REGRA FUNDAMENTAL PARA TRANSFORMAÇÕES: Sempre que precisar transformar campos (CAST, EXTRACT, PARSE, etc), crie uma CTE inicial (ex: cte_limpeza) apenas para limpeza/conversão dos campos. NUNCA misture transformação e análise na mesma CTE. A CTE de análise deve trabalhar apenas com os campos já limpos/convertidos. Isso evita erros de referência em PARTITION BY, GROUP BY e SELECT.\n"
-        "   - Quando usar PARTITION BY em funções de janela (ROW_NUMBER, RANK, etc), SEMPRE use a mesma expressão literal no GROUP BY (ex: EXTRACT(MONTH FROM dta_venda)), não apenas o alias.\n"
-        "\nIMPORTANTE: Use apenas os nomes de campos (colunas) que estão explicitamente listados no contexto de metadados da tabela alvo. NUNCA invente ou utilize nomes de colunas que não estejam documentados.\n"
-        "Os exemplos de template abaixo usam apenas variáveis genéricas (ex: <<coluna_periodo>>, <<coluna_valor>>), nunca nomes reais de colunas. Sempre substitua pelas colunas reais da tabela, conforme o contexto de metadados.\n"
-        "\nEXEMPLO DE TEMPLATE UNIVERSAL PARA COMPARAÇÃO ENTRE GRUPOS/CATEGORIAS:\n"
-        "WITH cte_limpeza AS (\n    SELECT EXTRACT(MONTH FROM <<coluna_periodo>>) AS mes, UPPER(<<coluna_dimensao>>) AS modelo, <<coluna_valor>>, <<coluna_qtd>>\n    FROM <<full_table_id>>\n    WHERE EXTRACT(YEAR FROM <<coluna_periodo>>) = 2024\n),\n vendas_modelo AS (\n    SELECT mes, modelo, SUM(<<coluna_valor>>) AS valor_total, COUNT(<<coluna_qtd>>) AS quantidade_vendida,\n           ROW_NUMBER() OVER (PARTITION BY mes ORDER BY SUM(<<coluna_valor>>) DESC) AS rn\n    FROM cte_limpeza\n    GROUP BY mes, modelo\n)\nSELECT mes, modelo, valor_total, quantidade_vendida\nFROM vendas_modelo WHERE rn <= 5 ORDER BY mes\n"
-        "\nEXEMPLO ERRADO (NUNCA FAÇA!):\nSELECT EXTRACT(MONTH FROM <<coluna_periodo>>) AS mes, SUM(<<coluna_valor>>) AS valor_total FROM vendas_cidade v1 JOIN vendas_cidade v2 ... -- ERRADO: está usando campo da tabela original e agregação após a CTE.\n"
-        "\nSe a pergunta envolver múltiplos anos, inclua ano no SELECT, GROUP BY e ORDER BY.\n"
-        "Se houver dúvida, consulte SEMPRE os exemplos e padrões do RAG e adapte para o contexto.\n"
-        "\nNUNCA gere respostas vagas, incompletas, genéricas ou não-SQL. O resultado deve ser sempre uma function_call query_business_data pronta para uso empresarial."
-    )
-    
-    # Mapeamento de tabelas disponíveis
-    full_table_mapping = {}
-    tables_description = "Consulta dados no BigQuery usando tabelas configuradas com contexto de negócio otimizado"
-    
-    for table_name, config in TABLES_CONFIG.items():
-        full_table_id = f"{PROJECT_ID}.{DATASET_ID}.{table_name}"
-        full_table_mapping[full_table_id] = table_name
+
+    # Usa instrução centralizada
+    base_instruction = get_sql_functioncall_instruction()
+
+    # Descrição detalhada das tabelas e campos válidos (coerente com o RAG)
+    fields_description = build_tables_fields_instruction()
 
     query_func = FunctionDeclaration(
         name="query_business_data",
-        description=tables_description,
+        description=f"Campos e tabelas disponíveis para consulta:\n{fields_description}",
         parameters={
             "type": "object",
             "properties": {
                 "full_table_id": {
                     "type": "string",
-                    "description": f"ID completo da tabela no BigQuery (PROJECT.DATASET.TABLE). Opções disponíveis: {', '.join(full_table_mapping.keys())}"
+                    "description": "ID completo da tabela no BigQuery (PROJECT.DATASET.TABLE). Deve ser um dos listados acima. Sempre sem crase."
                 },
                 "cte": {
                     "type": "string",
-                    "description": "CTE (Common Table Expression) para consultas complexas. Use para perguntas com múltiplas intenções."
+                    "description": "CTE (Common Table Expression). O campo 'cte' DEVE ser SEMPRE preenchido, mesmo para queries simples. Estruture toda consulta usando CTE, por exemplo: WITH t1 AS (SELECT ... FROM ... WHERE ...). Nunca deixe vazio."
                 },
                 "from_table": {
                     "type": "string",
-                    "description": "FROM ou JOIN a ser usado na query final. Quando houver CTE, deve ser o JOIN correto entre os aliases definidos na CTE (ex: 'FROM t1 JOIN t2 ON ...'). Nunca use a tabela original aqui se houver CTE."
+                    "description": "FROM ou JOIN a ser usado na query final. O campo 'from_table' DEVE ser o alias definido na CTE (ex: 't1', ou um JOIN entre aliases definidos na CTE). Nunca use o nome da tabela original diretamente no FROM se houver CTE."
                 },
                 "select": {
                     "type": "array",
@@ -118,9 +83,9 @@ def initialize_model():
             "required": ["full_table_id", "select"]
         }
     )
-    
+
     model = genai.GenerativeModel(
-        model_name="gemini-2.0-flash-exp",
+        model_name=MODEL_NAME,
         generation_config={
             "temperature": 0.2,
             "top_p": 0.95,
@@ -130,7 +95,7 @@ def initialize_model():
         system_instruction=base_instruction,
         tools=[query_func]
     )
-    
+
     return model
 
 def refine_with_gemini_rag(model, user_question: str, user_id: str = "default"):
@@ -288,95 +253,59 @@ def refine_with_gemini(model, user_question: str, user_id: str = "default"):
     """
     return refine_with_gemini_rag(model, user_question)
 
+
+from prompt_rules import get_chart_export_instruction
+import json
+import google.generativeai as genai
+import os
+
 def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = None, query: str = None):
     """
     Analisa dados finais e gera resposta completa com gráficos se solicitado
     """
-    import json
-    import google.generativeai as genai
-    import os
-    
-    # VERSÃO SIMPLIFICADA PARA TESTE - pula configuração do Gemini por agora
-    # api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-    # if not api_key:
-    #     try:
-    #         from config import GOOGLE_API_KEY
-    #         api_key = GOOGLE_API_KEY
-    #     except ImportError:
-    #         print("API key do Gemini nao encontrada")
-    #         return "API key do Gemini nao configurada", None
-    # genai.configure(api_key=api_key)
-    
     if function_params is not None:
         if hasattr(function_params, "_values"):
             function_params = {k: v for k, v in function_params.items()}
         elif not isinstance(function_params, dict):
             function_params = dict(function_params)
 
+    # Usa instrução centralizada para gráfico/exportação e refino/tabularização
+    chart_export_instruction = get_chart_export_instruction()
+    refine_instruction = get_refine_analysis_instruction()
+
+    # Formatação automática dos dados numéricos do DataFrame (2 casas decimais, inplace, sem onerar processamento)
+    if data and isinstance(data, list) and len(data) > 0:
+        df = pd.DataFrame(data)
+        float_cols = df.select_dtypes(include=['float', 'float64', 'float32']).columns
+        if len(float_cols) > 0:
+            df[float_cols] = df[float_cols].round(2)
+        # Atualiza a lista de dicts formatada
+        data = df.to_dict(orient='records')
+
     instruction = f"""
     Você é um ANALISTA SÊNIOR especializado em transformar dados em insights estratégicos.
-    
-    MISSÃO: Analisar ESPECIFICAMENTE os dados fornecidos e responder DIRETAMENTE à pergunta do usuário.
-    
+
+    MISSÃO: Analisar ESPECÍFICAMENTE os dados fornecidos e responder DIRETAMENTE à pergunta do usuário.
+
     CONTEXTO COMPLETO:
     - PERGUNTA DO USUÁRIO: "{prompt}"
     - CONSULTA SQL EXECUTADA: {query if query else "Consulta direta"}
     - FILTROS APLICADOS: {function_params.get('where', 'Nenhum') if function_params else 'Nenhum'}
-    
+
     DADOS ESPECÍFICOS PARA ANÁLISE:
     {json.dumps(data, indent=2, default=str)}
-    
-    INSTRUÇÕES CRÍTICAS:
-    1. ANALISE ESPECIFICAMENTE estes dados fornecidos
-    2. RESPONDA DIRETAMENTE ao que o usuário perguntou
-    3. Se usuário quer "comparar anos" → COMPARE os anos nos dados
-    4. Se usuário quer "gráfico" → inclua GRAPH-TYPE com configuração específica
-    5. Se usuário quer "exportar" → inclua EXPORT-INFO
-    6. CALCULE variações percentuais REAIS entre os períodos dos dados
-    7. IDENTIFIQUE padrões e tendências ESPECÍFICOS dos dados fornecidos
-    
-    REGRAS CRÍTICAS DE FORMATAÇÃO:
-    - SEMPRE use "R$ 123.456.789,00" para valores monetários (com R$ e espaço)
-    - SEMPRE adicione espaço entre números e texto: "123,45 em 2025" (não "123,45em2025")
-    - SEMPRE adicione espaço após porcentagens: "25,5% nos últimos" (não "25,5%nos")
-    - SEMPRE separe anos de texto: "Em 2025" (não "Em2025")
-    - NUNCA cole texto diretamente em números: use pontuação adequada
-    - Use "em" ao invés de "eem"
-    - Para nomes de modelos, mantenha espaçamento correto: "BYD SONG PRO"
-    
-    FORMATO DA RESPOSTA:
-    
-    ## ANÁLISE: [Título específico baseado na pergunta]
-    
-    ### RESUMO DIRETO
-    [Resposta direta à pergunta do usuário com base NOS DADOS FORNECIDOS]
-    
-    ### ANÁLISE DOS DADOS
-    [Insights específicos extraídos DOS DADOS REAIS fornecidos]
-    
-    ### COMPARAÇÕES E VARIAÇÕES
-    [Se aplicável: cálculos de variação entre períodos/categorias DOS DADOS]
-    
-    ### TABELA DE RESULTADOS
-    [Tabela organizada com OS DADOS FORNECIDOS e cálculos relevantes]
-    
-    ### INSIGHTS E RECOMENDAÇÕES
-    [Insights acionáveis baseados ESPECIFICAMENTE nos padrões dos dados]
-    
-    REGRAS PARA GRÁFICOS (se e somente se solicitado):
-    - Novamente ressaltando só crie a parametrização do gráfico se solicitado
-    - Para dados temporais (mês/ano): GRAPH-TYPE: line | X-AXIS: [coluna_tempo] | Y-AXIS: [métrica] | COLOR: [dimensão_comparação]
-    - Para dados categóricos: GRAPH-TYPE: bar | X-AXIS: [categoria] | Y-AXIS: [valor]
-    - O parâmetro 'color' do gráfico deve ser, preferencialmente, uma dimensão categórica relevante para a análise (ex: modelo, cidade, categoria, produto, vendedor). Só use campos temporais (ano, mês) se não houver dimensão melhor disponível ou se for explicitamente solicitado. Nunca use um campo que não existe no resultado. Se não houver dimensão adequada, repita a coluna X ou use None.
-    REGRA PARA EXPORTAÇÃO (se solicitada):
-    - Inclua: EXPORT-INFO: FORMATO: excel
-    
+
+    {chart_export_instruction}
+
+    {refine_instruction}
+
     IMPORTANTE:
     - Trabalhe APENAS com os dados fornecidos
     - Seja ESPECÍFICO aos números reais
     - Calcule variações REAIS entre os valores
     - Não seja genérico - seja preciso aos dados
     - Responda EXATAMENTE o que foi perguntado
+    - Nunca utilize notação científica para apresentar valores numéricos, sempre use formato decimal com até 2 casas decimais.
     """
 
     model = genai.GenerativeModel(
@@ -445,7 +374,7 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
         if any(word in prompt.lower() for word in ['gráfico', 'grafico', 'chart', 'visualização']):
             # Detecta coluna Y automaticamente dos dados
             if data and len(data) > 0:
-                numeric_cols = [col for col in data[0].keys() if col not in ['mes', 'ano', 'month', 'year'] and isinstance(data[0].get(col), (int, float))]
+                numeric_cols = [col for col in data[0].keys() if col not in ['mes', 'ano', 'month', 'year'] and isinstance(data[0].get(col), (int, float, float))]
                 y_col = numeric_cols[0] if numeric_cols else 'total_vendas'
             else:
                 y_col = 'total_vendas'
@@ -505,7 +434,6 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
                 print(f"Parametros do grafico - Tipo: {graph_type}, X: {x_axis}, Y: {y_axis}, Color: {color}")
                 
                 # Converte dados para DataFrame
-                import pandas as pd
                 df_data = pd.DataFrame(data)
                 
                 fig = generate_chart(df_data, graph_type, x_axis, y_axis, color)
@@ -640,7 +568,7 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
     """
     Cria gráficos com tema adaptativo (dark/light)
     """
-    import streamlit as st
+    
     
     # Detecta tema atual do Streamlit
     theme_mode = st.session_state.get('theme_mode', 'escuro')
@@ -703,34 +631,62 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
     }
     
     try:
+        # Normaliza nomes de colunas (remove espaços, lower)
+        data.columns = [str(col).strip() for col in data.columns]
+        x_axis = str(x_axis).strip()
+        y_axis = str(y_axis).strip()
+
+
+        # 1. Se color não existe no DataFrame, ou é igual a x_axis ou y_axis, ignora (None)
+        color_final = color.strip() if isinstance(color, str) else color
+        if (
+            color_final is None or
+            color_final not in data.columns or
+            color_final == x_axis or
+            color_final == y_axis
+        ):
+            color_final = None
+
+        # 2. Se color_final ainda é None, só usa cor se houver uma terceira coluna categórica diferente de x_axis e y_axis
+        if color_final is None:
+            for col in data.columns:
+                if col not in [x_axis, y_axis] and not pd.api.types.is_numeric_dtype(data[col]):
+                    color_final = col
+                    break
+            # Se não encontrou, mantém color_final=None
+
+        # 3. Se só existem x_axis e y_axis, nunca usa cor
+        if len(data.columns) <= 2:
+            color_final = None
+
+        # Trata eixo X como categoria se for string
+        if pd.api.types.is_object_dtype(data[x_axis]):
+            data[x_axis] = data[x_axis].astype(str)
+
+        # Geração do gráfico
         if chart_type in ['line', 'linha']:
             fig = px.line(
-                data, x=x_axis, y=y_axis, color=color,
+                data, x=x_axis, y=y_axis, color=color_final,
                 color_discrete_sequence=color_palette,
                 line_shape='spline'
             )
             fig.update_traces(line=dict(width=3))
-            
         elif chart_type in ['bar', 'barra']:
             fig = px.bar(
-                data, x=x_axis, y=y_axis, color=color,
+                data, x=x_axis, y=y_axis, color=color_final,
                 color_discrete_sequence=color_palette
             )
-            
         elif chart_type in ['scatter', 'dispersao']:
             fig = px.scatter(
-                data, x=x_axis, y=y_axis, color=color,
+                data, x=x_axis, y=y_axis, color=color_final,
                 color_discrete_sequence=color_palette,
                 size_max=15
             )
-            
         else:
-            fig = px.bar(data, x=x_axis, y=y_axis, color=color,
+            fig = px.bar(data, x=x_axis, y=y_axis, color=color_final,
                         color_discrete_sequence=color_palette)
-        
         # Aplica layout adaptativo
         fig.update_layout(layout_config)
-        
         # Grid adaptativo ao tema
         fig.update_xaxes(
             showgrid=True, gridwidth=1, gridcolor=grid_color,
@@ -740,7 +696,6 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
             showgrid=True, gridwidth=1, gridcolor=grid_color,
             showline=True, linewidth=1, linecolor=grid_color
         )
-        
         return fig
     except Exception as e:
         print(f"Erro ao criar gráfico: {e}")

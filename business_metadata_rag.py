@@ -153,7 +153,7 @@ class BusinessMetadataRAGV2:
         return metadata_list
     
     def _create_business_context(self, table_name: str, table_config: Dict[str, Any]) -> str:
-        """Cria contexto de negócio otimizado para o RAG, incluindo orientação de conversão se houver"""
+        """Cria contexto de negócio otimizado para o RAG, listando explicitamente todos os campos válidos (apenas do tables_config.json). Nunca inclua nomes de coluna em outro local!"""
         metadata = table_config.get('metadata', {})
         business_rules = table_config.get('business_rules', {})
         fields = table_config.get('fields', {})
@@ -165,39 +165,14 @@ class BusinessMetadataRAGV2:
             context = rule.get('context', '')
             critical_rules.append(f"• {rule_text}: {context}")
 
-        # Campos principais do formato v2
-        principal_fields = []
+        # Listar todos os campos válidos por categoria, extraídos apenas do tables_config.json
+        def list_fields(cat, label):
+            return [f"[{label}] {field.get('name')} ({field.get('type')})" for field in fields.get(cat, [])]
 
-        # Campos temporais (formato v2) - inclui orientação de conversão se houver
-        for field in fields.get('temporal_fields', []):
-            name = field.get('name')
-            desc = field.get('description')
-            extracts = field.get('common_extracts', [])
-            conversion = field.get('conversion', None)
-            if conversion:
-                principal_fields.append(f"• {name}: {desc} [⚠️ Para SQL: SEMPRE use {conversion} ao invés de {name}]")
-            else:
-                principal_fields.append(f"• {name}: {desc}")
-            if extracts:
-                principal_fields.append(f"  Extrações: {', '.join(extracts[:3])}")
-
-        # Campos de dimensão (formato v2)
-        for field in fields.get('dimension_fields', []):
-            name = field.get('name')
-            desc = field.get('description')
-            pattern = field.get('search_pattern', '')
-            principal_fields.append(f"• {name}: {desc}")
-            if pattern:
-                principal_fields.append(f"  Padrão: {pattern}")
-
-        # Campos métricos (formato v2)
-        for field in fields.get('metric_fields', []):
-            name = field.get('name')
-            desc = field.get('description')
-            priority = field.get('priority', '')
-            principal_fields.append(f"• {name}: {desc}")
-            if priority == 'alta':
-                principal_fields.append(f"  ⚠️ PRIORIDADE ALTA")
+        temporal_fields = list_fields('temporal_fields', 'temporal')
+        dimension_fields = list_fields('dimension_fields', 'dimension')
+        metric_fields = list_fields('metric_fields', 'metric')
+        filter_fields = list_fields('filter_fields', 'filter')
 
         context = f"""
 Tabela: {table_name} ({metadata.get('bigquery_table', table_name)})
@@ -207,8 +182,11 @@ Domínio: {metadata.get('domain', '')}
 === REGRAS CRÍTICAS ===
 {chr(10).join(critical_rules[:8])}
 
-=== CAMPOS PRINCIPAIS ===
-{chr(10).join(principal_fields[:15])}
+=== LISTA DE CAMPOS VÁLIDOS (use apenas estes nomes, nunca invente ou altere. Não utilize nomes de coluna que não estejam abaixo!) ===
+{chr(10).join(temporal_fields)}
+{chr(10).join(dimension_fields)}
+{chr(10).join(metric_fields)}
+{chr(10).join(filter_fields)}
 """.strip()
         return context
 

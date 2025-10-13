@@ -1,5 +1,6 @@
 from google.cloud import bigquery
 from config import PROJECT_ID, DATASET_ID
+import re
 
 client = bigquery.Client()
 
@@ -32,7 +33,6 @@ def _parse_list_param(param, param_name="param"):
             # Parse inteligente que respeita parênteses e aspas
             result = []
             content = param[1:-1]  # Remove [ e ]
-            
             # Split inteligente que respeita parênteses e aspas aninhadas
             parts = []
             current_part = ""
@@ -40,17 +40,14 @@ def _parse_list_param(param, param_name="param"):
             quote_count = 0
             in_single_quote = False
             in_double_quote = False
-            
             i = 0
             while i < len(content):
                 char = content[i]
-                
                 # Controla estado das aspas
                 if char == "'" and not in_double_quote:
                     in_single_quote = not in_single_quote
                 elif char == '"' and not in_single_quote:
                     in_double_quote = not in_double_quote
-                
                 # Controla parênteses apenas fora de aspas
                 elif not in_single_quote and not in_double_quote:
                     if char == "(":
@@ -63,22 +60,27 @@ def _parse_list_param(param, param_name="param"):
                         current_part = ""
                         i += 1
                         continue
-                
                 current_part += char
                 i += 1
-            
             # Adiciona último item
             if current_part.strip():
                 parts.append(current_part.strip())
-            
             # Limpa cada parte
             for part in parts:
-                cleaned = part.strip().strip('"').strip("'")
-                if cleaned:
-                    result.append(cleaned)
+                # Se o part contém várias colunas separadas por vírgula, separa
+                if "," in part and not (part.startswith("(") and part.endswith(")")):
+                    subparts = [p.strip().strip('"').strip("'") for p in part.split(",") if p.strip()]
+                    result.extend(subparts)
+                else:
+                    cleaned = part.strip().strip('"').strip("'")
+                    if cleaned:
+                        result.append(cleaned)
         else:
-            # String simples: "item1"
-            result = [param.strip()]
+            # String simples: "item1" ou string única com várias colunas separadas por vírgula
+            if "," in param:
+                result = [p.strip().strip('"').strip("'") for p in param.split(",") if p.strip()]
+            else:
+                result = [param.strip()]
     else:
         # Já é lista ou outro tipo
         result = list(param) if param else []
@@ -118,31 +120,29 @@ def execute_query(query: str):
         return {"error": str(e), "query": query}
 
 def build_query(params: dict) -> str:
-    """
-    Constrói a query exatamente conforme os parâmetros recebidos
-    O full_table_id já vem completo do Gemini
-    ATUALIZADO: Suporte a CTEs (Common Table Expressions) para queries complexas
-    """
-    # Aplica correções automáticas nos parâmetros
+    # Apenas constrói a query fielmente conforme os parâmetros recebidos
     original_params = params.copy()
     corrected_params = fix_function_params(params)
-    
+
     # Log das correções nos parâmetros
     if original_params != corrected_params:
         print(f"PARAM_CORRECTION: {original_params} -> {corrected_params}")
-    
+
     # Debug: log dos parâmetros corrigidos
     print(f"DEBUG - Parâmetros recebidos no build_query: {corrected_params}")
-    
+
     full_table_id = corrected_params.get("full_table_id")
     if not full_table_id:
         raise ValueError("full_table_id é obrigatório")
-    
+    # Sempre coloca o full_table_id entre crases para evitar problemas com '-' e outros caracteres
+    if not (full_table_id.startswith('`') and full_table_id.endswith('`')):
+        full_table_id = f'`{full_table_id}`'
+
     # Processa todos os parâmetros de lista usando a função auxiliar
     select = _parse_list_param(corrected_params.get("select", ["*"]), "select")
     group_by_list = _parse_list_param(corrected_params.get("group_by"), "group_by")
     order_by_list = _parse_list_param(corrected_params.get("order_by"), "order_by")
-    
+
     # Garante que select não fique vazio
     if not select:
         select = ["*"]
@@ -160,8 +160,15 @@ def build_query(params: dict) -> str:
         cte_clean = cte.strip()
         if cte_clean.upper().startswith("WITH "):
             cte_clean = cte_clean[5:].lstrip()
+        # Regex para encontrar nomes de tabela do tipo projeto.dataset.tabela e envolver por crase
+        def crasear_tabelas(match):
+            nome = match.group(0)
+            if nome.startswith('`') and nome.endswith('`'):
+                return nome
+            return f'`{nome}`'
+        # Garante crase para nomes do tipo projeto.dataset.tabela
+        cte_clean = re.sub(r'\b([a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+)\b', crasear_tabelas, cte_clean)
         with_clause = f"WITH {cte_clean}\n"
-
 
     # Caminho único: se não houver CTE, usa full_table_id como from_table automaticamente
     cte = corrected_params.get("cte")
@@ -175,6 +182,9 @@ def build_query(params: dict) -> str:
         if not from_table or not str(from_table).strip():
             from_table = full_table_id
 
+    # Se o from_table for igual ao full_table_id sem crase, coloca crase
+    if from_table == corrected_params.get("full_table_id") and not (from_table.startswith('`') and from_table.endswith('`')):
+        from_table = f'`{from_table}`'
 
     # Constrói as partes da query fielmente conforme os parâmetros
     where = f" WHERE {corrected_params['where']}" if corrected_params.get("where") else ""
@@ -186,5 +196,9 @@ def build_query(params: dict) -> str:
     query = f"""{with_clause}SELECT {', '.join(select)}
 FROM {from_table}{where}{group_by}{qualify}{order_by}{limit}"""
 
-    print(f"DEBUG - Query construída:\n{query}")
-    return query.strip()
+    # Remove \n, \t e espaços duplicados para evitar quebras
+    query_clean = re.sub(r'[\n\t]+', ' ', query)
+    query_clean = re.sub(r' +', ' ', query_clean)
+
+    print(f"DEBUG - Query construída:\n{query_clean}")
+    return query_clean.strip()

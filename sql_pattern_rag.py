@@ -1,17 +1,3 @@
-"""
-Sistema RAG Especializado em Padrões SQL/BigQuery
-==================================================
-
-Este módulo implementa um sistema RAG focado em padrões de SQL e melhores práticas
-do BigQuery, permitindo que o Gemini consulte dinamicamente as técnicas adequadas
-conforme o tipo de pergunta.
-
-BENEFÍCIOS:
-- Padrões SQL específicos para cada tipo de análise
-- Melhores práticas do BigQuery indexadas por contexto
-- Recomendações dinâmicas baseadas na intenção da pergunta
-- Separação clara entre lógica SQL e regras de negócio
-"""
 
 import json
 import hashlib
@@ -23,6 +9,7 @@ import numpy as np
 import re
 
 
+
 @dataclass
 class SQLPattern:
     """Estrutura de um padrão SQL"""
@@ -30,9 +17,10 @@ class SQLPattern:
     description: str
     keywords: List[str]
     pattern_type: str
-    sql_template: str
-    example: str
-    use_cases: List[str]
+    sql_template: Optional[str] = None
+    parameters_template: Optional[dict] = None
+    example: Optional[str] = None
+    use_cases: Optional[List[str]] = None
     embedding: Optional[List[float]] = None
 
 
@@ -50,22 +38,23 @@ class SQLPatternRAG:
         try:
             with open(self.patterns_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            
+
             # Converte padrões para objetos SQLPattern
             sql_patterns = data.get('sql_patterns', {})
             for pattern_id, pattern_data in sql_patterns.items():
                 self.patterns[pattern_id] = SQLPattern(
                     pattern_id=pattern_id,
-                    description=pattern_data['description'],
-                    keywords=pattern_data['keywords'],
-                    pattern_type=pattern_data['pattern_type'],
-                    sql_template=pattern_data['sql_template'],
-                    example=pattern_data['example'],
-                    use_cases=pattern_data['use_cases']
+                    description=pattern_data.get('description', ''),
+                    keywords=pattern_data.get('keywords', []),
+                    pattern_type=pattern_data.get('pattern_type', ''),
+                    sql_template=pattern_data.get('sql_template'),
+                    parameters_template=pattern_data.get('parameters_template'),
+                    example=pattern_data.get('example'),
+                    use_cases=pattern_data.get('use_cases', [])
                 )
-            
+
             print(f"Carregados {len(self.patterns)} padrões SQL")
-            
+
         except Exception as e:
             print(f"Erro ao carregar padrões SQL: {e}")
             self.patterns = {}
@@ -200,17 +189,10 @@ MELHORES PRÁTICAS BIGQUERY:
 
 def get_sql_guidance_for_query(user_query: str) -> str:
     """
-    Função utilitária para obter orientações SQL para uma pergunta
-    
-    Args:
-        user_query (str): Pergunta do usuário
-        
-    Returns:
-        str: Contexto SQL formatado
+    Função utilitária para obter orientações SQL para uma pergunta usando singleton
     """
-    sql_rag = SQLPatternRAG()
+    sql_rag = get_sql_rag_instance()
     return sql_rag.get_sql_guidance(user_query)
-
 
 # Instância global para reutilização
 _sql_rag_instance = None
@@ -219,5 +201,7 @@ def get_sql_rag_instance() -> SQLPatternRAG:
     """Retorna instância singleton do SQL RAG"""
     global _sql_rag_instance
     if _sql_rag_instance is None:
+        print("🔄 Inicializando SQLPatternRAG singleton...")
         _sql_rag_instance = SQLPatternRAG()
+        print("✅ SQLPatternRAG inicializado!")
     return _sql_rag_instance

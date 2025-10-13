@@ -1,6 +1,7 @@
- 
-google-cloud-bigquery==3.31.0
+ google-cloud-bigquery==3.31.0
 streamlit==1.44.1
+google-generativeai
+google-genai
 ruff
 black
 python-dotenv
@@ -11,4 +12,3 @@ duckdb
 mercadopago
 sentence-transformers
 numpy
- 
