@@ -1,5 +1,6 @@
 from google.cloud import bigquery
 from config import PROJECT_ID, DATASET_ID
+import ast
 import re
 
 client = bigquery.Client()
@@ -28,59 +29,17 @@ def _parse_list_param(param, param_name="param"):
     print(f"DEBUG - {param_name} inicial: {param} (tipo: {type(param)})")
     
     if isinstance(param, str):
-        if param.startswith("[") and param.endswith("]"):
-            # String que parece lista: "['item1', 'item2']"
-            # Parse inteligente que respeita parênteses e aspas
-            result = []
-            content = param[1:-1]  # Remove [ e ]
-            # Split inteligente que respeita parênteses e aspas aninhadas
-            parts = []
-            current_part = ""
-            paren_count = 0
-            quote_count = 0
-            in_single_quote = False
-            in_double_quote = False
-            i = 0
-            while i < len(content):
-                char = content[i]
-                # Controla estado das aspas
-                if char == "'" and not in_double_quote:
-                    in_single_quote = not in_single_quote
-                elif char == '"' and not in_single_quote:
-                    in_double_quote = not in_double_quote
-                # Controla parênteses apenas fora de aspas
-                elif not in_single_quote and not in_double_quote:
-                    if char == "(":
-                        paren_count += 1
-                    elif char == ")":
-                        paren_count -= 1
-                    elif char == "," and paren_count == 0:
-                        # Vírgula fora de parênteses - fim do item
-                        parts.append(current_part.strip())
-                        current_part = ""
-                        i += 1
-                        continue
-                current_part += char
-                i += 1
-            # Adiciona último item
-            if current_part.strip():
-                parts.append(current_part.strip())
-            # Limpa cada parte
-            for part in parts:
-                # Se o part contém várias colunas separadas por vírgula, separa
-                if "," in part and not (part.startswith("(") and part.endswith(")")):
-                    subparts = [p.strip().strip('"').strip("'") for p in part.split(",") if p.strip()]
-                    result.extend(subparts)
-                else:
-                    cleaned = part.strip().strip('"').strip("'")
-                    if cleaned:
-                        result.append(cleaned)
-        else:
-            # String simples: "item1" ou string única com várias colunas separadas por vírgula
-            if "," in param:
-                result = [p.strip().strip('"').strip("'") for p in param.split(",") if p.strip()]
+        # Tenta avaliar como lista Python válida (caso venha como string de lista)
+        try:
+            parsed = ast.literal_eval(param)
+            if isinstance(parsed, list):
+                # Garante que cada item é string e não quebra SQL
+                result = [str(item).strip() for item in parsed if str(item).strip()]
             else:
-                result = [param.strip()]
+                result = [str(parsed).strip()]
+        except Exception:
+            # Fallback: trata como string simples
+            result = [param.strip()]
     else:
         # Já é lista ou outro tipo
         result = list(param) if param else []

@@ -631,11 +631,34 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
     }
     
     try:
-        # Normaliza nomes de colunas (remove espaços, lower)
+        # Normaliza nomes de colunas (remove espaços)
         data.columns = [str(col).strip() for col in data.columns]
         x_axis = str(x_axis).strip()
         y_axis = str(y_axis).strip()
 
+        # --- Tratamento generalista para gráficos temporais ---
+        # Detecta se x_axis é temporal (semana, mes, dia, data, ano)
+        temporal_patterns = ['semana', 'mes', 'dia', 'data', 'ano', 'week', 'month', 'date', 'year']
+        is_temporal = any(p in x_axis.lower() for p in temporal_patterns)
+        # Detecta coluna de categoria (color) se existir
+        category_col = color if color and color in data.columns else None
+        if not category_col:
+            # Busca coluna categórica diferente de x_axis e y_axis
+            for col in data.columns:
+                if col not in [x_axis, y_axis] and not pd.api.types.is_numeric_dtype(data[col]):
+                    category_col = col
+                    break
+
+        if is_temporal and category_col:
+            # Completa matriz de períodos x categorias
+            all_temporals = sorted(data[x_axis].unique())
+            all_categories = sorted(data[category_col].unique())
+            import pandas as pd
+            idx = pd.MultiIndex.from_product([all_temporals, all_categories], names=[x_axis, category_col])
+            data = data.set_index([x_axis, category_col]).reindex(idx, fill_value=0).reset_index()
+            # Ordena eixo temporal
+            data[x_axis] = pd.Categorical(data[x_axis], ordered=True, categories=all_temporals)
+            data = data.sort_values(x_axis)
 
         # 1. Se color não existe no DataFrame, ou é igual a x_axis ou y_axis, ignora (None)
         color_final = color.strip() if isinstance(color, str) else color
@@ -685,6 +708,48 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
         else:
             fig = px.bar(data, x=x_axis, y=y_axis, color=color_final,
                         color_discrete_sequence=color_palette)
+        # --- Ajuste ainda mais agressivo do eixo Y para ignorar outliers e deixar o gráfico legível ---
+        if fig is not None and y_axis in data.columns:
+            y_vals = data[y_axis].dropna()
+            if len(y_vals) > 0:
+                y_min = y_vals.min()
+                y_max_real = y_vals.max()
+                y_pctl = y_vals.quantile(0.90)
+                # Detecta outlier: se o valor máximo for mais que 2x o percentil 90, considera outlier
+                is_outlier = y_max_real > y_pctl * 2
+                if is_outlier and y_max_real > 0:
+                    # Aplica escala logarítmica
+                    fig.update_yaxes(type="log")
+                    annotation_color = text_color
+                    fig.add_annotation(
+                        text="Escala logarítmica aplicada devido a outlier",
+                        xref="paper", yref="paper",
+                        x=0.99, y=0.98, showarrow=False,
+                        font=dict(size=11, color=annotation_color),
+                        bgcolor=bg_color,
+                        bordercolor=annotation_color,
+                        borderwidth=0,
+                        opacity=0.7,
+                        xanchor="right", yanchor="top"
+                    )
+                else:
+                    # Ajuste proporcional padrão
+                    y_top = max(y_max_real, min(y_pctl * 1.10, y_max_real * 2))
+                    fig.update_yaxes(range=[y_min, y_top])
+                    if y_top < y_max_real:
+                        annotation_color = text_color
+                        fig.add_annotation(
+                            text=f"Valores acima de {y_top:,.0f} não exibidos",
+                            xref="paper", yref="paper",
+                            x=0.99, y=0.98, showarrow=False,
+                            font=dict(size=11, color=annotation_color),
+                            bgcolor=bg_color,
+                            bordercolor=annotation_color,
+                            borderwidth=0,
+                            opacity=0.7,
+                            xanchor="right", yanchor="top"
+                        )
+
         # Aplica layout adaptativo
         fig.update_layout(layout_config)
         # Grid adaptativo ao tema

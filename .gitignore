@@ -20,3 +20,4 @@ cache.db
 *.db
 *.wal
 # Ignore SQL files      
+*.service
