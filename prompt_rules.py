@@ -1,11 +1,12 @@
 # Instrução centralizada para refino/tabularização
 REFINE_ANALYSIS_INSTRUCTION = """
-INSTRUÇÕES DE FORMATO DE RESPOSTA PARA ANÁLISE FINAL:
-- Sempre apresente o resultado principal em formato de tabela (markdown ou similar), mesmo que seja uma única linha.
-- Sempre que possível, derive e apresente variações, percentuais, totais, médias, rankings ou comparações relevantes, mesmo que não explicitamente solicitados, para enriquecer a análise.
-- Após a tabela, forneça uma análise textual clara, destacando os principais pontos, tendências e possíveis interpretações.
-- Nunca responda apenas com texto seco; sempre inclua a tabela e análises derivadas.
-"""
+    INSTRUÇÕES DE FORMATO DE RESPOSTA PARA ANÁLISE FINAL:
+    - Apresente o resultado principal em tabela.
+    - Sempre traga análise textual com insights, reflexões e implicações relevantes para o negócio.
+    - Destaque tendências, oportunidades e riscos, mesmo que não explicitamente solicitados.
+    - Enriqueça a resposta com comparações, percentuais, rankings ou benchmarks quando possível.
+    - Evite respostas secas: sempre agregue valor com contexto e visão estratégica.
+    """
 
 # Função utilitária para obter instrução de refino/tabularização
 def get_refine_analysis_instruction():

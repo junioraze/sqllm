@@ -360,7 +360,6 @@ class MessageHandler:
 
     def _handle_gemini_response(self, typing_placeholder, prompt: str, response) -> None:
     # Loga o objeto de retorno e seu tipo para diagnóstico
-        print(f"[DEBUG] _handle_gemini_response: response={repr(response)} | type={type(response)}")
         """Etapa 3: Processar resposta do Gemini"""
         self.flow_path.append("processando_resposta_gemini")
         
@@ -461,7 +460,6 @@ class MessageHandler:
 
             self.flow_path.append("construindo_query")
 
-            # Construir e executar query
             self._start_timing("construcao_query", typing_placeholder)
             try:
                 query = build_query(serializable_params)
@@ -636,15 +634,17 @@ class MessageHandler:
     def _finalize_response(self, typing_placeholder, response_text: str, tech_details: Dict = None) -> None:
         """Finaliza resposta e atualiza interface"""
         typing_placeholder.empty()
-        
+        # Remove instruções técnicas do texto antes de salvar
+        content = slugfy_response(response_text)
+        for marker in ["GRAPH-TYPE:", "EXPORT-INFO:", "dt:"]:
+            if marker in content:
+                content = content.split(marker)[0].strip()
         message_data = {
             "role": "assistant",
-            "content": format_text_with_ia_highlighting(slugfy_response(response_text))
+            "content": format_text_with_ia_highlighting(content)
         }
-        
         if tech_details:
             message_data["tech_details"] = tech_details
-            
         st.session_state.chat_history.append(message_data)
         st.rerun()
 

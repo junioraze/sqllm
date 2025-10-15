@@ -1,3 +1,4 @@
+
 import json
 import streamlit as st
 from datetime import datetime
@@ -5,7 +6,150 @@ import uuid
 import pandas as pd
 from io import BytesIO
 import base64, re
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+# Exibe uma tabela interativa com AgGrid, aplicando tema customizado
 
+def show_aggrid_table(data: list, theme: str = "streamlit", height: int = 350, fit_columns: bool = True):
+    # Detecta tema do Streamlit e aplica CSS específico
+    if not data or not isinstance(data, list) or not isinstance(data[0], dict):
+        st.info("Nenhum dado tabular disponível para exibir.")
+        return
+    df = pd.DataFrame(data)
+    # Tabela principal customizada
+    st.markdown("<div class='section-label'>dados</div>", unsafe_allow_html=True)
+    st.markdown(_render_custom_table(df), unsafe_allow_html=True)
+
+    # Se for numérico, mostra sumário analítico dentro de um expander fechado
+    if not df.empty:
+        numeric_cols = df.select_dtypes(include=["number"]).columns
+        if len(numeric_cols) > 0:
+            with st.expander("Resumo Analítico (abrir para ver detalhes)", expanded=False):
+                resumo = df[numeric_cols].describe().T
+                resumo = resumo.rename(columns={
+                    "count": "Frequência",
+                    "mean": "Média",
+                    "std": "Desvio Padrão",
+                    "min": "Mínimo",
+                    "25%": "1º Quartil",
+                    "50%": "Mediana",
+                    "75%": "3º Quartil",
+                    "max": "Máximo"
+                })
+                resumo.index.name = "Coluna"
+                st.markdown(_render_custom_table(resumo, small=True, show_index=True, bar_columns=["Média", "Quantidade", "Máximo"]), unsafe_allow_html=True)
+
+def _render_custom_table(df, small=False, show_index=False, bar_columns=None):
+    """
+    Renderiza um DataFrame como tabela HTML customizada, elegante e responsiva ao tema.
+    show_index: se True, mostra o índice como primeira coluna.
+    bar_columns: lista de colunas para exibir barra de volume proporcional.
+    """
+    if df.empty:
+        return "<em>Nenhum dado disponível</em>"
+    table_class = "custom-table small-table" if small else "custom-table"
+    html = f'<div style="overflow-x:auto;"><table class="{table_class}">'
+    # Cabeçalho
+    html += "<thead><tr>"
+    if show_index:
+        html += f'<th>{df.index.name or ""}</th>'
+    for col in df.columns:
+        html += f'<th>{col}</th>'
+    html += "</tr></thead>"
+    # Prepara escala para barras
+    bar_max = {}
+    if bar_columns:
+        for col in bar_columns:
+            if col in df.columns:
+                vals = pd.to_numeric(df[col], errors="coerce")
+                bar_max[col] = vals.max() if vals.notnull().any() else 1
+    # Corpo
+    html += "<tbody>"
+    for idx, row in df.iterrows():
+        html += "<tr>"
+        if show_index:
+            html += f'<td style="font-weight:600;">{idx}</td>'
+        for col, val in row.items():
+            display_val = val
+            if pd.notnull(val) and isinstance(val, (int, float)):
+                if isinstance(val, int):
+                    display_val = f"{val:,}".replace(",", ".")
+                else:
+                    display_val = f"{val:,.4f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            elif pd.isnull(val):
+                display_val = ""
+            if bar_columns and col in bar_max and pd.notnull(val):
+                width = int(100 * float(val) / bar_max[col]) if bar_max[col] else 0
+                bar_html = f'<div style="height:0.9em;width:{width}%;background:linear-gradient(90deg,var(--text-accent),var(--bg-tertiary));border-radius:4px;"></div>'
+                html += f'<td style="position:relative;">{display_val}<div style="margin-top:0.15em;">{bar_html}</div></td>'
+            else:
+                html += f'<td>{display_val}</td>'
+        html += "</tr>"
+    html += "</tbody></table></div>"
+    # CSS customizado responsivo ao tema
+    css = '''
+    <style>
+    .custom-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        background: var(--bg-tertiary);
+        border: 1.2px solid var(--border-primary);
+        border-radius: 13px;
+        font-size: 1.05em;
+        margin-bottom: 1em;
+        box-shadow: 0 4px 18px 0 rgba(0,0,0,0.10), 0 1.5px 0 0 var(--border-primary);
+        overflow: hidden;
+        /* Efeito de alto relevo sutil para padronizar com outros blocos */
+        transition: box-shadow 0.2s;
+    }
+    .custom-table th, .custom-table td {
+        text-align: center;
+        vertical-align: middle;
+        padding: 0.6em 0.7em;
+        color: var(--text-primary);
+        border-bottom: 1px solid var(--border-primary);
+    }
+    .custom-table th {
+        background: var(--bg-secondary);
+        font-weight: 600;
+        border-bottom: 2px solid var(--border-primary);
+    }
+    .custom-table tr:last-child td {
+        border-bottom: none;
+    }
+    .custom-table.small-table {
+        font-size: 0.98em;
+        margin-top: 0.2em;
+        margin-bottom: 0.2em;
+    }
+    .custom-table tbody tr:nth-child(even) {
+        background: rgba(0,0,0,0.03);
+    }
+    /* Borda e alto relevo sutil para tema escuro */
+    html[data-theme="dark"] .custom-table,
+    body[data-theme="dark"] .custom-table {
+        border: 1.7px solid #353535;
+        box-shadow: 0 4px 22px 0 rgba(0,0,0,0.18), 0 1.5px 0 0 #353535;
+        background: var(--bg-tertiary);
+    }
+    html[data-theme="dark"] .custom-table th, html[data-theme="dark"] .custom-table td,
+    body[data-theme="dark"] .custom-table th, body[data-theme="dark"] .custom-table td {
+        border-bottom: 1.2px solid #444;
+    }
+    .section-label {
+        font-size: 0.97em;
+        color: var(--text-secondary);
+        font-weight: 500;
+        letter-spacing: 0.03em;
+        margin-bottom: 0.18em;
+        margin-top: 0.7em;
+        text-transform: lowercase;
+        opacity: 0.78;
+    }
+    </style>
+    '''
+    return css + html
+    
 def format_text_with_ia_highlighting(text: str) -> str:
     """
     Formata qualquer texto aplicando destaque laranja em variações de IA usando HTML.
@@ -146,19 +290,16 @@ def display_message_with_spoiler(
         formatted_content = format_text_with_ia_highlighting(content)
         st.markdown(formatted_content, unsafe_allow_html=True)
         
-        # Exibe gráfico se disponível (UMA VEZ APENAS)
-        if (
-            tech_details
-            and tech_details.get("chart_info")
-            and tech_details["chart_info"].get("fig")
-        ):
-            st.plotly_chart(
-                tech_details["chart_info"]["fig"],
-                use_container_width=True,
-                height=600,
-                key=_generate_key(),
-                config={'displayModeBar': False}
-            )
+        # Exibe botões de download se disponíveis (UMA VEZ APENAS)
+        if tech_details and tech_details.get("export_links"):
+            export_text = format_text_with_ia_highlighting("**Exportar dados:**")
+            st.markdown(export_text)
+            # Criar uma string HTML com todos os botões juntos
+            buttons_html = '<div style="display: flex">'
+            for link in tech_details["export_links"]:
+                buttons_html += link
+            buttons_html += '</div>'
+            st.markdown(buttons_html, unsafe_allow_html=True)
         
         # Exibe botões de download se disponíveis (UMA VEZ APENAS)
         if tech_details and tech_details.get("export_links"):

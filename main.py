@@ -241,10 +241,41 @@ with st.container():
         }
 
     # Exibe o histórico de chat
+    from utils import show_aggrid_table
     for msg in st.session_state.chat_history:
-        display_message_with_spoiler(
-            msg["role"], msg["content"], msg.get("tech_details"), SHOW_TECHNICAL_SPOILER
-        )
+        tech = msg.get("tech_details")
+        with st.container():
+            # Exibe o texto limpo primeiro (sem instruções técnicas, sem gráfico embutido)
+            content = msg["content"]
+            for marker in ["GRAPH-TYPE:", "EXPORT-INFO:", "dt:"]:
+                if marker in content:
+                    content = content.split(marker)[0].strip()
+            display_message_with_spoiler(
+                msg["role"], content, tech if tech and tech.get("export_links") else None, False
+            )
+            # Exibe AgGrid logo após o texto, se houver dados válidos
+            if tech and tech.get("aggrid_data"):
+                aggrid_data = tech["aggrid_data"]
+                if isinstance(aggrid_data, list) and len(aggrid_data) > 0 and isinstance(aggrid_data[0], dict):
+                    st.markdown("<div style='margin-top:0.5em; margin-bottom:0.5em;'></div>", unsafe_allow_html=True)
+                    show_aggrid_table(aggrid_data, theme="balham", height=350, fit_columns=True)
+            # Exibe gráfico após grid
+            if tech and tech.get("chart_info") and tech["chart_info"].get("fig"):
+                st.markdown("<div style='margin-top:0.5em; margin-bottom:0.5em;'></div>", unsafe_allow_html=True)
+                st.plotly_chart(
+                    tech["chart_info"]["fig"],
+                    use_container_width=True,
+                    height=400,
+                    key=f"fig_{id(tech['chart_info']['fig'])}",
+                    config={'displayModeBar': False}
+                )
+            # Exibe detalhes técnicos por último, sempre após texto, grid e gráfico
+            if tech and SHOW_TECHNICAL_SPOILER:
+                from utils import create_tech_details_spoiler
+                expander_title = format_text_with_ia_highlighting("🔍 Detalhes Técnicos")
+                with st.expander(expander_title):
+                    tech_content = create_tech_details_spoiler(tech)
+                    st.markdown(tech_content, unsafe_allow_html=True)
 
 # Container fixo para o input (fora do content-container)
 prompt = st.chat_input(format_text_with_ia_highlighting("Faça sua pergunta..."), key="mobile_input")

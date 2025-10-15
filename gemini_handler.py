@@ -12,7 +12,7 @@ import json
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from utils import create_styled_download_button, generate_excel_bytes, generate_csv_bytes
+from utils import create_styled_download_button, generate_excel_bytes, generate_csv_bytes, dict_to_markdown_table, show_aggrid_table
 from datetime import datetime
 import time
 import os
@@ -295,8 +295,6 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
 
     {chart_export_instruction}
 
-    {refine_instruction}
-
 '    IMPORTANTE:
     - Trabalhe APENAS com os dados fornecidos
     - Seja ESPECÍFICO aos números reais
@@ -509,6 +507,9 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
         response_text = response_text.split("GRAPH-TYPE:")[0].strip()
         response_text = response_text.split("EXPORT-INFO:")[0].strip()
         
+        # Se a resposta for uma lista de dicts (tabela), retorna para exibição no handler
+        if isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict):
+            tech_details["aggrid_data"] = data
         return response_text, tech_details
         
     except Exception as e:
@@ -641,6 +642,7 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
     }
     
     try:
+        import pandas as pd  # Garante que pd está disponível mesmo se função chamada isolada
         # Normaliza nomes de colunas (remove espaços)
         data.columns = [str(col).strip() for col in data.columns]
         x_axis = str(x_axis).strip()
@@ -663,7 +665,6 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
             # Completa matriz de períodos x categorias
             all_temporals = sorted(data[x_axis].unique())
             all_categories = sorted(data[category_col].unique())
-            import pandas as pd
             idx = pd.MultiIndex.from_product([all_temporals, all_categories], names=[x_axis, category_col])
             data = data.set_index([x_axis, category_col]).reindex(idx, fill_value=0).reset_index()
             # Ordena eixo temporal

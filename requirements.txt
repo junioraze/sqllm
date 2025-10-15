@@ -12,3 +12,4 @@ duckdb
 mercadopago
 sentence-transformers
 numpy
+annoy
