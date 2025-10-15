@@ -151,5 +151,11 @@ FROM {from_table}{where}{group_by}{qualify}{order_by}{limit}"""
     query_clean = re.sub(r'[\n\t]+', ' ', query)
     query_clean = re.sub(r' +', ' ', query_clean)
 
+    # RESPONSABILIDADE: O handler/modelo que monta a query DEVE garantir que só haja um SELECT principal após o WITH.
+    # Não cortamos mais automaticamente para evitar truncar queries válidas com CTEs.
+    # Se detectar SELECT duplicado, apenas loga um aviso.
+    select_count = query_clean.upper().count('SELECT')
+    if select_count > 1:
+        print(f"[AVISO] Query contém {select_count} SELECTs. O handler/modelo deve garantir apenas um SELECT principal após o WITH. Query não será cortada automaticamente.")
     print(f"DEBUG - Query construída:\n{query_clean}")
     return query_clean.strip()

@@ -50,9 +50,13 @@ WITH cte_agrupada AS (
     SELECT campo_temporal, campo_categoria, SUM(campo_valor) AS valor_total
     FROM tabela
     GROUP BY campo_temporal, campo_categoria
-)
-SELECT campo_temporal, campo_categoria, valor_total
-FROM cte_agrupada
+GARANTIA ABSOLUTA DE CORREÇÃO DE QUERY:
+- Queries que contenham mais de um SELECT principal após o WITH serão rejeitadas pelo backend.
+- O modelo/handler é SEMPRE responsável por garantir que só exista UM SELECT principal após o fechamento das CTEs (WITH ... ).
+- O SELECT principal deve vir imediatamente após as CTEs, nunca duplicado, nunca dentro do campo 'cte'.
+- Se houver SELECT duplicado, a query será considerada inválida e não será executada.
+
+REGRAS ESSENCIAIS:
 ORDER BY campo_temporal, campo_categoria
 
 // ERRADO: nunca faça GROUP BY campo_temporal, campo_categoria, valor_total

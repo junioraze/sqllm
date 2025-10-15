@@ -466,9 +466,14 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
                 df_data = pd.DataFrame(data)
                 print(f"[DEBUG] Tentando gerar gráfico com colunas: {list(df_data.columns)}")
                 # Aplica fuzzy matching para garantir que os nomes de colunas existem no DataFrame
-                x_axis_real = fuzzy_column(x_axis, list(df_data.columns))
-                y_axis_real = fuzzy_column(y_axis, list(df_data.columns))
-                color_real = fuzzy_column(color, list(df_data.columns)) if color else None
+                # Garante que os nomes das colunas não tenham espaços/quebras de linha
+                x_axis_clean = x_axis.strip() if isinstance(x_axis, str) else x_axis
+                y_axis_clean = y_axis.strip() if isinstance(y_axis, str) else y_axis
+                color_clean = color.strip() if isinstance(color, str) else color
+
+                x_axis_real = fuzzy_column(x_axis_clean, list(df_data.columns))
+                y_axis_real = fuzzy_column(y_axis_clean, list(df_data.columns))
+                color_real = fuzzy_column(color_clean, list(df_data.columns)) if color_clean else None
                 fig = generate_chart(df_data, graph_type, x_axis_real, y_axis_real, color_real)
                 
                 if fig:
@@ -605,12 +610,22 @@ def should_reuse_data(model, current_prompt: str, user_history: list = None) -> 
     
     return {"should_reuse": False, "reason": "Nova consulta necessária"}
 
-# Função para gerar gráficos (mantida como estava)
 def generate_chart(data, chart_type, x_axis, y_axis, color=None):
+    # Limite de caracteres para itens da legenda/categorias
+    LEGEND_LABEL_MAXLEN = 22
+
+    # Trunca os labels da coluna de cor se necessário
+    if color and color in data.columns:
+        data[color] = data[color].astype(str).apply(lambda x: x[:LEGEND_LABEL_MAXLEN] + '…' if len(x) > LEGEND_LABEL_MAXLEN else x)
+
+    # Trunca os labels da coluna de categorias (x_axis) se for string/categórica
+    if x_axis and x_axis in data.columns:
+        if data[x_axis].dtype == object or str(data[x_axis].dtype).startswith('str'):
+            data[x_axis] = data[x_axis].astype(str).apply(lambda x: x[:LEGEND_LABEL_MAXLEN] + '…' if len(x) > LEGEND_LABEL_MAXLEN else x)
     """
-    Cria gráficos com tema adaptativo (dark/light)
+    Cria gráficos com tema adaptativo (dark/light) e layout responsivo
     """
-    
+    import streamlit as st
     
     # Detecta tema atual do Streamlit
     theme_mode = st.session_state.get('theme_mode', 'escuro')
@@ -643,165 +658,70 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
     if data.empty:
         return None
         
-    # Configuração adaptativa para todos os gráficos
+    # CONFIGURAÇÃO RESPONSIVA ATUALIZADA - EXTENSÃO HORIZONTAL
     layout_config = {
         'plot_bgcolor': bg_color,
         'paper_bgcolor': bg_color,
-        'font': {'color': text_color, 'size': 12, 'family': 'Arial, sans-serif'},
-        'margin': {'l': 80, 'r': 80, 't': 80, 'b': 80},
+        'font': {'color': text_color, 'size': 14, 'family': 'Arial, sans-serif'},
+        'margin': {'l': 20, 'r': 20, 't': 40, 'b': 80},  # Margens pequenas para ocupar mais espaço
         'showlegend': True,
+        'autosize': True,
+        'height': 480,
         'legend': {
             'orientation': 'h',
             'yanchor': 'bottom',
-            'y': -1.2,
+            'y': -1.2,  # Mais próximo do gráfico
             'xanchor': 'center',
             'x': 0.5,
             'bgcolor': legend_bg,
             'bordercolor': legend_border,
-            'borderwidth': 1,
+            'borderwidth': 0,
+            'font': {'size': 11, 'color': text_color},
+            'itemwidth': 140,
             'indentation': 20,
-            'font': {'size': 11, 'color': text_color}
+            'tracegroupgap': 20,
         },
         'xaxis': {
-            'title': {'font': {'size': 14, 'color': text_color}},
-            'tickfont': {'size': 11, 'color': text_color}
+            'title': {'font': {'size': 16, 'color': text_color}},
+            'tickfont': {'size': 13, 'color': text_color},
+            'automargin': True
         },
         'yaxis': {
-            'title': {'font': {'size': 14, 'color': text_color}},
-            'tickfont': {'size': 11, 'color': text_color}
+            'title': {'font': {'size': 16, 'color': text_color}},
+            'tickfont': {'size': 13, 'color': text_color},
+            'automargin': True
         }
     }
     
     try:
-        import pandas as pd  # Garante que pd está disponível mesmo se função chamada isolada
-        # Normaliza nomes de colunas (remove espaços)
-        data.columns = [str(col).strip() for col in data.columns]
-        x_axis = str(x_axis).strip()
-        y_axis = str(y_axis).strip()
-
-        # --- Tratamento generalista para gráficos temporais ---
-        # Detecta se x_axis é temporal (semana, mes, dia, data, ano)
-        temporal_patterns = ['semana', 'mes', 'dia', 'data', 'ano', 'week', 'month', 'date', 'year']
-        is_temporal = any(p in x_axis.lower() for p in temporal_patterns)
-        # Detecta coluna de categoria (color) se existir
-        category_col = color if color and color in data.columns else None
-        if not category_col:
-            # Busca coluna categórica diferente de x_axis e y_axis
-            for col in data.columns:
-                if col not in [x_axis, y_axis] and not pd.api.types.is_numeric_dtype(data[col]):
-                    category_col = col
-                    break
-
-        if is_temporal and category_col:
-            # Completa matriz de períodos x categorias
-            all_temporals = sorted(data[x_axis].unique())
-            all_categories = sorted(data[category_col].unique())
-            idx = pd.MultiIndex.from_product([all_temporals, all_categories], names=[x_axis, category_col])
-            data = data.set_index([x_axis, category_col]).reindex(idx, fill_value=0).reset_index()
-            # Ordena eixo temporal
-            data[x_axis] = pd.Categorical(data[x_axis], ordered=True, categories=all_temporals)
-            data = data.sort_values(x_axis)
-
-        # 1. Se color não existe no DataFrame, ou é igual a x_axis ou y_axis, ignora (None)
-        color_final = color.strip() if isinstance(color, str) else color
-        if (
-            color_final is None or
-            color_final not in data.columns or
-            color_final == x_axis or
-            color_final == y_axis
-        ):
-            color_final = None
-
-        # 2. Se color_final ainda é None, só usa cor se houver uma terceira coluna categórica diferente de x_axis e y_axis
-        if color_final is None:
-            for col in data.columns:
-                if col not in [x_axis, y_axis] and not pd.api.types.is_numeric_dtype(data[col]):
-                    color_final = col
-                    break
-            # Se não encontrou, mantém color_final=None
-
-        # 3. Se só existem x_axis e y_axis, nunca usa cor
-        if len(data.columns) <= 2:
-            color_final = None
-
-        # Trata eixo X como categoria se for string
-        if pd.api.types.is_object_dtype(data[x_axis]):
-            data[x_axis] = data[x_axis].astype(str)
-
-        # Geração do gráfico
         if chart_type in ['line', 'linha']:
             fig = px.line(
-                data, x=x_axis, y=y_axis, color=color_final,
+                data, x=x_axis, y=y_axis, color=color,
                 color_discrete_sequence=color_palette,
                 line_shape='spline'
             )
             fig.update_traces(line=dict(width=3))
+            
         elif chart_type in ['bar', 'barra']:
             fig = px.bar(
-                data, x=x_axis, y=y_axis, color=color_final,
-                color_discrete_sequence=color_palette,
-                text=y_axis  # Exibe valor nas barras
+                data, x=x_axis, y=y_axis, color=color,
+                color_discrete_sequence=color_palette
             )
-            fig.update_traces(
-                texttemplate='%{text:.2s}',
-                textposition='outside',
-                width=0.6  # barras mais largas
-            )
-            # Garante altura mínima do gráfico
-            fig.update_layout(height=500)
+            
         elif chart_type in ['scatter', 'dispersao']:
             fig = px.scatter(
-                data, x=x_axis, y=y_axis, color=color_final,
+                data, x=x_axis, y=y_axis, color=color,
                 color_discrete_sequence=color_palette,
                 size_max=15
             )
+            
         else:
-            fig = px.bar(data, x=x_axis, y=y_axis, color=color_final,
+            fig = px.bar(data, x=x_axis, y=y_axis, color=color,
                         color_discrete_sequence=color_palette)
-        # --- Ajuste ainda mais agressivo do eixo Y para ignorar outliers e deixar o gráfico legível ---
-        if fig is not None and y_axis in data.columns:
-            y_vals = data[y_axis].dropna()
-            if len(y_vals) > 0:
-                y_min = min(0, y_vals.min())  # Sempre começa do zero
-                y_max_real = y_vals.max()
-                y_pctl = y_vals.quantile(0.90)
-                # Detecta outlier: se o valor máximo for mais que 2x o percentil 90, considera outlier
-                is_outlier = y_max_real > y_pctl * 1.7
-                if is_outlier and y_max_real > 0:
-                    # Aplica escala logarítmica
-                    fig.update_yaxes(type="log")
-                    annotation_color = text_color
-                    fig.add_annotation(
-                        text="Escala logarítmica aplicada devido a outlier",
-                        xref="paper", yref="paper",
-                        x=0.99, y=0.98, showarrow=False,
-                        font=dict(size=11, color=annotation_color),
-                        bgcolor=bg_color,
-                        bordercolor=annotation_color,
-                        borderwidth=0,
-                        opacity=0.7,
-                        xanchor="right", yanchor="top"
-                    )
-                else:
-                    # Ajuste proporcional padrão, sempre mostrando todas as barras
-                    y_top = max(y_max_real * 1.05, y_pctl * 1.10, 1)
-                    fig.update_yaxes(range=[y_min, y_top])
-                    if y_top < y_max_real:
-                        annotation_color = text_color
-                        fig.add_annotation(
-                            text=f"Valores acima de {y_top:,.0f} não exibidos",
-                            xref="paper", yref="paper",
-                            x=0.99, y=0.98, showarrow=False,
-                            font=dict(size=11, color=annotation_color),
-                            bgcolor=bg_color,
-                            bordercolor=annotation_color,
-                            borderwidth=0,
-                            opacity=0.7,
-                            xanchor="right", yanchor="top"
-                        )
-
-        # Aplica layout adaptativo
+        
+        # Aplica layout responsivo
         fig.update_layout(layout_config)
+        
         # Grid adaptativo ao tema
         fig.update_xaxes(
             showgrid=True, gridwidth=1, gridcolor=grid_color,
@@ -811,6 +731,7 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
             showgrid=True, gridwidth=1, gridcolor=grid_color,
             showline=True, linewidth=1, linecolor=grid_color
         )
+        
         return fig
     except Exception as e:
         print(f"Erro ao criar gráfico: {e}")

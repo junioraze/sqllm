@@ -251,7 +251,7 @@ with st.container():
                 if marker in content:
                     content = content.split(marker)[0].strip()
             display_message_with_spoiler(
-                msg["role"], content, tech if tech and tech.get("export_links") else None, False
+                msg["role"], content, None, False
             )
             # Exibe AgGrid logo após o texto, se houver dados válidos
             if tech and tech.get("aggrid_data"):
@@ -259,17 +259,22 @@ with st.container():
                 if isinstance(aggrid_data, list) and len(aggrid_data) > 0 and isinstance(aggrid_data[0], dict):
                     st.markdown("<div style='margin-top:0.5em; margin-bottom:0.5em;'></div>", unsafe_allow_html=True)
                     show_aggrid_table(aggrid_data, theme="balham", height=350, fit_columns=True)
+            
             # Exibe gráfico após grid
             if tech and tech.get("chart_info") and tech["chart_info"].get("fig"):
                 import plotly.graph_objs as go
                 fig = go.Figure(tech["chart_info"]["fig"])
                 st.markdown("<div style='margin-top:0.5em; margin-bottom:0.5em;'></div>", unsafe_allow_html=True)
+                # Garante que o gráfico ocupe todo o espaço horizontal do container
                 st.plotly_chart(
                     fig,
                     use_container_width=True,
-                    height=400,
                     key=f"fig_{id(fig)}",
-                    config={'displayModeBar': False}
+                    config={
+                        'displayModeBar': False,
+                        'responsive': True,
+                        'staticPlot': False
+                    }
                 )
             # Exibe detalhes técnicos por último, sempre após texto, grid e gráfico
             if tech and SHOW_TECHNICAL_SPOILER:

@@ -46,6 +46,12 @@ def _render_custom_table(df, small=False, show_index=False, bar_columns=None):
     if df.empty:
         return "<em>Nenhum dado disponível</em>"
     table_class = "custom-table small-table" if small else "custom-table"
+    # Botões de exportação mini (xls/csv)
+    excel_bytes = generate_excel_bytes(df.to_dict(orient="records"))
+    csv_bytes = generate_csv_bytes(df.to_dict(orient="records"))
+    excel_btn = create_styled_download_button(excel_bytes, "dados.xlsx", "Excel")
+    csv_btn = create_styled_download_button(csv_bytes, "dados.csv", "CSV")
+    export_buttons = f"<div style='display:inline-flex;gap:0.3rem;vertical-align:middle;margin-top:0.3em;margin-bottom:0.2em;'>{excel_btn}{csv_btn}</div>"
     html = f'<div style="overflow-x:auto;"><table class="{table_class}">'
     # Cabeçalho
     html += "<thead><tr>"
@@ -66,7 +72,7 @@ def _render_custom_table(df, small=False, show_index=False, bar_columns=None):
     for idx, row in df.iterrows():
         html += "<tr>"
         if show_index:
-            html += f'<td style="font-weight:600;">{idx}</td>'
+            html += f'<td style="font-weight:600;text-align:left;">{idx}</td>'
         for col, val in row.items():
             display_val = val
             if pd.notnull(val) and isinstance(val, (int, float)):
@@ -79,11 +85,11 @@ def _render_custom_table(df, small=False, show_index=False, bar_columns=None):
             if bar_columns and col in bar_max and pd.notnull(val):
                 width = int(100 * float(val) / bar_max[col]) if bar_max[col] else 0
                 bar_html = f'<div style="height:0.9em;width:{width}%;background:linear-gradient(90deg,var(--text-accent),var(--bg-tertiary));border-radius:4px;"></div>'
-                html += f'<td style="position:relative;">{display_val}<div style="margin-top:0.15em;">{bar_html}</div></td>'
+                html += f'<td style="position:relative;text-align:left;">{display_val}<div style="margin-top:0.15em;">{bar_html}</div></td>'
             else:
-                html += f'<td>{display_val}</td>'
+                html += f'<td style="text-align:left;">{display_val}</td>'
         html += "</tr>"
-    html += "</tbody></table></div>"
+    html += "</tbody></table>" + export_buttons + "</div>"
     # CSS customizado responsivo ao tema
     css = '''
     <style>
@@ -289,29 +295,6 @@ def display_message_with_spoiler(
         formatted_content = format_text_with_ia_highlighting(content)
         st.markdown(formatted_content, unsafe_allow_html=True)
         
-        # Exibe botões de download se disponíveis (UMA VEZ APENAS)
-        if tech_details and tech_details.get("export_links"):
-            export_text = format_text_with_ia_highlighting("**Exportar dados:**")
-            st.markdown(export_text)
-            # Criar uma string HTML com todos os botões juntos
-            buttons_html = '<div style="display: flex">'
-            for link in tech_details["export_links"]:
-                buttons_html += link
-            buttons_html += '</div>'
-            st.markdown(buttons_html, unsafe_allow_html=True)
-        
-        # Exibe botões de download se disponíveis (UMA VEZ APENAS)
-        if tech_details and tech_details.get("export_links"):
-            export_text = format_text_with_ia_highlighting("**Exportar dados:**")
-            st.markdown(export_text)
-            
-            # Criar uma string HTML com todos os botões juntos
-            buttons_html = '<div style="display: flex">'
-            for link in tech_details["export_links"]:
-                buttons_html += link
-            buttons_html += '</div>'
-            
-            st.markdown(buttons_html, unsafe_allow_html=True)
         
         # Exibir detalhes técnicos se habilitado (UMA VEZ APENAS)
         if tech_details and tech_flag:
