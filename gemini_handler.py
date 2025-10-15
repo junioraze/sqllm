@@ -155,11 +155,9 @@ REGRAS PARA COMPARAÇÕES TEMPORAIS:
             if hasattr(candidate, 'content') and candidate.content:
                 if hasattr(candidate.content, 'parts') and candidate.content.parts:
                     part = candidate.content.parts[0]
-                    
                     # Prioriza texto direto se disponível
                     if hasattr(part, 'text') and part.text and part.text.strip():
                         response_text = part.text.strip()
-                        
                         # Registra uso básico de tokens para texto
                         prompt_tokens = len(optimized_prompt.split())
                         completion_tokens = len(response_text.split())
@@ -169,18 +167,19 @@ REGRAS PARA COMPARAÇÕES TEMPORAIS:
                             completion_tokens=completion_tokens,
                             total_tokens=total_tokens,
                             estimated_cost_usd=0.001,
-                            model_name="gemini-2.0-flash-exp",
+                            model_name=MODEL_NAME,
                             prompt_type="rag_optimized",
                             optimization_applied=True
                         )
                         ai_metrics.record_token_usage(session_id, user_id, token_usage)
-                        
-                        return response_text, None
-                    
+                        # Adiciona tokens ao tech_details
+                        tech_details["prompt_tokens"] = prompt_tokens
+                        tech_details["completion_tokens"] = completion_tokens
+                        tech_details["total_tokens"] = total_tokens
+                        return response_text, tech_details
                     # Se não tem texto, verifica function call
                     elif hasattr(part, 'function_call') and part.function_call:
                         function_call = part.function_call
-                        
                         # Registra uso básico de tokens para function call
                         prompt_tokens = len(optimized_prompt.split())
                         completion_tokens = 50
@@ -190,32 +189,23 @@ REGRAS PARA COMPARAÇÕES TEMPORAIS:
                             completion_tokens=completion_tokens,
                             total_tokens=total_tokens,
                             estimated_cost_usd=0.001,
-                            model_name="gemini-2.0-flash-exp",
+                            model_name=MODEL_NAME,
                             prompt_type="rag_optimized",
                             optimization_applied=True
                         )
                         ai_metrics.record_token_usage(session_id, user_id, token_usage)
-                        
-                        # Cria detalhes técnicos incluindo contexto RAG e orientações SQL
-                        tech_details = {
-                            "rag_context": rag_context,
-                            "sql_guidance": sql_guidance,
-                            "model_used": "gemini-2.0-flash-exp",
-                            "prompt_type": "rag_optimized_with_sql",
-                            "optimization_applied": True,
-                                    "function_call_name": function_call.name if hasattr(function_call, 'name') else None,
-                                    "optimized_prompt": optimized_prompt,
-                                    "prompt_tokens": prompt_tokens,
-                                    "completion_tokens": completion_tokens,
-                                    "total_tokens": total_tokens
-                        }
-                        
+                        # Adiciona tokens ao tech_details
+                        tech_details["prompt_tokens"] = prompt_tokens
+                        tech_details["completion_tokens"] = completion_tokens
+                        tech_details["total_tokens"] = total_tokens
+                        tech_details["function_call_name"] = function_call.name if hasattr(function_call, 'name') else None
+                        tech_details["model_used"] = MODEL_NAME
+                        tech_details["prompt_type"] = "rag_optimized_with_sql"
+                        tech_details["optimization_applied"] = True
                         return function_call, tech_details
-            
             # Fallback: tenta usar response.text diretamente
             if hasattr(response, 'text') and response.text:
                 response_text = response.text.strip()
-                
                 # Registra uso básico de tokens
                 prompt_tokens = len(optimized_prompt.split())
                 completion_tokens = len(response_text.split())
@@ -225,31 +215,29 @@ REGRAS PARA COMPARAÇÕES TEMPORAIS:
                     completion_tokens=completion_tokens,
                     total_tokens=total_tokens,
                     estimated_cost_usd=0.001,
-                    model_name="gemini-2.0-flash-exp",
+                    model_name=MODEL_NAME,
                     prompt_type="rag_optimized",
                     optimization_applied=True
                 )
                 ai_metrics.record_token_usage(session_id, user_id, token_usage)
-                
-                # Cria detalhes técnicos incluindo contexto RAG e orientações SQL
-                tech_details = {
-                    "rag_context": rag_context,
-                    "sql_guidance": sql_guidance,
-                    "model_used": "gemini-2.0-flash-exp",
-                    "prompt_type": "rag_optimized_with_sql",
-                    "optimization_applied": True,
-                    "response_type": "text",
-                    "optimized_prompt": optimized_prompt,
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "total_tokens": total_tokens
-                }
-                
+                # Adiciona tokens ao tech_details
+                tech_details["prompt_tokens"] = prompt_tokens
+                tech_details["completion_tokens"] = completion_tokens
+                tech_details["total_tokens"] = total_tokens
+                tech_details["model_used"] = MODEL_NAME
+                tech_details["prompt_type"] = "rag_optimized_with_sql"
+                tech_details["optimization_applied"] = True
+                tech_details["response_type"] = "text"
                 return response_text, tech_details
-        
+
         # Se chegou aqui, algo deu errado
         return "Desculpe, não consegui processar sua solicitação. Tente reformular a pergunta.", None
-            
+
+    except Exception as e:
+        # Para erros, apenas registra de forma simples
+        print(f"Erro interno: {e}")
+        return f"Erro interno: {str(e)}", None
+
     except Exception as e:
         # Para erros, apenas registra de forma simples
         print(f"Erro interno: {e}")
@@ -309,7 +297,7 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
 
     {refine_instruction}
 
-    IMPORTANTE:
+'    IMPORTANTE:
     - Trabalhe APENAS com os dados fornecidos
     - Seja ESPECÍFICO aos números reais
     - Calcule variações REAIS entre os valores
@@ -317,6 +305,7 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
     - Responda EXATAMENTE o que foi perguntado
     - Nunca utilize notação científica para apresentar valores numéricos, sempre use formato decimal com até 2 casas decimais.
     """
+
 
     model = genai.GenerativeModel(
         model_name=MODEL_NAME,
@@ -328,25 +317,21 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
         },
         system_instruction=instruction
     )
-    
+
     try:
         # Usa sistema de retry para contornar bloqueios
         response = None
         max_retries = 3
-        
+        analysis_prompt = instruction  # prompt COMPLETO enviado ao modelo
+        analysis_prompt_tokens = len(analysis_prompt.split())
         for attempt in range(max_retries):
             try:
-                # Prompt direto e focado
-                analysis_prompt = f"Analise os dados fornecidos e responda especificamente: {prompt}"
                 response = model.generate_content(analysis_prompt)
-                
                 # Verifica se a resposta foi bloqueada
                 if response.candidates and len(response.candidates) > 0:
                     candidate = response.candidates[0]
-                    
                     if hasattr(candidate, 'finish_reason') and candidate.finish_reason == 2:
                         print(f"Tentativa {attempt + 1}: Resposta bloqueada por segurança")
-                        
                         if attempt < max_retries - 1:
                             # Reformula para contexto empresarial
                             business_prompt = f"""
@@ -362,19 +347,16 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
                         else:
                             print("Máximo de tentativas - resposta bloqueada")
                             return "Análise temporariamente indisponível. Tente reformular a pergunta.", None
-                    
                     # Resposta válida
                     break
                 else:
                     print(f"Tentativa {attempt + 1}: Sem resposta")
                     if attempt == max_retries - 1:
                         return "Não foi possível gerar análise. Tente novamente.", None
-                        
             except Exception as e:
                 print(f"Tentativa {attempt + 1}: Erro - {str(e)}")
                 if attempt == max_retries - 1:
                     return f"Erro na análise: {str(e)}", None
-        
         if not response or not response.text:
             return "Não foi possível gerar análise dos dados. Tente novamente.", None
         else:
@@ -508,6 +490,8 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
                 export_info = {'error': str(e)}
 
         # Prepara tech_details
+        completion_tokens = len(response_text.split()) if response_text else 0
+        total_tokens = analysis_prompt_tokens + completion_tokens
         tech_details = {
             "function_params": function_params,
             "query": query,
@@ -515,6 +499,10 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
             "chart_info": chart_info,
             "export_links": export_links,
             "export_info": export_info,
+            "analyze_prompt": analysis_prompt,  # prompt COMPLETO
+            "analyze_prompt_tokens": analysis_prompt_tokens,
+            "analyze_completion_tokens": completion_tokens,
+            "analyze_total_tokens": total_tokens,
         }
         
         # Remove instruções de gráfico e export da resposta final

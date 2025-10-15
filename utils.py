@@ -235,15 +235,13 @@ def create_tech_details_spoiler(tech_details: dict) -> str:
                 content += f"| {step_display_name} | {timestamp} | {duration_formatted} |\n"
             content += "\n"
 
-    # NOVO: Prompt e tokens usados
+    # Prompt principal do FunctionDeclaration (SQL/RAG)
     if tech_details.get("optimized_prompt") or tech_details.get("prompt_tokens"):
-        # Expander discreto para o prompt otimizado
-        content += format_text_with_ia_highlighting("**📝 Prompt Gerado:**\n")
+        content += format_text_with_ia_highlighting("**📝 Prompt SQL/RAG (FunctionCall):**\n")
         if tech_details.get("optimized_prompt"):
-            # Expander HTML customizado, discreto
             content += (
                 "<details style='margin-bottom:8px;'><summary style='outline:none; cursor:pointer; color:#888; font-size:0.98em; font-weight:400; padding:2px 0;'>"
-                "<span style='color:#888;'>Ver prompt completo (avançado)</span>"
+                "<span style='color:#888;'>Ver prompt SQL/RAG enviado ao modelo</span>"
                 "</summary>\n"
                 f"<pre style='font-size:0.93em;background:#23272e;color:#fff;padding:8px 10px;border-radius:6px;white-space:pre-wrap;line-height:1.5;overflow-x:auto;'>{tech_details['optimized_prompt']}</pre>\n"
                 "</details>\n"
@@ -270,18 +268,42 @@ def create_tech_details_spoiler(tech_details: dict) -> str:
                     f"<pre style='font-size:0.93em;background:#23272e;color:#fff;padding:8px 10px;border-radius:6px;white-space:pre-wrap;line-height:1.5;overflow-x:auto;'>{sql_val}</pre>\n"
                     "</details>\n"
                 )
-        # Tokens
+        # Tokens do FunctionCall
         prompt_tokens = tech_details.get("prompt_tokens")
         completion_tokens = tech_details.get("completion_tokens")
         total_tokens = tech_details.get("total_tokens")
         if prompt_tokens is not None or completion_tokens is not None or total_tokens is not None:
-            content += format_text_with_ia_highlighting("**🔢 Uso de Tokens:**\n")
+            content += format_text_with_ia_highlighting("**🔢 Tokens FunctionCall:**\n")
             if prompt_tokens is not None:
                 content += f"- Prompt tokens: {prompt_tokens}\n"
             if completion_tokens is not None:
                 content += f"- Completion tokens: {completion_tokens}\n"
             if total_tokens is not None:
                 content += f"- Total tokens: {total_tokens}\n"
+            content += "\n"
+
+    # Prompt do refino/análise (analyze_data_with_gemini)
+    if tech_details.get("analyze_prompt"):
+        content += format_text_with_ia_highlighting("**📝 Prompt de Refino/Análise:**\n")
+        content += (
+            "<details style='margin-bottom:8px;'><summary style='outline:none; cursor:pointer; color:#888; font-size:0.98em; font-weight:400; padding:2px 0;'>"
+            "<span style='color:#888;'>Ver prompt de análise/refino enviado ao modelo</span>"
+            "</summary>\n"
+            f"<pre style='font-size:0.93em;background:#23272e;color:#fff;padding:8px 10px;border-radius:6px;white-space:pre-wrap;line-height:1.5;overflow-x:auto;'>{tech_details['analyze_prompt']}</pre>\n"
+            "</details>\n"
+        )
+        # Tokens do analyze/refino
+        analyze_prompt_tokens = tech_details.get("analyze_prompt_tokens")
+        analyze_completion_tokens = tech_details.get("analyze_completion_tokens")
+        analyze_total_tokens = tech_details.get("analyze_total_tokens")
+        if analyze_prompt_tokens is not None or analyze_completion_tokens is not None or analyze_total_tokens is not None:
+            content += format_text_with_ia_highlighting("**🔢 Tokens Refino/Análise:**\n")
+            if analyze_prompt_tokens is not None:
+                content += f"- Prompt tokens: {analyze_prompt_tokens}\n"
+            if analyze_completion_tokens is not None:
+                content += f"- Completion tokens: {analyze_completion_tokens}\n"
+            if analyze_total_tokens is not None:
+                content += f"- Total tokens: {analyze_total_tokens}\n"
             content += "\n"
     
     # Árvore de decisão horizontal (caminho do fluxo)
