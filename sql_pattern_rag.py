@@ -31,16 +31,32 @@ class SQLPatternRAG:
         self.patterns_file = patterns_file
         self.cache_db_path = cache_db
         self.patterns: Dict[str, SQLPattern] = {}
+        self.annoy_dim = 384  # all-MiniLM-L6-v2
+        self.annoy_index_path = self.cache_db_path.replace('.db', '.ann')
+        self.annoy_index = None
+        self._annoy_metadata = {}  # idx -> pattern_id
         self.load_patterns()
     
     def load_patterns(self):
-        """Carrega padrões SQL do arquivo JSON"""
+        """Carrega padrões SQL do arquivo JSON e inicializa Annoy do zero, sempre que o sistema inicia. Persiste metadados."""
         try:
+            import os, json
+            from annoy import AnnoyIndex
+            import numpy as np
+            self.annoy_meta_path = self.cache_db_path.replace('.db', '.meta.json')
+            # Remove arquivos antigos para garantir index limpo
+            if os.path.exists(self.annoy_index_path):
+                os.remove(self.annoy_index_path)
+            if os.path.exists(self.annoy_meta_path):
+                os.remove(self.annoy_meta_path)
             with open(self.patterns_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
             # Converte padrões para objetos SQLPattern
             sql_patterns = data.get('sql_patterns', {})
+            annoy_index = AnnoyIndex(self.annoy_dim, 'angular')
+            annoy_metadata = {}
+            idx = 0
             for pattern_id, pattern_data in sql_patterns.items():
                 self.patterns[pattern_id] = SQLPattern(
                     pattern_id=pattern_id,
@@ -52,47 +68,56 @@ class SQLPatternRAG:
                     example=pattern_data.get('example'),
                     use_cases=pattern_data.get('use_cases', [])
                 )
-
-            print(f"Carregados {len(self.patterns)} padrões SQL")
-
+                # Gera embedding e adiciona ao Annoy
+                emb = self._generate_embedding(pattern_data.get('description', ''))
+                if emb and len(emb) == self.annoy_dim:
+                    annoy_index.add_item(idx, np.array(emb, dtype=np.float32))
+                    annoy_metadata[idx] = {
+                        "pattern_id": pattern_id,
+                        "description": pattern_data.get('description', ''),
+                        "pattern_type": pattern_data.get('pattern_type', ''),
+                    }
+                    idx += 1
+            if idx > 0:
+                annoy_index.build(10)
+                annoy_index.save(self.annoy_index_path)
+                with open(self.annoy_meta_path, 'w', encoding='utf-8') as f:
+                    json.dump(annoy_metadata, f, ensure_ascii=False)
+                self.annoy_index = annoy_index
+                self._annoy_metadata = annoy_metadata
+            print(f"Carregados {len(self.patterns)} padrões SQL e Annoy index inicializado")
         except Exception as e:
             print(f"Erro ao carregar padrões SQL: {e}")
             self.patterns = {}
+
+    def _generate_embedding(self, text: str) -> List[float]:
+        """Gera embedding para um texto usando sentence-transformers"""
+        if not hasattr(self, 'st_model') or not getattr(self, '_has_st', False):
+            return []
+        try:
+            emb = self.st_model.encode([text], show_progress_bar=False)
+            return emb[0].tolist() if hasattr(emb[0], 'tolist') else list(emb[0])
+        except Exception as e:
+            return []
     
     def identify_sql_pattern(self, user_query: str, min_score: float = 1.5) -> List[Tuple[str, float]]:
         """
-        Identifica padrões SQL mais relevantes para a pergunta, com score mínimo mais restritivo.
-        Reforça detecção de padrões de comparação entre grupos/categorias (ex: 'meses em que X > Y', 'quando Crato superou Salvador', etc.).
+        Identifica padrões SQL mais relevantes usando Annoy para busca vetorial.
         """
-        query_lower = user_query.lower()
-        pattern_scores = []
-        # Heurística extra para comparação entre grupos/categorias
-        group_comp_keywords = [
-            'maior que', 'superou', 'foi maior que', 'comparar', 'em quais meses', 'quando', 'supera', '>', 'vs', 'versus', 'diferença entre', 'quanto a mais', 'quanto a menos', 'quanto maior', 'quanto menor', 'diferença percentual', 'razão entre', 'proporção entre', 'vezes maior', 'proporção', 'grupo', 'categoria', 'comparação entre grupos', 'comparação entre categorias'
-        ]
-        # Se detectar intenção de comparação entre grupos/categorias, força score alto nos padrões relevantes
-        is_group_comparison = any(kw in query_lower for kw in group_comp_keywords)
-        for pattern_id, pattern in self.patterns.items():
-            score = 0.0
-            # Score baseado em keywords
-            for keyword in pattern.keywords:
-                if keyword.lower() in query_lower:
-                    score += 1.0
-            # Score baseado em use cases
-            for use_case in pattern.use_cases:
-                use_case_words = set(use_case.lower().split())
-                query_words = set(query_lower.split())
-                common_words = use_case_words.intersection(query_words)
-                if common_words:
-                    score += len(common_words) * 0.5
-            # Heurística: se for padrão de comparação entre grupos/categorias, força score
-            if is_group_comparison and pattern_id in ['group_comparison', 'group_difference', 'group_ratio']:
-                score += 2.5  # Garante score acima do min_score
-            # Score mínimo mais restritivo
-            if score >= min_score:
-                pattern_scores.append((pattern_id, score))
-        pattern_scores.sort(key=lambda x: x[1], reverse=True)
-        return pattern_scores
+        from annoy import AnnoyIndex
+        import numpy as np
+        query_emb = self._generate_embedding(user_query)
+        if not query_emb or not self.annoy_index:
+            return []
+        idxs, dists = self.annoy_index.get_nns_by_vector(np.array(query_emb, dtype=np.float32), 5, include_distances=True)
+        results = []
+        for idx, dist in zip(idxs, dists):
+            pattern_id = self._annoy_metadata.get(idx)
+            if pattern_id:
+                score = max(0, 2.5 - dist)  # Score artificial baseado na distância angular
+                if score >= min_score:
+                    results.append((pattern_id, score))
+        return results
     
     def get_sql_guidance(self, user_query: str, top_k: int = 2, min_score: float = 1.5) -> str:
         """

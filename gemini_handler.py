@@ -18,7 +18,7 @@ import time
 import os
 import streamlit as st
 # Sistema RAG obrigatório
-from business_metadata_rag import business_rag, get_optimized_business_context
+from business_metadata_rag import get_business_rag_instance, get_optimized_business_context
 from ai_metrics import ai_metrics
 from prompt_rules import get_sql_functioncall_instruction, build_tables_fields_instruction, get_refine_analysis_instruction
 
@@ -521,8 +521,8 @@ def initialize_rag_system():
     Inicializa sistema RAG
     """
     print("🔄 Inicializando sistema RAG...")
-    from business_metadata_rag import setup_business_rag
-    setup_business_rag()
+    from business_metadata_rag import get_business_rag_instance
+    get_business_rag_instance()
     print("✅ Sistema RAG inicializado com sucesso!")
 
 def should_reuse_data(current_prompt, user_history):

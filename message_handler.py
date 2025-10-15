@@ -26,7 +26,7 @@ from logger import log_interaction
 from deepseek_theme import show_typing_animation, show_dynamic_processing_animation, get_step_display_info
 
 # Sistema RAG obrigatório
-from business_metadata_rag import business_rag
+from business_metadata_rag import get_business_rag_instance
 from ai_metrics import ai_metrics
 
 

@@ -64,35 +64,22 @@ class BusinessMetadataRAGV2:
             raise RuntimeError(f"[RAG][FATAL] Não foi possível carregar o modelo sentence-transformers: {e}")
     
     def _init_cache_db(self):
-        """Inicializa banco de cache"""
-        with duckdb.connect(self.cache_db_path) as conn:
-            # Cache de metadados
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS business_metadata_v2 (
-                    table_name VARCHAR PRIMARY KEY,
-                    table_id VARCHAR NOT NULL,
-                    bigquery_table VARCHAR NOT NULL,
-                    description VARCHAR NOT NULL,
-                    domain VARCHAR NOT NULL,
-                    business_context TEXT NOT NULL,
-                    full_content TEXT NOT NULL,
-                    content_hash VARCHAR NOT NULL,
-                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Cache de embeddings
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS business_embeddings_v2 (
-                    id VARCHAR PRIMARY KEY,
-                    table_name VARCHAR NOT NULL,
-                    content_hash VARCHAR NOT NULL,
-                    embedding_json TEXT NOT NULL,
-                    similarity_threshold DOUBLE DEFAULT 0.7,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (table_name) REFERENCES business_metadata_v2(table_name)
-                )
-            """)
+        """Inicializa Annoy index para embeddings e carrega metadados"""
+        from annoy import AnnoyIndex
+        import os, json
+        self.annoy_dim = 384  # all-MiniLM-L6-v2
+        self.annoy_index_path = self.cache_db_path.replace('.db', '.ann')
+        self.annoy_meta_path = self.cache_db_path.replace('.db', '.meta.json')
+        self.annoy_index = AnnoyIndex(self.annoy_dim, 'angular')
+        if os.path.exists(self.annoy_index_path):
+            self.annoy_index.load(self.annoy_index_path)
+        if os.path.exists(self.annoy_meta_path):
+            with open(self.annoy_meta_path, 'r', encoding='utf-8') as f:
+                self._annoy_metadata = json.load(f)
+            print(f"[Annoy] Metadados carregados: {self._annoy_metadata}")
+        else:
+            self._annoy_metadata = {}
+            print(f"[Annoy] Nenhum metadado encontrado em {self.annoy_meta_path}")
     
     def load_config(self) -> Dict[str, Any]:
         """Carrega configuração do arquivo JSON"""
@@ -204,13 +191,13 @@ Domínio: {metadata.get('domain', '')}
         for rule in business_rules.get('query_rules', []):
             all_rules.append(rule.get('description', ''))
         
-        # Extrai todos os campos
+        # Extrai todos os campos (usando 'name' corretamente)
         all_fields = []
         for category_fields in fields.values():
             if isinstance(category_fields, list):
                 for field in category_fields:
                     if isinstance(field, dict):
-                        all_fields.append(f"{field.get('field', '')} {field.get('description', '')}")
+                        all_fields.append(f"{field.get('name', '')} {field.get('description', '')}")
         
         # Extrai exemplos
         all_examples = []
@@ -258,95 +245,88 @@ Domínio: {metadata.get('domain', '')}
         
         return dot_product / (norm1 * norm2)
     
-    def store_metadata(self, metadata: TableMetadata) -> bool:
-        """Armazena metadados no cache"""
+
+    def store_metadata(self, metadata: TableMetadata, annoy_index, annoy_metadata, idx) -> bool:
+        """Armazena metadados e embedding no Annoy (novo index em memória)"""
         try:
-            content_hash = hashlib.md5(metadata.full_content.encode()).hexdigest()
-            with duckdb.connect(self.cache_db_path) as conn:
-                # Verifica se já existe e se precisa atualizar
-                existing = conn.execute(
-                    "SELECT content_hash FROM business_metadata_v2 WHERE table_name = ?",
-                    [metadata.table_name]
-                ).fetchone()
-                if existing and existing[0] == content_hash:
-                    return True  # Não mudou, não precisa atualizar
-                # Remove registros antigos
-                conn.execute("DELETE FROM business_embeddings_v2 WHERE table_name = ?", [metadata.table_name])
-                conn.execute("DELETE FROM business_metadata_v2 WHERE table_name = ?", [metadata.table_name])
-                # Insere metadados
-                conn.execute("""
-                    INSERT INTO business_metadata_v2 
-                    (table_name, table_id, bigquery_table, description, domain, business_context, full_content, content_hash)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, [
-                    metadata.table_name, metadata.table_id, metadata.bigquery_table,
-                    metadata.description, metadata.domain, metadata.business_context,
-                    metadata.full_content, content_hash
-                ])
-                # Gera e armazena embedding
-                embedding = self._generate_embedding(metadata.full_content)
-                if embedding and len(embedding) > 0:
-                    embedding_id = f"{metadata.table_name}_{content_hash}"
-                    conn.execute("""
-                        INSERT INTO business_embeddings_v2 
-                        (id, table_name, content_hash, embedding_json)
-                        VALUES (?, ?, ?, ?)
-                    """, [
-                        embedding_id, metadata.table_name, content_hash, json.dumps(embedding)
-                    ])
-                return True
+            import numpy as np
+            embedding = self._generate_embedding(metadata.full_content)
+            if embedding and len(embedding) > 0:
+                annoy_index.add_item(idx, np.array(embedding, dtype=np.float32))
+                annoy_metadata[idx] = (metadata.table_name, metadata.business_context)
+            return True
         except Exception as e:
+            print(f"[Annoy] Erro ao armazenar embedding: {e}")
             return False
     
+
     def update_metadata_cache(self):
-        """Atualiza cache completo de metadados"""
+        """Atualiza cache completo de metadados (recria Annoy do zero e salva metadados)"""
         try:
+            from annoy import AnnoyIndex
+            import numpy as np, json, os
             metadata_list = self.extract_table_metadata()
-            
-            with duckdb.connect(self.cache_db_path) as conn:
-                for metadata in metadata_list:
-                    success = self.store_metadata(metadata)
-                    status = "[OK]" if success else "[ERRO]"
-                    print(f"{status} {metadata.table_name}")
-                
-                print(f"[OK] Cache atualizado para {len(metadata_list)} tabelas")
-                
+            annoy_index = AnnoyIndex(self.annoy_dim, 'angular')
+            annoy_metadata = {}
+            idx = 0
+            for metadata in metadata_list:
+                success = self.store_metadata(metadata, annoy_index, annoy_metadata, idx)
+                status = "[OK]" if success else "[ERRO]"
+                print(f"{status} {metadata.table_name}")
+                if success:
+                    idx += 1
+            if idx > 0:
+                annoy_index.build(10)
+                annoy_index.save(self.annoy_index_path)
+                with open(self.annoy_meta_path, 'w', encoding='utf-8') as f:
+                    json.dump(annoy_metadata, f, ensure_ascii=False)
+                print(f"[Annoy] Metadados salvos: {annoy_metadata}")
+                self.annoy_index = annoy_index
+                self._annoy_metadata = annoy_metadata
+            print(f"[OK] Cache atualizado para {idx} tabelas")
         except Exception as e:
             print(f"Erro ao atualizar cache: {e}")
     
     def retrieve_relevant_context(self, user_query: str, max_results: int = 3, similarity_threshold: float = 0.3) -> List[str]:
-        """Recupera contexto relevante baseado na consulta do usuário e exibe o que será enviado ao modelo"""
+        """Recupera contexto relevante usando Annoy, com logging e threshold adaptativo"""
         try:
-            metadata_list = self.extract_table_metadata()
+            from annoy import AnnoyIndex
+            import numpy as np
+            # Se metadados não carregados ou vazios, recarrega
+            if not hasattr(self, '_annoy_metadata') or not self._annoy_metadata:
+                print("[Annoy] _annoy_metadata vazio ou não carregado, forçando recarregamento...")
+                self._init_cache_db()
+                print(f"[Annoy] _annoy_metadata após recarga: {self._annoy_metadata}")
             query_embedding = self._generate_embedding(user_query)
             if not query_embedding:
+                print("[Annoy] Embedding da query não gerado.")
                 return []
-
+            idxs, dists = self.annoy_index.get_nns_by_vector(np.array(query_embedding, dtype=np.float32), max_results, include_distances=True)
+            print(f"[Annoy] Embedding da query: {query_embedding[:8]}... (dim={len(query_embedding)})")
+            print(f"[Annoy] idxs encontrados: {idxs}")
+            print(f"[Annoy] dists: {dists}")
             contexts = []
-            with duckdb.connect(self.cache_db_path) as conn:
-                results = conn.execute("""
-                    SELECT m.table_name, m.business_context, e.embedding_json
-                    FROM business_metadata_v2 m
-                    JOIN business_embeddings_v2 e ON m.table_name = e.table_name
-                    ORDER BY m.table_name
-                """).fetchall()
-
-                similarities = []
-                for table_name, business_context, embedding_json in results:
-                    try:
-                        stored_embedding = json.loads(embedding_json)
-                        similarity = self._cosine_similarity(query_embedding, stored_embedding)
-                        if similarity >= similarity_threshold:
-                            similarities.append((similarity, table_name, business_context))
-                    except:
-                        continue
-
-                similarities.sort(reverse=True)
-                for similarity, table_name, business_context in similarities[:max_results]:
-                    contexts.append(f"=== {table_name} ===\n{business_context}")
-
+            for idx, dist in zip(idxs, dists):
+                meta = self._annoy_metadata.get(str(idx)) if isinstance(self._annoy_metadata, dict) else None
+                print(f"[Annoy] idx={idx} meta={meta} dist={dist}")
+                if meta is not None:
+                    table_name, business_context = meta
+                    print(f"[Annoy] Distância para {table_name}: {dist}")
+                    if dist <= similarity_threshold or len(contexts) == 0:
+                        # Sempre retorna pelo menos o mais próximo
+                        contexts.append(f"=== {table_name} ===\n{business_context}")
+            if not contexts:
+                # Se nada passou pelo threshold, retorna o mais próximo
+                if idxs:
+                    idx = idxs[0]
+                    meta = self._annoy_metadata.get(str(idx)) if isinstance(self._annoy_metadata, dict) else None
+                    print(f"[Annoy] Forçando retorno do mais próximo: idx={idx} meta={meta} dist={dists[0]}")
+                    if meta is not None:
+                        table_name, business_context = meta
+                        contexts.append(f"=== {table_name} ===\n{business_context}")
             return contexts
         except Exception as e:
+            print(f"[Annoy] Erro ao buscar contexto: {e}")
             return []
 
 
@@ -354,12 +334,6 @@ def get_optimized_business_context(user_query: str, max_results: int = 2) -> str
     """Função de conveniência para obter contexto otimizado"""
     try:
         rag = BusinessMetadataRAGV2()
-        # Verifica se há cache válido
-        with duckdb.connect(rag.cache_db_path) as conn:
-            count = conn.execute("SELECT COUNT(*) FROM business_metadata_v2").fetchone()[0]
-            if count == 0:
-                print("Cache vazio, atualizando...")
-                rag.update_metadata_cache()
         # Mais permissivo: mais exemplos e menor threshold
         contexts = rag.retrieve_relevant_context(user_query, max_results=5, similarity_threshold=0.15)
         if not contexts:
@@ -373,14 +347,23 @@ def get_optimized_business_context(user_query: str, max_results: int = 2) -> str
         return f"Erro ao obter contexto: {e}"
 
 
-# Instância global para uso no sistema
-business_rag = BusinessMetadataRAGV2()
+
+# Singleton para BusinessMetadataRAGV2
+_business_rag_instance = None
+
+def get_business_rag_instance() -> BusinessMetadataRAGV2:
+    """Retorna instância singleton do Business RAG"""
+    global _business_rag_instance
+    if _business_rag_instance is None:
+        print("Inicializando BusinessMetadataRAGV2 singleton...")
+        _business_rag_instance = BusinessMetadataRAGV2()
+        _business_rag_instance.update_metadata_cache()
+        print("BusinessMetadataRAGV2 inicializado!")
+    return _business_rag_instance
 
 def setup_business_rag():
-    """Inicializa o sistema RAG de negócios"""
-    print("🔄 Inicializando Business RAG v2...")
-    business_rag.update_metadata_cache()
-    print("✅ Business RAG v2 inicializado!")
+    """Inicializa o sistema RAG de negócios (mantido para compatibilidade)"""
+    get_business_rag_instance()
 
 
 if __name__ == "__main__":
