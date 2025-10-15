@@ -237,11 +237,39 @@ def create_tech_details_spoiler(tech_details: dict) -> str:
 
     # NOVO: Prompt e tokens usados
     if tech_details.get("optimized_prompt") or tech_details.get("prompt_tokens"):
+        # Expander discreto para o prompt otimizado
         content += format_text_with_ia_highlighting("**📝 Prompt Gerado:**\n")
         if tech_details.get("optimized_prompt"):
-            content += f"<details><summary>Ver prompt completo</summary>\n"
-            content += f"<pre style='font-size:0.95em;background:#222;color:#fff;padding:8px;border-radius:6px;white-space:pre-wrap;'>{tech_details['optimized_prompt']}</pre>\n"
-            content += "</details>\n"
+            # Expander HTML customizado, discreto
+            content += (
+                "<details style='margin-bottom:8px;'><summary style='outline:none; cursor:pointer; color:#888; font-size:0.98em; font-weight:400; padding:2px 0;'>"
+                "<span style='color:#888;'>Ver prompt completo (avançado)</span>"
+                "</summary>\n"
+                f"<pre style='font-size:0.93em;background:#23272e;color:#fff;padding:8px 10px;border-radius:6px;white-space:pre-wrap;line-height:1.5;overflow-x:auto;'>{tech_details['optimized_prompt']}</pre>\n"
+                "</details>\n"
+            )
+        # Expander para rag_context
+        if tech_details.get("rag_context_sent") or tech_details.get("rag_context"):
+            rag_val = tech_details.get("rag_context_sent") or tech_details.get("rag_context")
+            if rag_val:
+                content += (
+                    "<details style='margin-bottom:8px;'><summary style='outline:none; cursor:pointer; color:#888; font-size:0.98em; font-weight:400; padding:2px 0;'>"
+                    "<span style='color:#888;'>Ver contexto RAG enviado</span>"
+                    "</summary>\n"
+                    f"<pre style='font-size:0.93em;background:#23272e;color:#fff;padding:8px 10px;border-radius:6px;white-space:pre-wrap;line-height:1.5;overflow-x:auto;'>{rag_val}</pre>\n"
+                    "</details>\n"
+                )
+        # Expander para sql_guidance
+        if tech_details.get("sql_guidance_sent") or tech_details.get("sql_guidance"):
+            sql_val = tech_details.get("sql_guidance_sent") or tech_details.get("sql_guidance")
+            if sql_val:
+                content += (
+                    "<details style='margin-bottom:8px;'><summary style='outline:none; cursor:pointer; color:#888; font-size:0.98em; font-weight:400; padding:2px 0;'>"
+                    "<span style='color:#888;'>Ver orientações SQL enviadas</span>"
+                    "</summary>\n"
+                    f"<pre style='font-size:0.93em;background:#23272e;color:#fff;padding:8px 10px;border-radius:6px;white-space:pre-wrap;line-height:1.5;overflow-x:auto;'>{sql_val}</pre>\n"
+                    "</details>\n"
+                )
         # Tokens
         prompt_tokens = tech_details.get("prompt_tokens")
         completion_tokens = tech_details.get("completion_tokens")

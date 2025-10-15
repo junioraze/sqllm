@@ -42,9 +42,9 @@ def build_tables_description():
     return desc
 
 # Instruções para geração de queries SQL (function_call)
-SQL_FUNCTIONCALL_INSTRUCTIONS = """
-EXEMPLO CRÍTICO DE CTE CORRETA (usando apenas placeholders):
 
+SQL_FUNCTIONCALL_INSTRUCTIONS = """
+EXEMPLO CRÍTICO (CTE correta, só placeholders):
 WITH cte_agrupada AS (
     SELECT campo_temporal, campo_categoria, SUM(campo_valor) AS valor_total
     FROM tabela
@@ -56,23 +56,19 @@ ORDER BY campo_temporal, campo_categoria
 
 // ERRADO: nunca faça GROUP BY campo_temporal, campo_categoria, valor_total
 
-REGRAS PARA CTE:
-- No SELECT final, colunas agregadas em CTE (ex: valor_total) não vão no GROUP BY.
-- Só coloque no GROUP BY do SELECT final os campos que realmente precisam ser agrupados novamente.
-REGRAS CRÍTICAS DE ESTRUTURA SQL:
+REGRAS ESSENCIAIS:
+- No SELECT final, NUNCA coloque colunas agregadas (ex: valor_total) no GROUP BY. Só campos não agregados vão no GROUP BY.
+- No SELECT final, só inclua no SELECT colunas do GROUP BY ou agregadas (ex: SUM, COUNT, AVG). Nunca coloque coluna não agregada fora do GROUP BY.
+- SEMPRE use CTE (WITH) para toda query, mesmo simples.
+- O campo 'cte' deve conter apenas a(s) definição(ões) de CTE, nunca o SELECT final.
+- O campo 'from_table' deve ser o alias definido na CTE.
+- O campo 'select' é uma lista de strings, cada item uma coluna/expressão, nunca uma string única com vírgulas.
+- Sempre preencha todos os parâmetros do function_call.
+- Use apenas tabelas/campos listados no contexto.
 
-No SELECT final, só inclua colunas que estejam no GROUP BY ou que sejam resultado de funções de agregação (ex: SUM(campo), COUNT(campo), AVG(campo)). Nunca coloque no SELECT uma coluna que não esteja no GROUP BY nem seja agregada.
+ATENÇÃO: Nunca envie parâmetros de consulta como texto puro, JSON, string, markdown ou qualquer formato diferente de function_call. Sempre envie o objeto/dict puro para o function_call, exatamente como o backend espera. O campo "full_table_id" é OBRIGATÓRIO em TODOS os casos.
 
-Exemplo correto (usando placeholders):
-    SELECT campo1, campo2, SUM(campo3) AS total
-    FROM ...
-    GROUP BY campo1, campo2
-
-Exemplo incorreto:
-    SELECT campo1, campo2, campo3
-    FROM ...
-    GROUP BY campo1, campo2
-    -- campo3 não está agregada!
+Nunca gere dois SELECTs seguidos na query final. O SELECT principal deve ser sempre separado das definições de CTE.
 
 
 ATENÇÃO: NUNCA envie parâmetros de consulta como texto puro, JSON isolado, string, markdown (```json ... ```), ou qualquer formato diferente de function_call. Sempre envie o objeto/dict puro (ou tuple com dict) para o function_call, exatamente como o backend espera. NÃO ESQUEÇA: O campo "full_table_id" é OBRIGATÓRIO em TODOS os casos, mesmo quando a consulta usa CTE. Sempre inclua "full_table_id" nos parâmetros, indicando a tabela base do BigQuery utilizada. Não envie explicações, JSON, markdown, texto solto ou qualquer outro formato para parâmetros de consulta. O backend só aceita function_call.

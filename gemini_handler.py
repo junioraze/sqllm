@@ -319,7 +319,7 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
     """
 
     model = genai.GenerativeModel(
-        model_name="gemini-2.0-flash-exp",
+        model_name=MODEL_NAME,
         generation_config={
             "temperature": 0,
             "top_p": 0.95,
