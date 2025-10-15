@@ -6,7 +6,6 @@ import uuid
 import pandas as pd
 from io import BytesIO
 import base64, re
-from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 # Exibe uma tabela interativa com AgGrid, aplicando tema customizado
 
 def show_aggrid_table(data: list, theme: str = "streamlit", height: int = 350, fit_columns: bool = True):
