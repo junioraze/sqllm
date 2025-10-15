@@ -119,14 +119,6 @@ def build_query(params: dict) -> str:
         cte_clean = cte.strip()
         if cte_clean.upper().startswith("WITH "):
             cte_clean = cte_clean[5:].lstrip()
-        # Regex para encontrar nomes de tabela do tipo projeto.dataset.tabela e envolver por crase
-        def crasear_tabelas(match):
-            nome = match.group(0)
-            if nome.startswith('`') and nome.endswith('`'):
-                return nome
-            return f'`{nome}`'
-        # Garante crase para nomes do tipo projeto.dataset.tabela
-        cte_clean = re.sub(r'\b([a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+)\b', crasear_tabelas, cte_clean)
         with_clause = f"WITH {cte_clean}\n"
 
     # Caminho único: se não houver CTE, usa full_table_id como from_table automaticamente

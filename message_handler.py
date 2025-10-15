@@ -359,6 +359,8 @@ class MessageHandler:
         self._handle_gemini_response(typing_placeholder, prompt, response)
 
     def _handle_gemini_response(self, typing_placeholder, prompt: str, response) -> None:
+    # Loga o objeto de retorno e seu tipo para diagnóstico
+        print(f"[DEBUG] _handle_gemini_response: response={repr(response)} | type={type(response)}")
         """Etapa 3: Processar resposta do Gemini"""
         self.flow_path.append("processando_resposta_gemini")
         
@@ -368,9 +370,7 @@ class MessageHandler:
                 text_response, tech_details = response
                 # Garante que prompt/token info esteja sempre em tech_details
                 if tech_details is not None:
-                    # Se não houver prompt/token info, tenta buscar do st.session_state
                     if ("optimized_prompt" not in tech_details or "prompt_tokens" not in tech_details):
-                        # fallback defensivo: tenta buscar última interação
                         last_interaction = None
                         if hasattr(st.session_state, "chat_history") and st.session_state.chat_history:
                             for msg in reversed(st.session_state.chat_history):
@@ -381,41 +381,62 @@ class MessageHandler:
                             for k in ["optimized_prompt", "prompt_tokens", "completion_tokens", "total_tokens"]:
                                 if k in last_interaction and k not in tech_details:
                                     tech_details[k] = last_interaction[k]
-                if text_response and not hasattr(text_response, 'name'):
-                    # É texto simples
-                    self._handle_text_response(typing_placeholder, prompt, text_response, tech_details)
+                # Se vier dict, processa normalmente
+                if isinstance(text_response, dict):
+                    class MockFunctionCall:
+                        def __init__(self, args):
+                            self.args = args
+                    self._process_function_call(typing_placeholder, prompt, MockFunctionCall(text_response))
                     return
-                elif hasattr(text_response, 'name'):
-                    # É function call
+                # Se vier objeto com .args, processa normalmente
+                elif hasattr(text_response, 'args'):
                     self._process_function_call(typing_placeholder, prompt, text_response)
                     return
-            
-            # Formato antigo para compatibilidade
-            # Verificação defensiva da resposta
-            self._start_timing("validacao_resposta_gemini")
-            if not response or not response.candidates:
-                raise ValueError("Resposta inválida do modelo - sem candidatos")
-            
-            candidate = response.candidates[0]
-            if not candidate or not candidate.content or not candidate.content.parts:
-                raise ValueError("Resposta inválida do modelo - estrutura incompleta")
-            self._end_timing("validacao_resposta_gemini")
-
-            # Verifica se há chamada de função
-            self._start_timing("analise_tipo_resposta")
-            first_part = candidate.content.parts[0]
-            self._end_timing("analise_tipo_resposta")
-            
-            if hasattr(first_part, 'function_call') and first_part.function_call:
-                self.flow_path.append("function_call_detectado")
-                self._process_function_call(typing_placeholder, prompt, first_part.function_call)
+                # Se vier string (mesmo dentro de tuple), tenta parsear como JSON removendo markdown
+                elif isinstance(text_response, str):
+                    cleaned = text_response.strip()
+                    if cleaned.startswith('```json'):
+                        cleaned = cleaned[len('```json'):].strip()
+                    elif cleaned.startswith('```'):
+                        cleaned = cleaned[len('```'):].strip()
+                    if cleaned.endswith('```'):
+                        cleaned = cleaned[:-3].strip()
+                    try:
+                        import json
+                        params_dict = json.loads(cleaned)
+                        class MockFunctionCall:
+                            def __init__(self, args):
+                                self.args = args
+                        self._process_function_call(typing_placeholder, prompt, MockFunctionCall(params_dict))
+                        return
+                    except Exception as e:
+                        print(f"[ERROR] Falha ao parsear string retornada pelo modelo como JSON: {repr(text_response)} (type={type(text_response)}) | Erro: {e}")
+                        # Erro de parsing simples: loga, mas não reinicializa sistema RAG
+                        self._handle_error(typing_placeholder, prompt, f"Resposta do modelo em string inválida para function_call: {type(text_response)}", None, critical=False)
+                        return
+                else:
+                    print(f"[ERROR] Resposta do modelo em formato inválido para function_call: {repr(text_response)} (type={type(text_response)})")
+                    self._handle_error(typing_placeholder, prompt, f"Resposta do modelo em formato inválido para function_call: {type(text_response)}", None, critical=True)
+                    return
+            elif isinstance(response, dict):
+                class MockFunctionCall:
+                    def __init__(self, args):
+                        self.args = args
+                self._process_function_call(typing_placeholder, prompt, MockFunctionCall(response))
+                return
+            elif hasattr(response, 'args'):
+                self._process_function_call(typing_placeholder, prompt, response)
+                return
             else:
-                self.flow_path.append("resposta_direta")
-                self._process_direct_response(typing_placeholder, response)
+                # Loga erro e aborta
+                print(f"[ERROR] Resposta do modelo em formato inválido para function_call: {repr(response)} (type={type(response)})")
+                self._handle_error(typing_placeholder, prompt, f"Resposta do modelo em formato inválido para function_call: {type(response)}", None)
+                return
                 
         except Exception as e:
             self.flow_path.append("erro_processamento_gemini")
             self._handle_error(typing_placeholder, prompt, f"Erro ao processar resposta Gemini: {str(e)}", traceback.format_exc())
+            traceback.print_exc()
 
     def _process_function_call(self, typing_placeholder, prompt: str, function_call) -> None:
         """Etapa 4: Processar chamada de função (SQL)"""
@@ -788,15 +809,12 @@ class MessageHandler:
             print(f"Erro ao extrair texto da resposta: {e}")
             return "Resposta processada, mas não foi possível exibir o conteúdo completo."
     
-    def _handle_text_response(self, typing_placeholder, prompt: str, text_response: str) -> None:
+    def _handle_text_response(self, typing_placeholder, prompt: str, text_response: str, tech_details: dict = None) -> None:
         """Processa resposta em texto do modelo (sem function call)"""
         self.flow_path.append("processando_resposta_texto")
-        
         try:
-            # Remove animação
             typing_placeholder.empty()
-            
-            # Salva interação sem dados tabulares
+            td = tech_details if tech_details is not None else {"response_type": "text_only", "flow_path": " → ".join(self.flow_path)}
             save_interaction(
                 user_id=self.user_id,
                 question=prompt,
@@ -805,25 +823,18 @@ class MessageHandler:
                 raw_data=None,
                 raw_response=text_response,
                 refined_response=text_response,
-                tech_details={"response_type": "text_only", "flow_path": " → ".join(self.flow_path)},
+                tech_details=td,
                 status="TEXT_RESPONSE"
             )
-            
-            # Adiciona resposta ao histórico com formatação IA
             formatted_response = format_text_with_ia_highlighting(text_response)
+            td_hist = dict(td)
+            td_hist["total_time_ms"] = self._get_total_duration()
             st.session_state.chat_history.append({
-                "role": "assistant", 
+                "role": "assistant",
                 "content": formatted_response,
-                "tech_details": {
-                    "response_type": "text_only",
-                    "flow_path": " → ".join(self.flow_path),
-                    "total_time_ms": self._get_total_duration()
-                }
+                "tech_details": td_hist
             })
-            
-            # Força rerun para mostrar resposta
             st.rerun()
-            
         except Exception as e:
             self.flow_path.append("erro_resposta_texto")
             self._handle_error(typing_placeholder, prompt, f"Erro ao processar resposta texto: {str(e)}", traceback.format_exc())

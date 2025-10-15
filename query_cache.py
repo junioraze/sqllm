@@ -427,4 +427,4 @@ def query_cache():
         traceback.print_exc()
     
 if __name__ == "__main__":
-    test_rag_system()
+    query_cache()

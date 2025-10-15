@@ -43,6 +43,24 @@ def build_tables_description():
 
 # Instruções para geração de queries SQL (function_call)
 SQL_FUNCTIONCALL_INSTRUCTIONS = """
+REGRAS CRÍTICAS DE ESTRUTURA SQL:
+
+No SELECT final, só inclua colunas que estejam no GROUP BY ou que sejam resultado de funções de agregação (ex: SUM(campo), COUNT(campo), AVG(campo)). Nunca coloque no SELECT uma coluna que não esteja no GROUP BY nem seja agregada.
+
+Exemplo correto (usando placeholders):
+    SELECT campo1, campo2, SUM(campo3) AS total
+    FROM ...
+    GROUP BY campo1, campo2
+
+Exemplo incorreto:
+    SELECT campo1, campo2, campo3
+    FROM ...
+    GROUP BY campo1, campo2
+    -- campo3 não está agregada!
+
+
+ATENÇÃO: NUNCA envie parâmetros de consulta como texto puro, JSON isolado, string, markdown (```json ... ```), ou qualquer formato diferente de function_call. Sempre envie o objeto/dict puro (ou tuple com dict) para o function_call, exatamente como o backend espera. NÃO ESQUEÇA: O campo "full_table_id" é OBRIGATÓRIO em TODOS os casos, mesmo quando a consulta usa CTE. Sempre inclua "full_table_id" nos parâmetros, indicando a tabela base do BigQuery utilizada. Não envie explicações, JSON, markdown, texto solto ou qualquer outro formato para parâmetros de consulta. O backend só aceita function_call.
+
 REGRAS ABSOLUTAS PARA GERAÇÃO DE QUERIES SQL:
 
 1. SEMPRE use CTE (WITH) para TODA query, mesmo as mais simples. Toda consulta DEVE ser estruturada usando CTE, mesmo que haja apenas uma tabela ou um único passo. Exemplo: WITH t1 AS (SELECT ... FROM ... WHERE ...) SELECT ... FROM t1 ...
@@ -63,7 +81,7 @@ REGRAS ABSOLUTAS PARA GERAÇÃO DE QUERIES SQL:
      - O pipeline irá montar o SELECT usando cada item da lista como uma coluna.
 
 4. O campo 'from_table' DEVE referenciar o alias definido na CTE (ex: 't1', ou um JOIN entre aliases definidos na CTE). Nunca use o nome da tabela original diretamente no FROM se houver CTE.
-5. Nomes de tabela SEMPRE no formato {PROJECT_ID}.{DATASET_ID}.nome_da_tabela (SEM crase, a crase será adicionada automaticamente pelo sistema na montagem da query final).
+5. Nomes de tabela SEMPRE no formato {PROJECT_ID}.{DATASET_ID}.nome_da_tabela, usando apenas UM acento grave (`) ao redor do nome da tabela, nunca dois e nunca sem acento. O backend NÃO adiciona nem remove acentos graves: o modelo é responsável por garantir o formato correto, exatamente como o BigQuery espera.
 6. Use apenas os campos listados no contexto de metadados da tabela (nunca invente nomes).
 7. Preencha todos os parâmetros do function_call: full_table_id, select, where, group_by, order_by, cte, qualify, limit, etc.
 8. Para análises temporais, use EXTRACT() ou FORMAT_DATE() explicitamente no SELECT, GROUP BY e ORDER BY.
