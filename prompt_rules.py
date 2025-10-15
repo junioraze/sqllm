@@ -43,6 +43,22 @@ def build_tables_description():
 
 # Instruções para geração de queries SQL (function_call)
 SQL_FUNCTIONCALL_INSTRUCTIONS = """
+EXEMPLO CRÍTICO DE CTE CORRETA (usando apenas placeholders):
+
+WITH cte_agrupada AS (
+    SELECT campo_temporal, campo_categoria, SUM(campo_valor) AS valor_total
+    FROM tabela
+    GROUP BY campo_temporal, campo_categoria
+)
+SELECT campo_temporal, campo_categoria, valor_total
+FROM cte_agrupada
+ORDER BY campo_temporal, campo_categoria
+
+// ERRADO: nunca faça GROUP BY campo_temporal, campo_categoria, valor_total
+
+REGRAS PARA CTE:
+- No SELECT final, colunas agregadas em CTE (ex: valor_total) não vão no GROUP BY.
+- Só coloque no GROUP BY do SELECT final os campos que realmente precisam ser agrupados novamente.
 REGRAS CRÍTICAS DE ESTRUTURA SQL:
 
 No SELECT final, só inclua colunas que estejam no GROUP BY ou que sejam resultado de funções de agregação (ex: SUM(campo), COUNT(campo), AVG(campo)). Nunca coloque no SELECT uma coluna que não esteja no GROUP BY nem seja agregada.
@@ -151,7 +167,8 @@ INSTRUÇÕES PARA GRÁFICO/EXPORTAÇÃO (APENAS SE O USUÁRIO SOLICITAR):
 - Se solicitado, inclua no final da resposta:
     GRAPH-TYPE: [tipo] | X-AXIS: [coluna] | Y-AXIS: [coluna] | COLOR: [coluna]
     Tipos suportados: bar, line
-- Se não houver uma coluna adequada para COLOR, use o X-AXIS como cor se for categórico, ou escolha outra dimensão disponível. Nunca deixe COLOR vazio se houver outra dimensão possível.
+- Só use como COLOR colunas que estejam presentes no resultado da consulta. Se não houver coluna adequada para COLOR, omita o parâmetro COLOR.
+- Nunca assuma que existe uma coluna chamada "ano", "categoria" ou similar: sempre verifique as colunas reais do resultado antes de definir COLOR.
 - Para exportação, só gere links ou instruções se o usuário pedir (exportar, excel, csv, baixar, download).
 """
 

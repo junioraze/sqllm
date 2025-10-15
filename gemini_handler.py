@@ -102,8 +102,8 @@ def refine_with_gemini_rag(model, user_question: str, user_id: str = "default"):
     """
     Processa pergunta usando sistema RAG otimizado + orientações SQL
     """
+
     start_time = time.time()
-    
     # Inicia sessão de métricas
     session_id = ai_metrics.start_session(user_id)
     try:
@@ -130,6 +130,16 @@ ALIASES OBRIGATÓRIOS:
 
 REGRAS PARA COMPARAÇÕES TEMPORAIS:
 """
+
+        # Adiciona detalhes técnicos do prompt otimizado, contexto RAG e seu tamanho
+        tech_details = {
+            "optimized_prompt": optimized_prompt,
+            "optimized_prompt_length": len(optimized_prompt),
+            "rag_context_sent": rag_context,
+            "rag_context_length": len(rag_context) if rag_context else 0,
+            "sql_guidance_sent": sql_guidance,
+            "sql_guidance_length": len(sql_guidance) if sql_guidance else 0,
+        }
 
         # Processa com Gemini
         try:
@@ -374,11 +384,23 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
         if any(word in prompt.lower() for word in ['gráfico', 'grafico', 'chart', 'visualização']):
             # Detecta coluna Y automaticamente dos dados
             if data and len(data) > 0:
-                numeric_cols = [col for col in data[0].keys() if col not in ['mes', 'ano', 'month', 'year'] and isinstance(data[0].get(col), (int, float, float))]
-                y_col = numeric_cols[0] if numeric_cols else 'total_vendas'
+                columns = list(data[0].keys())
+                # X-AXIS: prioriza 'mes', 'semana', 'data', senão primeira coluna string
+                x_axis = next((c for c in columns if c.lower() in ['mes', 'semana', 'data', 'periodo', 'month', 'week', 'date', 'period']), None)
+                if not x_axis:
+                    x_axis = next((c for c in columns if isinstance(data[0].get(c), str)), columns[0])
+                # Y-AXIS: primeira coluna numérica diferente do X
+                y_col = next((c for c in columns if c != x_axis and isinstance(data[0].get(c), (int, float))), None)
+                if not y_col:
+                    y_col = columns[0] if columns[0] != x_axis else (columns[1] if len(columns) > 1 else columns[0])
+                # COLOR: só se houver terceira coluna categórica diferente de X e Y
+                color_col = next((c for c in columns if c not in [x_axis, y_col] and isinstance(data[0].get(c), str)), None)
+                if color_col:
+                    response_text += f"\nGRAPH-TYPE: line | X-AXIS: {x_axis} | Y-AXIS: {y_col} | COLOR: {color_col}"
+                else:
+                    response_text += f"\nGRAPH-TYPE: line | X-AXIS: {x_axis} | Y-AXIS: {y_col}"
             else:
-                y_col = 'total_vendas'
-            response_text += f"\nGRAPH-TYPE: line | X-AXIS: mes | Y-AXIS: {y_col} | COLOR: ano"
+                response_text += "\nGRAPH-TYPE: line | X-AXIS: x | Y-AXIS: y"
         
         # Se solicitado exportação, adiciona instrução
         if any(word in prompt.lower() for word in ['exportar', 'excel', 'planilha', 'csv', 'baixar']):
@@ -716,7 +738,7 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
                 y_max_real = y_vals.max()
                 y_pctl = y_vals.quantile(0.90)
                 # Detecta outlier: se o valor máximo for mais que 2x o percentil 90, considera outlier
-                is_outlier = y_max_real > y_pctl * 2
+                is_outlier = y_max_real > y_pctl * 1.7
                 if is_outlier and y_max_real > 0:
                     # Aplica escala logarítmica
                     fig.update_yaxes(type="log")
