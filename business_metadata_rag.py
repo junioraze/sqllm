@@ -94,7 +94,7 @@ class BusinessMetadataRAGV2:
         config = self.load_config()
         metadata_list = []
 
-        # CORREÇÃO: Seu JSON tem tabelas no nível raiz
+        # CORREÇÃO: JSON tem tabelas no nível raiz
         tables_data = config
 
         for table_name, table_config in tables_data.items():

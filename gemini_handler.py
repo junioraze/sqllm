@@ -386,12 +386,6 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
         if any(word in prompt.lower() for word in ['exportar', 'excel', 'planilha', 'csv', 'baixar']):
             response_text += "\nEXPORT-INFO: FORMATO: excel"
         
-        # TESTE REAL COM GEMINI (comentado por agora)
-        # response = model.generate_content(f"Analise os dados fornecidos e responda à pergunta: {prompt}")
-        # if not response or not response.text:
-        #     return "Não foi possível gerar análise dos dados.", None
-        # response_text = response.text
-        
         chart_info = None
 
         # Extrai instrução de gráfico, se houver

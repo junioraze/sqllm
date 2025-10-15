@@ -219,7 +219,7 @@ def get_sql_guidance_for_query(user_query: str) -> str:
     sql_rag = get_sql_rag_instance()
     return sql_rag.get_sql_guidance(user_query)
 
-# Instância global para reutilização
+# Instância global
 _sql_rag_instance = None
 
 def get_sql_rag_instance() -> SQLPatternRAG:
