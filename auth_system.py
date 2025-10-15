@@ -105,7 +105,7 @@ def ensure_empresarial_user():
         print(f"❌ Erro ao configurar usuário empresarial: {e}")
 
 def render_auth_system():
-    """Renderiza sistema de autenticação"""
+    """Renderiza sistema de autenticação em layout otimizado"""
     
     # Garante que usuário empresarial existe (se estiver no modo empresarial)
     ensure_empresarial_user()
@@ -122,58 +122,187 @@ def render_auth_system():
     from deepseek_theme import fix_baseweb_input_dark_theme
     fix_baseweb_input_dark_theme()
     
-    # Título com logo centralizado em base64 (apenas na tela de login)
-    from image_utils import get_base64_image
-    logo_path = os.path.join(os.path.dirname(__file__), "etc", "desc_logo.jpg")
-    logo_b64 = get_base64_image(logo_path)
-    if logo_b64:
-        st.markdown(f"""
-            <div style='text-align: center; margin: 2rem 0;'>
-                <img src='data:image/jpeg;base64,{logo_b64}' alt='ViaQuest' style='max-width:340px; width:100%; height:auto; margin-bottom:0.5rem;'/>
-                <p style='color: rgba(229, 231, 235, 0.7); font-size: 1.1rem;'>
-                    Sistema de Análise de Dados Inteligente
-                </p>
-            </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-            <div style='text-align: center; margin: 2rem 0;'>
-                <h1 style="
-                    background: linear-gradient(135deg, #00d4ff 0%, #00a8cc 50%, #0066ff 100%);
-                    -webkit-background-clip: text;
-                    -webkit-text-fill-color: transparent;
-                    background-clip: text;
-                    font-size: 3rem;
-                    font-weight: 700;
-                    margin-bottom: 0.5rem;
-                    letter-spacing: -0.02em;
-                ">ViaQuest</h1>
-                <p style='color: rgba(229, 231, 235, 0.7); font-size: 1.1rem;'>
-                    Sistema de Análise de Dados Inteligente
-                </p>
-            </div>
-        """, unsafe_allow_html=True)
+    # CSS para o novo layout 1-1 + 222
+    st.markdown("""
+    <style>
+    .main .block-container {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+        padding-bottom: 0.5rem !important;
+    }
+    .stColumns, .stColumns > div {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0px !important;
+    }
+    .stForm {
+        margin-bottom: 0.5rem !important;
+    }
+    .stAlert {
+        margin-bottom: 0.5rem !important;
+        padding: 0.75rem !important;
+    }
+    /* Alinhar altura dos blocos de login */
+    .login-align-stretch {
+        height: 220px;
+        min-height: 180px;
+        display: flex;
+        align-items: stretch;
+        justify-content: center;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    .login-align-stretch-inner {
+        flex: 1;
+        display: flex;
+        align-items: stretch;
+        justify-content: center;
+        background: rgba(0, 212, 255, 0.05);
+        border-radius: 10px;
+        border: 1px solid rgba(0, 212, 255, 0.2);
+        padding: 0 !important;
+        margin: 0 !important;
+        height: 100%;
+    }
+    .login-logo-img {
+        object-fit: contain;
+        height: 100%;
+        width: 100%;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: block;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     
-    # MODO EMPRESARIAL: Apenas tela de login, sem cadastro
+    # Conteúdo principal - NOVO LAYOUT 1-1 + 222
     if is_empresarial_mode():
-        st.subheader("🔑 Login Empresarial")
-        render_login_form()
+        # MODO EMPRESARIAL - Layout 1-1 + 222
+        col1, col2 = st.columns(2)
+        with col1:
+            from image_utils import get_base64_image
+            logo_path = os.path.join(os.path.dirname(__file__), "etc", "desc_logo.jpg")
+            logo_b64 = get_base64_image(logo_path)
+            if logo_b64:
+                logo_html = f"<img src='data:image/jpeg;base64,{logo_b64}' alt='ViaQuest' class='login-logo-img'/>"
+            else:
+                logo_html = (
+                    "<h3 style=\"background: linear-gradient(135deg, #00d4ff 0%, #00a8cc 50%, #0066ff 100%);"
+                    "-webkit-background-clip: text;-webkit-text-fill-color: transparent;background-clip: text;"
+                    "font-size: 1.8rem;font-weight: 700;margin: 0;text-align: center;display: flex;align-items: center;"
+                    "justify-content: center;height: 100%;\">ViaQuest</h3>"
+                )
+            st.markdown(
+                f"""
+                <div class='login-align-stretch'>
+                  <div class='login-align-stretch-inner'>
+                    {logo_html}
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        with col2:
+            st.markdown("""
+                <div class='login-align-stretch'>
+                  <div class='login-align-stretch-inner'>
+                    <div style='width:100%;display:flex;flex-direction:column;justify-content:center;'>
+                      <h4 style='color: #00d4ff; margin-bottom: 0.8rem; text-align: center;'>🏢 Acesso Corporativo</h4>
+                      <p style='margin: 0.3rem 0; font-size: 0.9rem; text-align: center;'><strong>Recursos Inclusos</strong></p>
+                      <p style='margin: 0.2rem 0; font-size: 0.85rem; text-align: center;'>• 100 consultas diárias<br>• Acesso completo<br>• Suporte prioritário</p>
+                    </div>
+                  </div>
+                </div>
+            """, unsafe_allow_html=True)
+        # Linha 222 - Formulário ocupando largura total
+        st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+        st.subheader("🔑 Login Corporativo", anchor=False)
+        render_login_form_compact()
+    
     else:
-        # MODO NORMAL: Tabs para Login e Registro
+        # MODO NORMAL - Layout similar
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Coluna 1 - Logo (mesma altura do quadro)
+            from image_utils import get_base64_image
+            logo_path = os.path.join(os.path.dirname(__file__), "etc", "desc_logo.jpg")
+            logo_b64 = get_base64_image(logo_path)
+            
+            if logo_b64:
+                st.markdown(f"""
+                    <div style='
+                        background: rgba(0, 212, 255, 0.05); 
+                        padding: 1.2rem; 
+                        border-radius: 10px; 
+                        border: 1px solid rgba(0, 212, 255, 0.2);
+                        height: 100%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    '>
+                        <img src='data:image/jpeg;base64,{logo_b64}' alt='ViaQuest' style='max-width:160px; width:100%; height:auto;'/>
+                    </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                    <div style='
+                        background: rgba(0, 212, 255, 0.05); 
+                        padding: 1.2rem; 
+                        border-radius: 10px; 
+                        border: 1px solid rgba(0, 212, 255, 0.2);
+                        height: 100%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    '>
+                        <h3 style="
+                            background: linear-gradient(135deg, #00d4ff 0%, #00a8cc 50%, #0066ff 100%);
+                            -webkit-background-clip: text;
+                            -webkit-text-fill-color: transparent;
+                            background-clip: text;
+                            font-size: 1.8rem;
+                            font-weight: 700;
+                            margin: 0;
+                            text-align: center;
+                        ">ViaQuest</h3>
+                    </div>
+                """, unsafe_allow_html=True)
+        
+        with col2:
+            # Coluna 2 - Vantagens
+            st.markdown("""
+                <div style='
+                    background: rgba(0, 212, 255, 0.05); 
+                    padding: 1.2rem; 
+                    border-radius: 10px; 
+                    border: 1px solid rgba(0, 212, 255, 0.2);
+                    height: 100%;
+                '>
+                <h4 style='color: #00d4ff; margin-bottom: 0.8rem; text-align: center;'>🚀 Vantagens</h4>
+                <p style='margin: 0.3rem 0; font-size: 0.9rem; text-align: center;'><strong>Recursos</strong></p>
+                <p style='margin: 0.2rem 0; font-size: 0.85rem; text-align: center;'>• Consultas por IA<br>• Gráficos interativos<br>• Exportação de dados</p>
+                </div>
+            """, unsafe_allow_html=True)
+        
+        # Linha 222 - Tabs ocupando largura total
+        st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+        
         if st.session_state.get('redirect_to_login', False):
             st.session_state['redirect_to_login'] = False
-            default_tab = 0  # Login tab
-            st.success("🎉 Conta criada! Faça login com suas credenciais:")
-        else:
-            default_tab = 0
+            st.success("🎉 Conta criada! Faça login:", icon="✅")
         
-        tab1, tab2 = st.tabs(["🔑 Login", "👤 Criar Conta"])
+        tab1, tab2 = st.tabs(["**🔑 Login**", "**👤 Registrar**"])
         
         with tab1:
-            render_login_form()
+            render_login_form_compact()
         
         with tab2:
-            render_register_form()
+            render_register_form_compact()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
     
     return False
 
@@ -299,3 +428,124 @@ def require_auth():
             return func(*args, **kwargs)
         return wrapper
     return decorator
+
+
+def render_login_form_compact():
+    """Formulário de login compacto para tela única"""
+    with st.form("login_form_compact", clear_on_submit=False):
+        username = st.text_input(
+            "**Usuário ou Email**",
+            placeholder="Digite seu usuário ou email",
+            key="login_username_compact"
+        )
+        password = st.text_input(
+            "**Senha**", 
+            type="password", 
+            placeholder="Sua senha",
+            key="login_password_compact"
+        )
+        
+        submit_login = st.form_submit_button(
+            "**🔑 Entrar**", 
+            use_container_width=True,
+            type="primary"
+        )
+        
+        if submit_login:
+            if not username or not password:
+                st.error("❌ Preencha todos os campos")
+                return
+            
+            success, user_data = db.authenticate_user(username, password)
+            
+            if success:
+                st.session_state.authenticated = True
+                st.session_state.user_id = user_data['id']
+                st.session_state.username = user_data['username']
+                st.session_state.user_email = user_data['email']
+                
+                st.success(f"✅ Bem-vindo, {user_data['username']}!")
+                st.rerun()
+            else:
+                st.error("❌ Credenciais incorretas")
+
+def render_register_form_compact():
+    """Formulário de registro compacto para tela única"""
+    with st.form("register_form_compact", clear_on_submit=False):
+        username = st.text_input(
+            "**Nome de usuário**", 
+            placeholder="Escolha um nome de usuário",
+            key="reg_username_compact"
+        )
+        email = st.text_input(
+            "**Email**", 
+            placeholder="seu@email.com",
+            key="reg_email_compact"
+        )
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            password = st.text_input(
+                "**Senha**", 
+                type="password", 
+                placeholder="Senha",
+                key="reg_password_compact"
+            )
+        with col2:
+            confirm_password = st.text_input(
+                "**Confirmar**", 
+                type="password", 
+                placeholder="Confirmar",
+                key="reg_confirm_compact"
+            )
+        
+        st.markdown("""
+        <div style='
+            background: rgba(0, 212, 255, 0.1); 
+            padding: 0.6rem; 
+            border-radius: 6px; 
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            margin: 0.3rem 0;
+            font-size: 0.8rem;
+        '>
+        <strong>🎯 Plano Grátis</strong> - 10 consultas/dia
+        </div>
+        """, unsafe_allow_html=True)
+        
+        submit_register = st.form_submit_button(
+            "**👤 Criar Conta Grátis**", 
+            use_container_width=True,
+            type="primary"
+        )
+        
+        if submit_register:
+            if not all([username, email, password, confirm_password]):
+                st.error("❌ Preencha todos os campos")
+                return
+            
+            if password != confirm_password:
+                st.error("❌ Senhas não conferem")
+                return
+            
+            if not AuthSystem.validate_email(email):
+                st.error("❌ Email inválido")
+                return
+            
+            valid_username, username_msg = AuthSystem.validate_username(username)
+            if not valid_username:
+                st.error(f"❌ {username_msg}")
+                return
+            
+            valid_password, password_msg = AuthSystem.validate_password(password)
+            if not valid_password:
+                st.error(f"❌ {password_msg}")
+                return
+            
+            success, message = db.create_user(username, email, password)
+            
+            if success:
+                st.success("🎉 Conta criada! Faça login.")
+                st.session_state['redirect_to_login'] = True
+                st.rerun()
+            else:
+                st.error(f"❌ {message}")
