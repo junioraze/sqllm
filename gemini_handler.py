@@ -258,9 +258,27 @@ import google.generativeai as genai
 import os
 
 def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = None, query: str = None):
+    print("[DEBUG] Entrou em analyze_data_with_gemini")
     """
     Analisa dados finais e gera resposta completa com gráficos se solicitado
     """
+
+    # Fuzzy matching para nomes de colunas
+    def fuzzy_column(col, columns):
+        if col in columns:
+            return col
+        # Busca por coluna que contenha o termo (case-insensitive)
+        matches = [c for c in columns if col.lower() in c.lower()]
+        if len(matches) == 1:
+            print(f"[FuzzyMatch] '{col}' não encontrado, usando '{matches[0]}'")
+            return matches[0]
+        elif len(matches) > 1:
+            print(f"[FuzzyMatch] '{col}' não encontrado, múltiplas opções: {matches}. Usando original.")
+            return col
+        else:
+            print(f"[FuzzyMatch] '{col}' não encontrado, sem opções semelhantes. Usando original.")
+            return col
+
     if function_params is not None:
         if hasattr(function_params, "_values"):
             function_params = {k: v for k, v in function_params.items()}
@@ -280,6 +298,9 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
         # Atualiza a lista de dicts formatada
         data = df.to_dict(orient='records')
 
+    # Lista de colunas disponíveis para orientar o modelo
+    columns_list = list(df.columns) if 'df' in locals() else (list(data[0].keys()) if data and isinstance(data, list) and isinstance(data[0], dict) else [])
+
     instruction = f"""
     Você é um ANALISTA SÊNIOR especializado em transformar dados em insights estratégicos.
 
@@ -293,9 +314,18 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
     DADOS ESPECÍFICOS PARA ANÁLISE:
     {json.dumps(data, indent=2, default=str)}
 
+    COLUNAS DISPONÍVEIS NO DATAFRAME PARA GRÁFICO:
+    {columns_list}
+
     {chart_export_instruction}
 
-'    IMPORTANTE:
+    ORIENTAÇÃO CRÍTICA PARA GRÁFICO:
+    - Sempre gere os parâmetros do gráfico (X, Y, COLOR) usando EXATAMENTE os nomes das colunas listadas acima, sem traduzir, abreviar ou modificar.
+    - Se não houver coluna adequada para COLOR, deixe COLOR vazio ou None.
+    - Se não houver coluna numérica para Y, explique e não gere gráfico.
+    - Se não houver coluna categórica para X, explique e não gere gráfico.
+
+    IMPORTANTE:
     - Trabalhe APENAS com os dados fornecidos
     - Seja ESPECÍFICO aos números reais
     - Calcule variações REAIS entre os valores
@@ -333,6 +363,8 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
                         if attempt < max_retries - 1:
                             # Reformula para contexto empresarial
                             business_prompt = f"""
+                            print(f"[DEBUG] Prompt recebido: {prompt}")
+                            print(f"[DEBUG] Dados retornados para gráfico: {data}")
                             Contexto: Análise de dados empresariais para tomada de decisão.
                             Objetivo: {prompt}
                             Dados: {json.dumps(data[:3], default=str)}... (amostra)
@@ -405,6 +437,7 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
                     print("X-AXIS nao encontrado na instrucao do grafico")
                     return response_text, None
                     
+                print(f"[DEBUG] Tentando gerar gráfico com colunas: {list(df.columns)}")
                 # Extração segura do Y-AXIS  
                 if "Y-AXIS:" in graph_part:
                     y_axis = graph_part.split("Y-AXIS:")[1].split("|")[0].strip()
@@ -431,8 +464,12 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
                 
                 # Converte dados para DataFrame
                 df_data = pd.DataFrame(data)
-                
-                fig = generate_chart(df_data, graph_type, x_axis, y_axis, color)
+                print(f"[DEBUG] Tentando gerar gráfico com colunas: {list(df_data.columns)}")
+                # Aplica fuzzy matching para garantir que os nomes de colunas existem no DataFrame
+                x_axis_real = fuzzy_column(x_axis, list(df_data.columns))
+                y_axis_real = fuzzy_column(y_axis, list(df_data.columns))
+                color_real = fuzzy_column(color, list(df_data.columns)) if color else None
+                fig = generate_chart(df_data, graph_type, x_axis_real, y_axis_real, color_real)
                 
                 if fig:
                     chart_info = {
@@ -702,8 +739,16 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
         elif chart_type in ['bar', 'barra']:
             fig = px.bar(
                 data, x=x_axis, y=y_axis, color=color_final,
-                color_discrete_sequence=color_palette
+                color_discrete_sequence=color_palette,
+                text=y_axis  # Exibe valor nas barras
             )
+            fig.update_traces(
+                texttemplate='%{text:.2s}',
+                textposition='outside',
+                width=0.6  # barras mais largas
+            )
+            # Garante altura mínima do gráfico
+            fig.update_layout(height=500)
         elif chart_type in ['scatter', 'dispersao']:
             fig = px.scatter(
                 data, x=x_axis, y=y_axis, color=color_final,
@@ -717,7 +762,7 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
         if fig is not None and y_axis in data.columns:
             y_vals = data[y_axis].dropna()
             if len(y_vals) > 0:
-                y_min = y_vals.min()
+                y_min = min(0, y_vals.min())  # Sempre começa do zero
                 y_max_real = y_vals.max()
                 y_pctl = y_vals.quantile(0.90)
                 # Detecta outlier: se o valor máximo for mais que 2x o percentil 90, considera outlier
@@ -738,8 +783,8 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
                         xanchor="right", yanchor="top"
                     )
                 else:
-                    # Ajuste proporcional padrão
-                    y_top = max(y_max_real, min(y_pctl * 1.10, y_max_real * 2))
+                    # Ajuste proporcional padrão, sempre mostrando todas as barras
+                    y_top = max(y_max_real * 1.05, y_pctl * 1.10, 1)
                     fig.update_yaxes(range=[y_min, y_top])
                     if y_top < y_max_real:
                         annotation_color = text_color

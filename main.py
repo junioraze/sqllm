@@ -261,12 +261,14 @@ with st.container():
                     show_aggrid_table(aggrid_data, theme="balham", height=350, fit_columns=True)
             # Exibe gráfico após grid
             if tech and tech.get("chart_info") and tech["chart_info"].get("fig"):
+                import plotly.graph_objs as go
+                fig = go.Figure(tech["chart_info"]["fig"])
                 st.markdown("<div style='margin-top:0.5em; margin-bottom:0.5em;'></div>", unsafe_allow_html=True)
                 st.plotly_chart(
-                    tech["chart_info"]["fig"],
+                    fig,
                     use_container_width=True,
                     height=400,
-                    key=f"fig_{id(tech['chart_info']['fig'])}",
+                    key=f"fig_{id(fig)}",
                     config={'displayModeBar': False}
                 )
             # Exibe detalhes técnicos por último, sempre após texto, grid e gráfico
