@@ -79,6 +79,10 @@ def execute_query(query: str):
         return {"error": str(e), "query": query}
 
 def build_query(params: dict) -> str:
+    # Função utilitária para normalizar nome de tabela removendo crases
+    def normalize_table_id(table_id):
+        return table_id.replace('`', '').strip()
+
     # Apenas constrói a query fielmente conforme os parâmetros recebidos
     original_params = params.copy()
     corrected_params = fix_function_params(params)
@@ -93,9 +97,19 @@ def build_query(params: dict) -> str:
     full_table_id = corrected_params.get("full_table_id")
     if not full_table_id:
         raise ValueError("full_table_id é obrigatório")
-    # Sempre coloca o full_table_id entre crases para evitar problemas com '-' e outros caracteres
+
+    # Exemplo de validação (substitua pelo local correto do seu projeto):
+    # available_tables = ... (lista de tabelas disponíveis)
+    # if not any(normalize_table_id(full_table_id) == normalize_table_id(t) for t in available_tables):
+    #     raise ValueError(f"Invalid full_table_id: {full_table_id}")
+    # Para validação, compara tanto com quanto sem crases
+    def normalize_table_id(table_id):
+        return table_id.replace('`', '').strip()
+    # Sempre monta o SQL com crases
     if not (full_table_id.startswith('`') and full_table_id.endswith('`')):
-        full_table_id = f'`{full_table_id}`'
+        full_table_id_sql = f'`{full_table_id}`'
+    else:
+        full_table_id_sql = full_table_id
 
 
     # 1. Normaliza listas e corrige múltiplos agrupamentos
@@ -173,21 +187,45 @@ def build_query(params: dict) -> str:
         "Data", "Hora", "Pessoa", "Mensagem", "DataLastValue", "DataLookupPrevious", "PessoaLastValue", "DataHoraD", "Assunto", "Intencao", "Entidades", "Sentimento", "AcaoSugerida", "MessageWordCount", "TimeDiff", "DataRank", "MessagenLen"
     ])
     # Inclui todos os campos de categorização (dimensões não agregadas, JOIN, CTE, última CTE base) no SELECT e GROUP BY, filtrando apenas campos válidos
+    # No SELECT principal, só incluir nomes de colunas válidos e sem prefixo/alias
     required_fields = (set(get_non_agg_fields(select)) | join_dims | cte_fields | set(group_by) | last_cte_fields)
-    required_fields = set([f for f in required_fields if f.split('.')[-1] in valid_fields])
+    required_fields = set([f.split('.')[-1] for f in required_fields if f.split('.')[-1] in valid_fields])
     filtered_group_by = list(dict.fromkeys([g for g in group_by if g in required_fields]))
     for f in required_fields:
         if f not in filtered_group_by:
             print(f"[CORREÇÃO GROUP_BY] Adicionando campo obrigatório ao group_by: {f}")
             filtered_group_by.append(f)
-    select_fields = set(get_non_agg_fields(select))
+    # Garante que cada campo não agregado só seja adicionado se o nome final (após AS) não estiver presente
+    select_aliases = set()
+    for sel in select:
+        # Extrai alias do campo (após AS), se existir, senão o próprio campo
+        m = re.search(r'AS\s+(\w+)$', sel, re.IGNORECASE)
+        if m:
+            select_aliases.add(m.group(1).strip())
+        else:
+            # Se não tem alias, pega o nome do campo (com ou sem prefixo)
+            field = sel.split('.')[-1].strip()
+            select_aliases.add(field)
     for f in required_fields:
-        if f not in select_fields:
+        alias = f.split('.')[-1]
+        if alias not in select_aliases:
             print(f"[CORREÇÃO SELECT] Adicionando campo não agregado ao SELECT: {f}")
-            alias = f.split('.')[-1]
             select.append(f + f' AS {alias}')
-    # Remove duplicidade no SELECT
-    select = list(dict.fromkeys(select))
+            select_aliases.add(alias)
+    # Remove duplicidade no SELECT (mantendo ordem)
+    seen = set()
+    select_clean = []
+    for s in select:
+        alias = None
+        m = re.search(r'AS\s+(\w+)$', s, re.IGNORECASE)
+        if m:
+            alias = m.group(1).strip()
+        else:
+            alias = s.split('.')[-1].strip()
+        if alias not in seen:
+            select_clean.append(s)
+            seen.add(alias)
+    select = select_clean
     if not has_agg and filtered_group_by:
         print("[CORREÇÃO GROUP_BY] Removendo todos os campos do group_by pois SELECT final não tem agregação.")
         filtered_group_by = []
@@ -227,29 +265,14 @@ def build_query(params: dict) -> str:
         if is_full_query:
             query_clean = re.sub(r'[\n\t]+', ' ', cte)
             query_clean = re.sub(r' +', ' ', query_clean)
-            # Adiciona ORDER BY ao final se não estiver presente
+            # Adiciona ORDER BY apenas ao SELECT final, nunca dentro de CTEs
             order_by = _parse_list_param(corrected_params.get("order_by"), "order_by")
-            # Verifica se já existe ORDER BY na query
             if order_by:
                 order_by_clause = f" ORDER BY {', '.join(order_by)}"
+                # Só adiciona ORDER BY se não existir e apenas ao final da query
                 if "ORDER BY" not in query_clean.upper():
                     query_clean = query_clean.strip()
-                    # Adiciona antes do último SELECT se houver mais de um, senão ao final
-                    if query_clean.upper().count("SELECT") > 1:
-                        # Adiciona ao final da última SELECT
-                        last_select = query_clean.upper().rfind("SELECT")
-                        # Busca o fim do último bloco SELECT
-                        end_select = query_clean.rfind("GROUP BY")
-                        if end_select != -1:
-                            # Adiciona após GROUP BY
-                            group_by_end = query_clean.find(" ", end_select)
-                            if group_by_end == -1:
-                                group_by_end = len(query_clean)
-                            query_clean = query_clean[:group_by_end] + order_by_clause + query_clean[group_by_end:]
-                        else:
-                            query_clean += order_by_clause
-                    else:
-                        query_clean += order_by_clause
+                    query_clean += order_by_clause
             print(f"DEBUG - Query construída:\n{query_clean}")
             return query_clean.strip()
         else:
@@ -267,25 +290,36 @@ def build_query(params: dict) -> str:
 
     # 6. Monta demais cláusulas
     where = f" WHERE {corrected_params['where']}" if corrected_params.get("where") else ""
-    group_by_sql = f" GROUP BY {', '.join(filtered_group_by)}" if filtered_group_by else ""
+    # O SELECT final nunca deve ter GROUP BY ou agregação, apenas projeção dos campos já agregados/agrupados definidos nas CTEs
+    # Remove agregações do SELECT final
+    select_final = []
+    for s in select:
+        # Se for agregação (SUM, COUNT, AVG, etc), só inclui se vier como campo já definido (ex: quantidade)
+        if re.search(r"(SUM|COUNT|AVG|MIN|MAX)\s*\(", s, re.IGNORECASE):
+            # Tenta extrair alias
+            m = re.search(r"AS\s+(\w+)$", s, re.IGNORECASE)
+            if m:
+                select_final.append(m.group(1).strip())
+            # Se não tem alias, ignora agregação no SELECT final
+        else:
+            select_final.append(s)
+    # Remove GROUP BY do SELECT final
+    group_by_sql = ""
     # Garante que todos os campos do eixo X e do parâmetro order_by estejam presentes
-    # Se não houver order_by, adiciona automaticamente o campo temporal/dimensão principal
     if not order_by:
-        # Prioriza campo temporal/dimensão principal
-        temporal_fields = [f for f in select if re.search(r"data|mes|ano|dia|hora", f, re.IGNORECASE)]
+        temporal_fields = [f for f in select_final if re.search(r"data|mes|ano|dia|hora", f, re.IGNORECASE)]
         temporal_fields = [f.split(" AS ")[0].strip() for f in temporal_fields]
         for tf in temporal_fields:
             if tf not in order_by:
                 order_by.append(tf)
-        # Se ainda vazio, adiciona primeira dimensão do group_by
         if not order_by and filtered_group_by:
             order_by.append(filtered_group_by[0])
     order_by_sql = f" ORDER BY {', '.join(order_by)}" if order_by else ""
     qualify = f" QUALIFY {corrected_params['qualify']}" if corrected_params.get("qualify") else ""
     limit = f" LIMIT {int(corrected_params['limit'])}" if corrected_params.get("limit") else ""
 
-    # 7. Monta query principal
-    query = f"{with_clause}SELECT {', '.join(select)} FROM {from_table}{where}{group_by_sql}{qualify}{order_by_sql}{limit}"
+    # Monta query principal sem GROUP BY/agregação no SELECT final
+    query = f"{with_clause}SELECT {', '.join(select_final)} FROM {from_table}{where}{qualify}{order_by_sql}{limit}"
 
     # 8. Remove espaços
     query_clean = re.sub(r'[\n\t]+', ' ', query)

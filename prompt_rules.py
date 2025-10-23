@@ -45,19 +45,43 @@ def build_tables_description():
 # Instruções para geração de queries SQL (function_call)
 
 SQL_FUNCTIONCALL_INSTRUCTIONS = """
-PADRÃO OBRIGATÓRIO DE CTEs:
+
+
+PADRÃO OBRIGATÓRIO DE CTEs (GENERALISTA):
 
 Toda query deve ser estruturada usando múltiplas CTEs, cada uma com responsabilidade única:
-Limpeza/conversão (ex: CAST, EXTRACT, UPPER, filtros) — nomeie como cte_limpeza, cte_preparacao.
-Agregação (ex: SUM, COUNT, AVG, GROUP BY) — nomeie como cte_agregacao, cte_agrupamento.
-Ranking/window (ex: ROW_NUMBER, QUALIFY, DENSE_RANK) — nomeie como cte_ranking, cte_final.
-Comparação/análise (ex: JOINs, pivots, cálculos finais) — nomeie como cte_comparacao, cte_pivot.
-Nunca misture transformação e análise na mesma CTE.
-Use nomes descritivos e consistentes para CTEs e aliases de campos.
-O SELECT final deve conter apenas campos agregados e agrupados definidos nas CTEs, nunca campos agregados no GROUP BY do SELECT final.
-O GROUP BY pode conter múltiplos campos/dimensões conforme o contexto da pergunta (ex: mês, pessoa, categoria, etc). Sempre inclua todos os campos não agregados do SELECT no GROUP BY.
-Só inclua no SELECT final colunas do GROUP BY ou agregadas (SUM, COUNT, AVG).
-Nunca gere dois SELECTs seguidos na query final; o SELECT principal deve ser separado das definições de CTE.
+- Limpeza/conversão (ex: CAST, EXTRACT, UPPER, filtros) — nomeie como cte_limpeza, cte_preparacao.
+- Agregação (ex: SUM, COUNT, AVG, GROUP BY) — nomeie como cte_agregacao, cte_agrupamento.
+- Ranking/window (ex: ROW_NUMBER, QUALIFY, DENSE_RANK) — nomeie como cte_ranking, cte_final.
+- Comparação/análise (ex: JOINs, pivots, cálculos finais) — nomeie como cte_comparacao, cte_pivot.
+- Nunca misture transformação e análise na mesma CTE.
+- Use nomes descritivos e consistentes para CTEs e aliases de campos.
+
+REGRAS CRÍTICAS PARA O SELECT FINAL:
+- O SELECT final NUNCA deve conter GROUP BY ou agregação (SUM, COUNT, AVG, etc). Toda agregação deve ocorrer dentro de uma CTE específica.
+- O SELECT final apenas projeta os campos agregados e agrupados definidos nas CTEs e ordena para garantir o eixo X correto no gráfico.
+- Nunca gere dois SELECTs seguidos na query final; o SELECT principal deve ser separado das definições de CTE.
+
+O GROUP BY pode conter múltiplos campos/dimensões conforme o contexto da pergunta (ex: campo_periodo, campo_eixo_x, campo_categoria, etc). Sempre inclua todos os campos não agregados do SELECT no GROUP BY da CTE de agrupamento.
+Só inclua no SELECT final colunas agregadas ou agrupadas (SUM, COUNT, AVG) já definidas nas CTEs.
+
+REGRAS DE ORDENAÇÃO (ORDER BY):
+- A ordenação (ORDER BY) deve ocorrer sempre no SELECT final, nunca dentro das CTEs.
+- Priorize SEMPRE o campo de período (ex: campo_periodo, campo_data, campo_mes, campo_ano) para ordenação.
+- Se não existir campo de período, use o campo principal do eixo X (ex: campo_eixo_x, campo_categoria) ou a ordem natural dos registros.
+- Nunca ordene por valores agregados (ex: SUM, COUNT) no SELECT final, apenas pelos campos de dimensão/eixo X.
+
+Exemplo generalista:
+WITH cte_agregacao AS (
+    SELECT campo_periodo, campo_eixo_x, SUM(campo_valor) AS valor_total
+    FROM nome_da_tabela
+    WHERE ...
+    GROUP BY campo_periodo, campo_eixo_x
+)
+SELECT campo_periodo, campo_eixo_x, valor_total
+FROM cte_agregacao
+ORDER BY campo_periodo, campo_eixo_x
+
 REGRAS ESPECÍFICAS PARA MONTAGEM DE QUERY:
 4. O campo 'from_table' DEVE referenciar o alias definido na CTE (ex: 't1', ou um JOIN entre aliases definidos na CTE). Nunca use o nome da tabela original diretamente no FROM se houver CTE.
 5. Nomes de tabela SEMPRE no formato {PROJECT_ID}.{DATASET_ID}.nome_da_tabela, usando apenas UM acento grave (`) ao redor do nome da tabela, nunca dois e nunca sem acento. O backend NÃO adiciona nem remove acentos graves: o modelo é responsável por garantir o formato correto, exatamente como o BigQuery espera.
@@ -81,17 +105,15 @@ Exemplo CORRETO: WHERE campo = 'valor_exemplo'
 Exemplo CORRETO para flag: WHERE campo_flag = 1
 ATENÇÃO: Nunca gere dois SELECTs seguidos na query final. O SELECT principal deve ser sempre separado das definições de CTE.
 
-EXEMPLO DE ESTRUTURA CORRETA:
-WITH cte_limpeza AS (
-SELECT ... FROM ... WHERE ...
-),
-cte_agregacao AS (
-SELECT ... FROM cte_limpeza GROUP BY ...
-),
-cte_ranking AS (
-SELECT ..., ROW_NUMBER() OVER (...) AS ranking FROM cte_agregacao
+EXEMPLO GENERALISTA DE PADRÃO CORRETO:
+WITH cte_agregacao AS (
+    SELECT campo_agrupado, SUM(valor) AS total
+    FROM tabela
+    GROUP BY campo_agrupado
 )
-SELECT ... FROM cte_ranking WHERE ranking <= N ORDER BY
+SELECT campo_agrupado, total
+FROM cte_agregacao
+ORDER BY campo_agrupado
 """
 
 # Função para construir instrução dinâmica das tabelas/campos válidos
