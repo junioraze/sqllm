@@ -45,58 +45,20 @@ def build_tables_description():
 # Instruções para geração de queries SQL (function_call)
 
 SQL_FUNCTIONCALL_INSTRUCTIONS = """
-EXEMPLO CRÍTICO (CTE correta, só placeholders):
-WITH cte_agrupada AS (
-    SELECT campo_temporal, campo_categoria, SUM(campo_valor) AS valor_total
-    FROM tabela
-    GROUP BY campo_temporal, campo_categoria
-GARANTIA ABSOLUTA DE CORREÇÃO DE QUERY:
-- Queries que contenham mais de um SELECT principal após o WITH serão rejeitadas pelo backend.
-- O modelo/handler é SEMPRE responsável por garantir que só exista UM SELECT principal após o fechamento das CTEs (WITH ... ).
-- O SELECT principal deve vir imediatamente após as CTEs, nunca duplicado, nunca dentro do campo 'cte'.
-- Se houver SELECT duplicado, a query será considerada inválida e não será executada.
+PADRÃO OBRIGATÓRIO DE CTEs:
 
-REGRAS ESSENCIAIS:
-ORDER BY campo_temporal, campo_categoria
-
-// ERRADO: nunca faça GROUP BY campo_temporal, campo_categoria, valor_total
-
-REGRAS ESSENCIAIS:
-- No SELECT final, NUNCA coloque colunas agregadas (ex: valor_total) no GROUP BY. Só campos não agregados vão no GROUP BY.
-- No SELECT final, só inclua no SELECT colunas do GROUP BY ou agregadas (ex: SUM, COUNT, AVG). Nunca coloque coluna não agregada fora do GROUP BY.
-- SEMPRE use CTE (WITH) para toda query, mesmo simples.
-- O campo 'cte' deve conter apenas a(s) definição(ões) de CTE, nunca o SELECT final.
-- O campo 'from_table' deve ser o alias definido na CTE.
-- O campo 'select' é uma lista de strings, cada item uma coluna/expressão, nunca uma string única com vírgulas.
-- Sempre preencha todos os parâmetros do function_call.
-- Use apenas tabelas/campos listados no contexto.
-
-ATENÇÃO: Nunca envie parâmetros de consulta como texto puro, JSON, string, markdown ou qualquer formato diferente de function_call. Sempre envie o objeto/dict puro para o function_call, exatamente como o backend espera. O campo "full_table_id" é OBRIGATÓRIO em TODOS os casos.
-
-Nunca gere dois SELECTs seguidos na query final. O SELECT principal deve ser sempre separado das definições de CTE.
-
-
-ATENÇÃO: NUNCA envie parâmetros de consulta como texto puro, JSON isolado, string, markdown (```json ... ```), ou qualquer formato diferente de function_call. Sempre envie o objeto/dict puro (ou tuple com dict) para o function_call, exatamente como o backend espera. NÃO ESQUEÇA: O campo "full_table_id" é OBRIGATÓRIO em TODOS os casos, mesmo quando a consulta usa CTE. Sempre inclua "full_table_id" nos parâmetros, indicando a tabela base do BigQuery utilizada. Não envie explicações, JSON, markdown, texto solto ou qualquer outro formato para parâmetros de consulta. O backend só aceita function_call.
-
-REGRAS ABSOLUTAS PARA GERAÇÃO DE QUERIES SQL:
-
-1. SEMPRE use CTE (WITH) para TODA query, mesmo as mais simples. Toda consulta DEVE ser estruturada usando CTE, mesmo que haja apenas uma tabela ou um único passo. Exemplo: WITH t1 AS (SELECT ... FROM ... WHERE ...) SELECT ... FROM t1 ...
-2. O campo 'cte' DEVE ser preenchido SEMPRE, contendo APENAS a(s) definição(ões) de CTE (WITH ... AS (...)), NUNCA o SELECT final. O SELECT principal deve ser montado separadamente, fora do campo 'cte', usando os aliases definidos nas CTEs.
-     - Exemplo CORRETO de 'cte':
-         WITH t1 AS (SELECT ... FROM ... WHERE ...)
-     - Exemplo INCORRETO de 'cte':
-         WITH t1 AS (SELECT ... FROM ...) SELECT ... FROM t1 ...
-     - O SELECT final NUNCA deve estar dentro do campo 'cte'.
-3. O campo 'select' deve ser uma lista de strings, cada item representando uma coluna ou expressão, SEM aspas internas e SEM concatenar tudo em uma única string.
-     - Exemplo CORRETO de 'select':
-         ["coluna1", "coluna2", "SUM(valor) AS total"]
-     - Exemplo INCORRETO de 'select':
-         ["'coluna1', 'coluna2', 'SUM(valor) AS total'"]
-         ou
-         ["coluna1, coluna2, SUM(valor) AS total"]
-     - Cada item da lista deve ser uma expressão SQL válida, sem aspas simples ou duplas internas, e nunca uma string única com várias colunas separadas por vírgula.
-     - O pipeline irá montar o SELECT usando cada item da lista como uma coluna.
-
+Toda query deve ser estruturada usando múltiplas CTEs, cada uma com responsabilidade única:
+Limpeza/conversão (ex: CAST, EXTRACT, UPPER, filtros) — nomeie como cte_limpeza, cte_preparacao.
+Agregação (ex: SUM, COUNT, AVG, GROUP BY) — nomeie como cte_agregacao, cte_agrupamento.
+Ranking/window (ex: ROW_NUMBER, QUALIFY, DENSE_RANK) — nomeie como cte_ranking, cte_final.
+Comparação/análise (ex: JOINs, pivots, cálculos finais) — nomeie como cte_comparacao, cte_pivot.
+Nunca misture transformação e análise na mesma CTE.
+Use nomes descritivos e consistentes para CTEs e aliases de campos.
+O SELECT final deve conter apenas campos agregados e agrupados definidos nas CTEs, nunca campos agregados no GROUP BY do SELECT final.
+O GROUP BY pode conter múltiplos campos/dimensões conforme o contexto da pergunta (ex: mês, pessoa, categoria, etc). Sempre inclua todos os campos não agregados do SELECT no GROUP BY.
+Só inclua no SELECT final colunas do GROUP BY ou agregadas (SUM, COUNT, AVG).
+Nunca gere dois SELECTs seguidos na query final; o SELECT principal deve ser separado das definições de CTE.
+REGRAS ESPECÍFICAS PARA MONTAGEM DE QUERY:
 4. O campo 'from_table' DEVE referenciar o alias definido na CTE (ex: 't1', ou um JOIN entre aliases definidos na CTE). Nunca use o nome da tabela original diretamente no FROM se houver CTE.
 5. Nomes de tabela SEMPRE no formato {PROJECT_ID}.{DATASET_ID}.nome_da_tabela, usando apenas UM acento grave (`) ao redor do nome da tabela, nunca dois e nunca sem acento. O backend NÃO adiciona nem remove acentos graves: o modelo é responsável por garantir o formato correto, exatamente como o BigQuery espera.
 6. Use apenas os campos listados no contexto de metadados da tabela (nunca invente nomes).
@@ -108,18 +70,28 @@ REGRAS ABSOLUTAS PARA GERAÇÃO DE QUERIES SQL:
 12. Só gere visualização gráfica se explicitamente solicitado (veja instruções de gráfico abaixo).
 13. Use apenas as tabelas e campos listados abaixo.
 
-
-
 REGRAS PARA VALORES DE FILTRO E FLAGS:
-- Nunca assuma que um campo é binário (S/N, 1/0, TRUE/FALSE) apenas pelo nome. Só trate como flag se o nome terminar com _fl, _flag, _sn, ou se a descrição/exemplos indicarem explicitamente que é binário.
-- Os exemplos de valores fornecidos no dicionário (campo "examples") servem apenas como referência para dedução do tipo e semântica dos valores esperados, nunca como lista exaustiva. Use-os para entender o padrão de valor esperado, mas deduza o valor correto a partir do contexto, descrição e lógica de negócio.
-- Nunca limite a consulta apenas aos exemplos. Se o campo aceitar outros valores (ex: texto livre, múltiplos tipos), utilize a descrição e o contexto para deduzir o valor correto.
-- Nunca assuma valores genéricos como 'S', 'N', '1', '0' só pelo nome do campo. Sempre valide pelo contexto, descrição e exemplos.
-- Exemplo INCORRETO: WHERE campo = 'S'  (não existe valor 'S' para esse campo)
-- Exemplo CORRETO: WHERE campo = 'valor_exemplo'
-- Exemplo CORRETO para flag: WHERE campo_flag = 1 
 
+Nunca assuma que um campo é binário (S/N, 1/0, TRUE/FALSE) apenas pelo nome. Só trate como flag se o nome terminar com _fl, _flag, _sn, ou se a descrição/exemplos indicarem explicitamente que é binário.
+Os exemplos de valores fornecidos no dicionário (campo "examples") servem apenas como referência para dedução do tipo e semântica dos valores esperados, nunca como lista exaustiva. Use-os para entender o padrão de valor esperado, mas deduza o valor correto a partir do contexto, descrição e lógica de negócio.
+Nunca limite a consulta apenas aos exemplos. Se o campo aceitar outros valores (ex: texto livre, múltiplos tipos), utilize a descrição e o contexto para deduzir o valor correto.
+Nunca assuma valores genéricos como 'S', 'N', '1', '0' só pelo nome do campo. Sempre valide pelo contexto, descrição e exemplos.
+Exemplo INCORRETO: WHERE campo = 'S' (não existe valor 'S' para esse campo)
+Exemplo CORRETO: WHERE campo = 'valor_exemplo'
+Exemplo CORRETO para flag: WHERE campo_flag = 1
 ATENÇÃO: Nunca gere dois SELECTs seguidos na query final. O SELECT principal deve ser sempre separado das definições de CTE.
+
+EXEMPLO DE ESTRUTURA CORRETA:
+WITH cte_limpeza AS (
+SELECT ... FROM ... WHERE ...
+),
+cte_agregacao AS (
+SELECT ... FROM cte_limpeza GROUP BY ...
+),
+cte_ranking AS (
+SELECT ..., ROW_NUMBER() OVER (...) AS ranking FROM cte_agregacao
+)
+SELECT ... FROM cte_ranking WHERE ranking <= N ORDER BY
 """
 
 # Função para construir instrução dinâmica das tabelas/campos válidos

@@ -14,9 +14,16 @@ def show_aggrid_table(data: list, theme: str = "streamlit", height: int = 350, f
         st.info("Nenhum dado tabular disponível para exibir.")
         return
     df = pd.DataFrame(data)
-    # Tabela principal customizada
-    st.markdown("<div class='section-label'>dados</div>", unsafe_allow_html=True)
-    st.markdown(_render_custom_table(df), unsafe_allow_html=True)
+    # Controle de exibição: mostra só os 10 primeiros, com opção de expandir
+    # Ícone simples para expandir: '[ ]' no topo da tabela
+    if len(df) > 10:
+        st.markdown("<div class='section-label'>dados (primeiros 10 registros)</div>", unsafe_allow_html=True)
+        st.markdown(_render_custom_table(df.head(10)), unsafe_allow_html=True)
+        with st.expander("Exibir todos os registros", expanded=False):
+            st.markdown(_render_custom_table(df), unsafe_allow_html=True)
+    else:
+        st.markdown("<div class='section-label'>dados</div>", unsafe_allow_html=True)
+        st.markdown(_render_custom_table(df), unsafe_allow_html=True)
 
     # Se for numérico, mostra sumário analítico dentro de um expander fechado
     if not df.empty:
