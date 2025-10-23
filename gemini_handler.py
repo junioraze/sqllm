@@ -614,23 +614,53 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
     # Limite de caracteres para itens da legenda/categorias
     LEGEND_LABEL_MAXLEN = 22
 
+    # Função especialista para garantir correspondência segura do alias
+    import re
+    def clean_alias(alias):
+        # Remove tudo que não é letra, número ou underline
+        return re.sub(r'[^a-zA-Z0-9_]', '', alias.strip().lower().replace(' ', '_'))
+
+    def get_real_column(alias, columns):
+        alias_norm = clean_alias(alias)
+        for col in columns:
+            col_norm = clean_alias(col)
+            if col_norm == alias_norm:
+                return col
+        raise ValueError(f"Alias '{alias}' não encontrado nas colunas do DataFrame: {columns}")
+
     # Trunca os labels da coluna de cor se necessário
-    if color and color in data.columns:
-        data[color] = data[color].astype(str).apply(lambda x: x[:LEGEND_LABEL_MAXLEN] + '…' if len(x) > LEGEND_LABEL_MAXLEN else x)
+    color_real = None
+    if color:
+        try:
+            color_real = get_real_column(color, data.columns)
+            data[color_real] = data[color_real].astype(str).apply(lambda x: x[:LEGEND_LABEL_MAXLEN] + '…' if len(x) > LEGEND_LABEL_MAXLEN else x)
+        except Exception as e:
+            print(f"Coluna de cor '{color}' não encontrada, gráfico será gerado sem cor.")
+            color_real = None
 
     # Trunca os labels da coluna de categorias (x_axis) se for string/categórica
-    if x_axis and x_axis in data.columns:
-        if data[x_axis].dtype == object or str(data[x_axis].dtype).startswith('str'):
-            data[x_axis] = data[x_axis].astype(str).apply(lambda x: x[:LEGEND_LABEL_MAXLEN] + '…' if len(x) > LEGEND_LABEL_MAXLEN else x)
-    """
-    Cria gráficos com tema adaptativo (dark/light) e layout responsivo
-    """
+    if x_axis:
+        try:
+            x_axis_real = get_real_column(x_axis, data.columns)
+            if data[x_axis_real].dtype == object or str(data[x_axis_real].dtype).startswith('str'):
+                data[x_axis_real] = data[x_axis_real].astype(str).apply(lambda x: x[:LEGEND_LABEL_MAXLEN] + '…' if len(x) > LEGEND_LABEL_MAXLEN else x)
+        except Exception as e:
+            print(f"Erro ao validar coluna X: {e}")
+            return None
+
+    if y_axis:
+        try:
+            y_axis_real = get_real_column(y_axis, data.columns)
+        except Exception as e:
+            print(f"Erro ao validar coluna Y: {e}")
+            return None
+
     import streamlit as st
-    
+
     # Detecta tema atual do Streamlit
     theme_mode = st.session_state.get('theme_mode', 'escuro')
     is_dark_theme = theme_mode == 'escuro'
-    
+
     # Cores adaptativas baseadas no tema
     if is_dark_theme:
         # Tema escuro
@@ -654,10 +684,10 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
         grid_color = 'rgba(0,0,0,0.1)'
         legend_bg = 'rgba(255, 255, 255, 0.95)'
         legend_border = 'rgba(0,0,0,0.1)'
-    
+
     if data.empty:
         return None
-        
+
     # CONFIGURAÇÃO RESPONSIVA ATUALIZADA - EXTENSÃO HORIZONTAL
     layout_config = {
         'plot_bgcolor': bg_color,
@@ -692,36 +722,36 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
             'automargin': True
         }
     }
-    
+
     try:
         if chart_type in ['line', 'linha']:
             fig = px.line(
-                data, x=x_axis, y=y_axis, color=color,
+                data, x=x_axis_real, y=y_axis_real, color=color_real,
                 color_discrete_sequence=color_palette,
                 line_shape='spline'
             )
             fig.update_traces(line=dict(width=3))
-            
+
         elif chart_type in ['bar', 'barra']:
             fig = px.bar(
-                data, x=x_axis, y=y_axis, color=color,
+                data, x=x_axis_real, y=y_axis_real, color=color_real,
                 color_discrete_sequence=color_palette
             )
-            
+
         elif chart_type in ['scatter', 'dispersao']:
             fig = px.scatter(
-                data, x=x_axis, y=y_axis, color=color,
+                data, x=x_axis_real, y=y_axis_real, color=color_real,
                 color_discrete_sequence=color_palette,
                 size_max=15
             )
-            
+
         else:
-            fig = px.bar(data, x=x_axis, y=y_axis, color=color,
+            fig = px.bar(data, x=x_axis_real, y=y_axis_real, color=color_real,
                         color_discrete_sequence=color_palette)
-        
+
         # Aplica layout responsivo
         fig.update_layout(layout_config)
-        
+
         # Grid adaptativo ao tema
         fig.update_xaxes(
             showgrid=True, gridwidth=1, gridcolor=grid_color,
@@ -731,7 +761,7 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
             showgrid=True, gridwidth=1, gridcolor=grid_color,
             showline=True, linewidth=1, linecolor=grid_color
         )
-        
+
         return fig
     except Exception as e:
         print(f"Erro ao criar gráfico: {e}")
