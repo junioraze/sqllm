@@ -17,6 +17,12 @@ INSTRUÇÕES DE GRÁFICO/EXPORTAÇÃO:
 - Exporte os dados em formato tabular antes de gerar o gráfico.
 - Nunca inclua dados ou campos não presentes no SELECT final.
 - Se solicitado exportação, gere CSV ou Excel com os campos do SELECT final, sem agregações extras.
+
+INSTRUÇÃO CRÍTICA DE FORMATO DE RESPOSTA PARA GRÁFICO:
+Sempre inclua na resposta, de forma destacada, o tipo de gráfico solicitado pelo usuário, usando o formato:
+GRAPH-TYPE: <tipo> | X-AXIS: <coluna_x> | Y-AXIS: <coluna_y> | COLOR: <coluna_color (opcional)>
+Exemplo: GRAPH-TYPE: bar | X-AXIS: divulgadores_tipo_divulgador | Y-AXIS: variacao_percentual
+
 """
 
 
@@ -57,7 +63,11 @@ def build_tables_description():
 # Instruções para geração de queries SQL (function_call)
 
 SQL_FUNCTIONCALL_INSTRUCTIONS = """
+
 ATENÇÃO: NUNCA, EM HIPÓTESE ALGUMA, gere comentários SQL (nem --, nem /* ... */) em nenhuma query. Comentários SQL não são permitidos e causam erro de sintaxe.
+
+REGRA CRÍTICA DE FORMATAÇÃO DE RESPOSTA:
+NUNCA retorne a resposta em formato markdown (ex: ```json ... ``` ou qualquer bloco ``` ... ```). Sempre retorne o JSON puro, sem qualquer formatação markdown, para evitar erros de parsing.
 
 PADRÃO OBRIGATÓRIO DE CTEs (GENERALISTA):
 

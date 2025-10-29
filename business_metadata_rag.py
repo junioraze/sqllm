@@ -152,9 +152,12 @@ class BusinessMetadataRAGV2:
             context = rule.get('context', '')
             critical_rules.append(f"• {rule_text}: {context}")
 
-        # Listar todos os campos válidos por categoria, extraídos apenas do tables_config.json
+        # Listar todos os campos válidos por categoria, incluindo descrição
         def list_fields(cat, label):
-            return [f"[{label}] {field.get('name')} ({field.get('type')})" for field in fields.get(cat, [])]
+            return [
+                f"[{label}] {field.get('name')} ({field.get('type')}) — {field.get('description', '').strip()}"
+                for field in fields.get(cat, [])
+            ]
 
         temporal_fields = list_fields('temporal_fields', 'temporal')
         dimension_fields = list_fields('dimension_fields', 'dimension')
