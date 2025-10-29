@@ -153,16 +153,20 @@ class BusinessMetadataRAGV2:
             critical_rules.append(f"• {rule_text}: {context}")
 
         # Listar todos os campos válidos por categoria, incluindo descrição
-        def list_fields(cat, label):
-            return [
-                f"[{label}] {field.get('name')} ({field.get('type')}) — {field.get('description', '').strip()}"
-                for field in fields.get(cat, [])
-            ]
 
-        temporal_fields = list_fields('temporal_fields', 'temporal')
-        dimension_fields = list_fields('dimension_fields', 'dimension')
-        metric_fields = list_fields('metric_fields', 'metric')
-        filter_fields = list_fields('filter_fields', 'filter')
+        def list_fields_with_conversion(cat, label):
+            result = []
+            for field in fields.get(cat, []):
+                desc = f"[{label}] {field.get('name')} ({field.get('type')}) — {field.get('description', '').strip()}"
+                if field.get('type', '') == 'TIMESTAMP' and field.get('conversion', ''):
+                    desc += f" | Conversão recomendada: {field.get('conversion', '')}"
+                result.append(desc)
+            return result
+
+        temporal_fields = list_fields_with_conversion('temporal_fields', 'temporal')
+        dimension_fields = list_fields_with_conversion('dimension_fields', 'dimension')
+        metric_fields = list_fields_with_conversion('metric_fields', 'metric')
+        filter_fields = list_fields_with_conversion('filter_fields', 'filter')
 
         context = f"""
 Tabela: {table_name} ({metadata.get('bigquery_table', table_name)})

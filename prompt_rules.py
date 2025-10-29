@@ -63,16 +63,10 @@ def build_tables_description():
 # Instruções para geração de queries SQL (function_call)
 
 SQL_FUNCTIONCALL_INSTRUCTIONS = """
-
-ATENÇÃO: NUNCA, EM HIPÓTESE ALGUMA, gere comentários SQL (nem --, nem /* ... */) em nenhuma query. Comentários SQL não são permitidos e causam erro de sintaxe.
-
-REGRA CRÍTICA DE FORMATAÇÃO DE RESPOSTA:
-NUNCA retorne a resposta em formato markdown (ex: ```json ... ``` ou qualquer bloco ``` ... ```). Sempre retorne o JSON puro, sem qualquer formatação markdown, para evitar erros de parsing.
-
 PADRÃO OBRIGATÓRIO DE CTEs (GENERALISTA):
 
 Toda query deve ser estruturada usando múltiplas CTEs, cada uma com responsabilidade única:
-- Limpeza/conversão (ex: CAST, EXTRACT, UPPER, filtros) — nomeie como cte_limpeza, cte_preparacao.
+- Limpeza/conversão (ex: CAST, EXTRACT, UPPER, filtros) — nomeie como cte_limpeza, cte_preparacao. Campos que vao na instrução com o parametro conversion (normalmente campos TIMESTAMP) devem ser convertidos se utilizados. 
 - Agregação (ex: SUM, COUNT, AVG, GROUP BY) — nomeie como cte_agregacao, cte_agrupamento.
 - Ranking/window (ex: ROW_NUMBER, DENSE_RANK) — nomeie como cte_ranking, cte_final.
 - Comparação/análise (ex: JOINs, pivots, cálculos finais) — nomeie como cte_comparacao, cte_pivot.
@@ -108,7 +102,8 @@ REGRAS ESPECÍFICAS PARA MONTAGEM DE QUERY:
 4. O campo 'from_table' DEVE referenciar o alias definido na CTE (ex: 't1', ou um JOIN entre aliases definidos na CTE). Nunca use o nome da tabela original diretamente no FROM se houver CTE.
 5. Nomes de tabela SEMPRE no formato {PROJECT_ID}.{DATASET_ID}.nome_da_tabela, usando apenas UM acento grave (`) ao redor do nome da tabela, nunca dois e nunca sem acento. O backend NÃO adiciona nem remove acentos graves: o modelo é responsável por garantir o formato correto, exatamente como o BigQuery espera.
 6. Use apenas os campos listados no contexto de metadados da tabela (nunca invente nomes).
-7. Preencha todos os parâmetros do function_call: select, where, order_by, cte, limit, etc. Nunca inclua group_by nem full_table_id como parâmetro externo. O agrupamento deve ser feito apenas dentro do CTE.
+7. Preencha todos os parâmetros do function_call: select, where, order_by, cte,  etc.
+
 REGRAS PARA AGRUPAMENTO:
 O agrupamento (GROUP BY) deve ser sempre feito dentro do CTE de agregação. Nunca inclua parâmetro group_by externo no function_call. O SELECT final só projeta e ordena os campos já agregados/agrupados definidos nas CTEs.
 8. Para análises temporais, use EXTRACT() ou FORMAT_DATE() explicitamente no SELECT, GROUP BY e ORDER BY.
@@ -128,16 +123,6 @@ Exemplo INCORRETO: WHERE campo = 'S' (não existe valor 'S' para esse campo)
 Exemplo CORRETO: WHERE campo = 'valor_exemplo'
 Exemplo CORRETO para flag: WHERE campo_flag = 1
 ATENÇÃO: Nunca gere dois SELECTs seguidos na query final. O SELECT principal deve ser sempre separado das definições de CTE.
-
-EXEMPLO GENERALISTA DE PADRÃO CORRETO:
-WITH cte_agregacao AS (
-    SELECT campo_agrupado, SUM(valor) AS total
-    FROM tabela
-    GROUP BY campo_agrupado
-)
-SELECT campo_agrupado, total
-FROM cte_agregacao
-ORDER BY campo_agrupado
 """
 
 # Função para construir instrução dinâmica das tabelas/campos válidos
@@ -145,10 +130,23 @@ ORDER BY campo_agrupado
 
 def build_tables_fields_instruction():
     return """
-PADRÃO OBRIGATÓRIO DE CTEs (GENERALISTA):
+DEFINIÇÃO:
+VOCÊ É UMA FERRAMENTA DE CONVERTER LINGUAGEM NATURAL EM PARAMETRIZAÇÃO PARA GERAÇÃO DE SQL CONFORME OS PARAMETROS DECLARADOS NOS SEUS PARAMETERS
 
-Toda query deve ser estruturada usando múltiplas CTEs, cada uma com responsabilidade única:
-...existing code...
+REGRA CRÍTICA DE FORMATAÇÃO DE RESPOSTA:
+NUNCA retorne a resposta em formato markdown (ex: ```json ... ``` ou qualquer bloco ``` ... ```). Sempre retorne o JSON puro, sem qualquer formatação markdown, para evitar erros de parsing.
+NUNCA, EM HIPÓTESE ALGUMA, gere comentários SQL (nem --, nem /* ... */) em nenhuma query. Comentários SQL não são permitidos e causam erro de sintaxe.
+
+
+PADRÃO OBRIGATÓRIO DE CTEs (GENERALISTA):
+- Toda query deve ser estruturada usando múltiplas CTEs, cada uma com responsabilidade única.
+- Toda query deve ser estruturada usando múltiplas CTEs, cada uma com responsabilidade única:
+- Limpeza/conversão (ex: CAST, EXTRACT, UPPER, filtros) — nomeie como cte_limpeza, cte_preparacao. Campos que sao enviados na instrução com o parametro conversion (normalmente campos TIMESTAMP) devem ser convertidos quando forem ser utilizados.
+- Agregação (ex: SUM, COUNT, AVG, GROUP BY) — nomeie como cte_agregacao, cte_agrupamento.
+- Ranking/window (ex: ROW_NUMBER, DENSE_RANK) — nomeie como cte_ranking, cte_final.
+- Comparação/análise (ex: JOINs, pivots, cálculos finais) — nomeie como cte_comparacao, cte_pivot.
+- Nunca misture transformação e análise na mesma CTE.
+- Use nomes descritivos e consistentes para CTEs e aliases de campos. 
 
 REGRAS CRÍTICAS PARA O SELECT FINAL:
 - O SELECT final NUNCA deve conter GROUP BY ou agregação (SUM, COUNT, AVG, etc). Toda agregação deve ocorrer dentro de uma CTE específica.

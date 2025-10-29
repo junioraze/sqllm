@@ -1,3 +1,4 @@
+
 from google.cloud import bigquery
 from config import PROJECT_ID, DATASET_ID
 import ast
@@ -5,10 +6,19 @@ import re
 import sqlparse
 from config import TABLES_CONFIG
 
+# Função para remover comentários SQL
+def remove_sql_comments(query: str) -> str:
+    # Remove comentários de bloco /* ... */
+    query = re.sub(r'/\*.*?\*/', '', query, flags=re.DOTALL)
+    # Remove comentários de linha -- ...
+    query = re.sub(r'--.*?(\n|$)', '', query)
+    return query
+
 client = bigquery.Client()
 
 def fix_sql_issues(query):
-    """Função simplificada de correção SQL"""
+    """Função simplificada de correção SQL: remove comentários"""
+    query = remove_sql_comments(query)
     return query
 
 def fix_function_params(params):
@@ -289,6 +299,7 @@ def build_query(params: dict) -> str:
     query_clean = re.sub(r'[\n\t]+', ' ', query)
     query_clean = re.sub(r' +', ' ', query_clean)
 
-    # 9. Retorna sempre o SQL completo gerado
-    print(f"DEBUG - Query construída:\n{query_clean}")
-    return query_clean.strip()
+    # 9. Remove comentários SQL antes de retornar e logar
+    query_no_comments = remove_sql_comments(query_clean.strip())
+    print(f"DEBUG - Query construída:\n{query_no_comments}")
+    return query_no_comments
