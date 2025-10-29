@@ -42,7 +42,7 @@ def initialize_model():
             "properties": {
                 "cte": {
                     "type": "string",
-                    "description": "CTE (Common Table Expression). O campo 'cte' DEVE ser SEMPRE preenchido, mesmo para queries simples. Estruture toda consulta usando CTE, por exemplo: WITH t1 AS (SELECT ... FROM ... WHERE ...). Nunca deixe vazio."
+                    "description": "CTE (Common Table Expression). O campo 'cte' DEVE ser SEMPRE preenchido, mesmo para queries simples. Estruture toda consulta usando CTE, por exemplo: WITH t1 AS (SELECT ... FROM ... WHERE ...). Nunca deixe vazio. ATENÇÃO: NUNCA, EM HIPÓTESE ALGUMA, gere comentários SQL (nem --, nem /* ... */) em nenhuma query. Comentários SQL não são permitidos e causam erro de sintaxe."
                 },
                 "from_table": {
                     "type": "string",
@@ -63,10 +63,7 @@ def initialize_model():
                     "items": {"type": "string"},
                     "description": "Campos para ORDER BY"
                 },
-                "qualify": {
-                    "type": "string",
-                    "description": "QUALIFY (para windows functions - ROW_NUMBER, RANK, etc.)"
-                },
+                # Para rankings, crie o campo analítico (ROW_NUMBER, RANK, etc) na CTE e filtre no SELECT final usando WHERE ranking <= N.
                 "limit": {
                     "type": "integer",
                     "description": "LIMIT (número máximo de registros). NUNCA use junto com QUALIFY"

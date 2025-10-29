@@ -183,8 +183,6 @@ def build_query(params: dict) -> str:
     if not select:
         select = ["*"]
 
-    if corrected_params.get("qualify") and corrected_params.get("limit"):
-        raise ValueError("NUNCA use LIMIT com QUALIFY - use QUALIFY para múltiplas dimensões")
 
     # 4. Suporte a CTE (Common Table Expressions) - usa 'cte' se presente, sem duplicar 'WITH'
     with_clause = ""
@@ -270,11 +268,22 @@ def build_query(params: dict) -> str:
             if tf not in order_by:
                 order_by.append(tf)
     order_by_sql = f" ORDER BY {', '.join(order_by)}" if order_by else ""
-    qualify = f" QUALIFY {corrected_params['qualify']}" if corrected_params.get("qualify") else ""
     limit = f" LIMIT {int(corrected_params['limit'])}" if corrected_params.get("limit") else ""
 
+    # Se vier filtro de ranking, inclua no WHERE
+    where_clause = where
+    if corrected_params.get("where") and "ranking <= " in corrected_params["where"]:
+        # Já está no WHERE
+        pass
+    elif corrected_params.get("ranking_filter"):
+        # Se vier ranking_filter separado, inclua no WHERE
+        if where_clause:
+            where_clause += f" AND {corrected_params['ranking_filter']}"
+        else:
+            where_clause = f" WHERE {corrected_params['ranking_filter']}"
+
     # Monta query principal sem GROUP BY/agregação no SELECT final
-    query = f"{with_clause}SELECT {', '.join(select_final)} FROM {from_table}{where}{qualify}{order_by_sql}{limit}"
+    query = f"{with_clause}SELECT {', '.join(select_final)} FROM {from_table}{where_clause}{order_by_sql}{limit}"
 
     # 8. Remove espaços
     query_clean = re.sub(r'[\n\t]+', ' ', query)

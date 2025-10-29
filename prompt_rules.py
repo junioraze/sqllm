@@ -57,14 +57,14 @@ def build_tables_description():
 # Instruções para geração de queries SQL (function_call)
 
 SQL_FUNCTIONCALL_INSTRUCTIONS = """
-
+ATENÇÃO: NUNCA, EM HIPÓTESE ALGUMA, gere comentários SQL (nem --, nem /* ... */) em nenhuma query. Comentários SQL não são permitidos e causam erro de sintaxe.
 
 PADRÃO OBRIGATÓRIO DE CTEs (GENERALISTA):
 
 Toda query deve ser estruturada usando múltiplas CTEs, cada uma com responsabilidade única:
 - Limpeza/conversão (ex: CAST, EXTRACT, UPPER, filtros) — nomeie como cte_limpeza, cte_preparacao.
 - Agregação (ex: SUM, COUNT, AVG, GROUP BY) — nomeie como cte_agregacao, cte_agrupamento.
-- Ranking/window (ex: ROW_NUMBER, QUALIFY, DENSE_RANK) — nomeie como cte_ranking, cte_final.
+- Ranking/window (ex: ROW_NUMBER, DENSE_RANK) — nomeie como cte_ranking, cte_final.
 - Comparação/análise (ex: JOINs, pivots, cálculos finais) — nomeie como cte_comparacao, cte_pivot.
 - Nunca misture transformação e análise na mesma CTE.
 - Use nomes descritivos e consistentes para CTEs e aliases de campos.
@@ -89,19 +89,20 @@ WITH cte_agregacao AS (
     FROM nome_da_tabela
     WHERE ...
     GROUP BY campo_periodo, campo_eixo_x
-5. Sempre use o nome da tabela original conforme listado no contexto, apenas dentro do FROM da primeira CTE. Nunca invente ou modifique o nome da tabela.
-6. Use apenas os campos listados no contexto de metadados da tabela (nunca invente nomes).
-7. Preencha todos os parâmetros do function_call: select, where, order_by, cte, qualify, limit, etc. Nunca inclua group_by nem full_table_id como parâmetro externo. O agrupamento deve ser feito apenas dentro do CTE.
+)
+SELECT campo_periodo, campo_eixo_x, valor_total
+FROM cte_agregacao
+ORDER BY campo_periodo, campo_eixo_x
 
 REGRAS ESPECÍFICAS PARA MONTAGEM DE QUERY:
 4. O campo 'from_table' DEVE referenciar o alias definido na CTE (ex: 't1', ou um JOIN entre aliases definidos na CTE). Nunca use o nome da tabela original diretamente no FROM se houver CTE.
 5. Nomes de tabela SEMPRE no formato {PROJECT_ID}.{DATASET_ID}.nome_da_tabela, usando apenas UM acento grave (`) ao redor do nome da tabela, nunca dois e nunca sem acento. O backend NÃO adiciona nem remove acentos graves: o modelo é responsável por garantir o formato correto, exatamente como o BigQuery espera.
 6. Use apenas os campos listados no contexto de metadados da tabela (nunca invente nomes).
-7. Preencha todos os parâmetros do function_call: select, where, order_by, cte, qualify, limit, etc. Nunca inclua group_by nem full_table_id como parâmetro externo. O agrupamento deve ser feito apenas dentro do CTE.
+7. Preencha todos os parâmetros do function_call: select, where, order_by, cte, limit, etc. Nunca inclua group_by nem full_table_id como parâmetro externo. O agrupamento deve ser feito apenas dentro do CTE.
 REGRAS PARA AGRUPAMENTO:
 O agrupamento (GROUP BY) deve ser sempre feito dentro do CTE de agregação. Nunca inclua parâmetro group_by externo no function_call. O SELECT final só projeta e ordena os campos já agregados/agrupados definidos nas CTEs.
 8. Para análises temporais, use EXTRACT() ou FORMAT_DATE() explicitamente no SELECT, GROUP BY e ORDER BY.
-9. Para rankings, use QUALIFY ROW_NUMBER() OVER (...), nunca LIMIT.
+9. Para rankings, crie o campo analítico (ROW_NUMBER, RANK, etc) na CTE e filtre no SELECT final usando WHERE ranking <= N. Nunca use QUALIFY nem LIMIT no SELECT final.
 10. Para comparações entre grupos/categorias, use CTE + JOIN entre aliases.
 11. Nunca mostre SQL ao usuário, apenas execute via function_call.
 12. Só gere visualização gráfica se explicitamente solicitado (veja instruções de gráfico abaixo).

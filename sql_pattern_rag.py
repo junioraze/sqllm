@@ -57,7 +57,10 @@ class SQLPatternRAG:
             annoy_index = AnnoyIndex(self.annoy_dim, 'angular')
             annoy_metadata = {}
             idx = 0
+            total_patterns = 0
+            total_embeddings = 0
             for pattern_id, pattern_data in sql_patterns.items():
+                total_patterns += 1
                 # keywords e use_cases: garantir que são listas
                 keywords = pattern_data.get('keywords', [])
                 if not isinstance(keywords, list):
@@ -66,17 +69,17 @@ class SQLPatternRAG:
                 if not isinstance(use_cases, list):
                     use_cases = [use_cases] if use_cases else []
 
-                # function_call_example: pode ser dict, list, ou outro
+                # function_call_example: garantir que sempre converte para string corretamente
                 fc = pattern_data.get('function_call_example')
-                function_call_str = None
                 if fc is not None:
-                    if isinstance(fc, (dict, list)):
-                        try:
-                            function_call_str = json.dumps(fc, ensure_ascii=False)
-                        except Exception:
-                            function_call_str = str(fc)
-                    else:
+                    try:
+                        function_call_str = json.dumps(fc, ensure_ascii=False)
+                    except Exception:
                         function_call_str = str(fc)
+                else:
+                    function_call_str = None
+
+                print(f"[DEBUG][RAG] pattern_id={pattern_id} function_call_example={function_call_str}")
 
                 self.patterns[pattern_id] = SQLPattern(
                     pattern_id=pattern_id,
@@ -98,11 +101,20 @@ class SQLPatternRAG:
                         "pattern_type": pattern_data.get('pattern_type', ''),
                     }
                     idx += 1
+                    total_embeddings += 1
+            print(f"[DEBUG][RAG] Total padrões processados: {total_patterns}")
+            print(f"[DEBUG][RAG] Total embeddings válidos: {total_embeddings}")
             if idx > 0:
                 annoy_index.build(10)
                 annoy_index.save(self.annoy_index_path)
                 with open(self.annoy_meta_path, 'w', encoding='utf-8') as f:
                     json.dump(annoy_metadata, f, ensure_ascii=False)
+                print(f"[DEBUG][RAG] Annoy meta salvo em: {self.annoy_meta_path}")
+                # Confirma existência do arquivo
+                if os.path.exists(self.annoy_meta_path):
+                    print(f"[DEBUG][RAG] Annoy meta.json criado com sucesso: {self.annoy_meta_path}")
+                else:
+                    print(f"[ERRO][RAG] Annoy meta.json NÃO foi criado: {self.annoy_meta_path}")
                 self.annoy_index = annoy_index
                 self._annoy_metadata = annoy_metadata
             print(f"Carregados {len(self.patterns)} padrões SQL e Annoy index inicializado")
@@ -120,16 +132,17 @@ class SQLPatternRAG:
         except Exception as e:
             return []
     
-    def identify_sql_pattern(self, user_query: str, min_score: float = 1.5) -> List[Tuple[str, float]]:
+    def identify_sql_pattern(self, user_query: str, min_score: float = 1.5, top_n: int = 3) -> List[Tuple[str, float]]:
         """
         Identifica padrões SQL mais relevantes usando Annoy para busca vetorial.
+        Sempre retorna pelo menos top_n padrões, mesmo que a distância seja alta.
         """
         from annoy import AnnoyIndex
         import numpy as np
         query_emb = self._generate_embedding(user_query)
         if not query_emb or not self.annoy_index:
             return []
-        idxs, dists = self.annoy_index.get_nns_by_vector(np.array(query_emb, dtype=np.float32), 5, include_distances=True)
+        idxs, dists = self.annoy_index.get_nns_by_vector(np.array(query_emb, dtype=np.float32), max(5, top_n), include_distances=True)
         results = []
         for idx, dist in zip(idxs, dists):
             pattern_id = self._annoy_metadata.get(idx)
@@ -137,52 +150,61 @@ class SQLPatternRAG:
                 score = max(0, 2.5 - dist)  # Score artificial baseado na distância angular
                 if score >= min_score:
                     results.append((pattern_id, score))
-        return results
+        # Se não houver resultados suficientes, retorna os top_n padrões mais próximos independentemente do score
+        if len(results) < top_n:
+            # Adiciona os mais próximos, ignorando o score
+            extra = []
+            for idx, dist in zip(idxs, dists):
+                pattern_id = self._annoy_metadata.get(idx)
+                if pattern_id and (pattern_id, max(0, 2.5 - dist)) not in results:
+                    extra.append((pattern_id, max(0, 2.5 - dist)))
+                if len(results) + len(extra) >= top_n:
+                    break
+            results.extend(extra)
+        return results[:top_n]
     
     def get_sql_guidance(self, user_query: str, top_k: int = 2, min_score: float = 1.5) -> str:
         """
         Retorna orientações SQL específicas para a pergunta do usuário
-        Agora exibe function_call_example como string ao invés de sql_example.
+        Sempre traz TODOS os exemplos function_call_example do sql_patterns.json, sem busca vetorial/RAG.
         """
-        relevant_patterns = self.identify_sql_pattern(user_query, min_score=min_score)
-        if not relevant_patterns:
-            return self._get_general_sql_guidance()
         context_parts = []
         context_parts.append("ORIENTAÇÕES SQL ESPECÍFICAS PARA SUA PERGUNTA:")
         context_parts.append("")
-        for i, (pattern_id, score) in enumerate(relevant_patterns[:top_k]):
-            pattern = self.patterns[pattern_id]
+        disclaimer = "[ATENÇÃO] Os exemplos abaixo não são necessariamente a solução exata para sua pergunta, mas servem para ilustrar como construir os parâmetros da query corretamente."
+        context_parts.append(disclaimer)
+        exemplos_encontrados = False
+        for i, pattern in enumerate(self.patterns.values()):
             context_parts.append(f"{i+1}. PADRÃO: {pattern.description.upper()}")
             context_parts.append(f"   Tipo: {pattern.pattern_type}")
             context_parts.append(f"   Template: {pattern.sql_template}")
-            # Exibe function_call_example como string
-            if pattern.example is not None:
+            if pattern.example:
                 context_parts.append(f"   Function Call Example: {pattern.example}")
-                if pattern.example is not None:
-                    context_parts.append(f"   Function Call Example: {pattern.example}")
-                else:
-                    context_parts.append("   Function Call Example: None")
+                exemplos_encontrados = True
+            else:
+                context_parts.append("   Function Call Example: [Nenhum exemplo disponível para este padrão]")
             context_parts.append("")
+        if not exemplos_encontrados:
+            context_parts.append("Nenhum exemplo function_call_example disponível nos padrões.")
         context_parts.append("PRÁTICAS RECOMENDADAS BIGQUERY:")
         context_parts.extend(self._get_bigquery_best_practices())
+        print("[DEBUG][SQL_GUIDANCE] Orientações SQL injetadas:\n" + "\n".join(context_parts))
         return "\n".join(context_parts)
     
     def _get_general_sql_guidance(self) -> str:
         """Retorna orientações SQL gerais quando não há padrões específicos"""
-        return """
-ORIENTAÇÕES SQL GERAIS:
-
-1. Use QUALIFY para rankings ao invés de subqueries
-2. Para consultas complexas, prefira CTEs (WITH)
-3. Use EXTRACT(YEAR FROM campo_data) para filtros temporais
-4. Agregações requerem GROUP BY dos campos não agregados
-5. Para comparações de texto, use UPPER() com LIKE
-
-MELHORES PRÁTICAS BIGQUERY:
-- Evite SELECT * em tabelas grandes
-- Use word boundaries em comparações de texto
-- Prefira QUALIFY a LIMIT para rankings
-"""
+        return (
+            "ORIENTAÇÕES SQL GERAIS:\n"
+            "1. Use QUALIFY para rankings ao invés de subqueries\n"
+            "2. Para consultas complexas, prefira CTEs (WITH)\n"
+            "3. Use EXTRACT(YEAR FROM campo_data) para filtros temporais\n"
+            "4. Agregações requerem GROUP BY dos campos não agregados\n"
+            "5. Para comparações de texto, use UPPER() com LIKE\n\n"
+            "MELHORES PRÁTICAS BIGQUERY:\n"
+            "- Evite SELECT * em tabelas grandes\n"
+            "- Use word boundaries em comparações de texto\n"
+            "- Prefira QUALIFY a LIMIT para rankings"
+        )
     
     def _get_bigquery_best_practices(self) -> List[str]:
         """Retorna lista de melhores práticas do BigQuery"""
