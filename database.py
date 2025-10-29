@@ -124,18 +124,6 @@ def execute_query(query: str):
         }
 
 def build_query(params: dict) -> str:
-    # Função utilitária para normalizar nome de tabela removendo crases
-    def normalize_table_id(table_id):
-        # Remove crase e espaços, para validação
-        return table_id.replace('`', '').strip()
-
-    def ensure_crase(table_id):
-        # Garante crase ao redor do nome da tabela
-        t = table_id.strip()
-        if not (t.startswith('`') and t.endswith('`')):
-            return f'`{t}`'
-        return t
-
     # Apenas constrói a query fielmente conforme os parâmetros recebidos
     original_params = params.copy()
     corrected_params = fix_function_params(params)

@@ -291,16 +291,28 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
     refine_instruction = get_refine_analysis_instruction()
 
     # Formatação automática dos dados numéricos do DataFrame (2 casas decimais, inplace, sem onerar processamento)
+    df_full = None
     if data and isinstance(data, list) and len(data) > 0:
-        df = pd.DataFrame(data)
-        float_cols = df.select_dtypes(include=['float', 'float64', 'float32']).columns
+        df_full = pd.DataFrame(data)
+        float_cols = df_full.select_dtypes(include=['float', 'float64', 'float32']).columns
         if len(float_cols) > 0:
-            df[float_cols] = df[float_cols].round(2)
-        # Atualiza a lista de dicts formatada
-        data = df.to_dict(orient='records')
+            df_full[float_cols] = df_full[float_cols].round(2)
+        # Para o modelo Gemini, envia só as primeiras 15 linhas + mini relatório se houver mais de 15
+        if len(df_full) > 15:
+            df_prompt = df_full.head(15)
+            mini_report = df_full.describe(include='all').to_dict()
+            data_for_prompt = df_prompt.to_dict(orient='records')
+            mini_report_text = f"\nMINI RELATÓRIO DOS DADOS COMPLETOS:\n{json.dumps(mini_report, indent=2, default=str)}"
+        else:
+            data_for_prompt = df_full.to_dict(orient='records')
+            mini_report_text = ""
+        # O DataFrame completo (df_full) será usado para gráficos e downloads
+    else:
+        data_for_prompt = data
+        mini_report_text = ""
 
     # Lista de colunas disponíveis para orientar o modelo
-    columns_list = list(df.columns) if 'df' in locals() else (list(data[0].keys()) if data and isinstance(data, list) and isinstance(data[0], dict) else [])
+    columns_list = list(df_full.columns) if df_full is not None else (list(data[0].keys()) if data and isinstance(data, list) and isinstance(data[0], dict) else [])
 
     instruction = f"""
     Você é um ANALISTA SÊNIOR especializado em transformar dados em insights estratégicos.
@@ -312,8 +324,9 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
     - CONSULTA SQL EXECUTADA: {query if query else "Consulta direta"}
     - FILTROS APLICADOS: {function_params.get('where', 'Nenhum') if function_params else 'Nenhum'}
 
-    DADOS ESPECÍFICOS PARA ANÁLISE:
-    {json.dumps(data, indent=2, default=str)}
+    DADOS ESPECÍFICOS PARA ANÁLISE (máx. 15 linhas):
+    {json.dumps(data_for_prompt, indent=2, default=str)}
+    {mini_report_text}
 
     COLUNAS DISPONÍVEIS NO DATAFRAME PARA GRÁFICO:
     {columns_list}
@@ -438,7 +451,7 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
                     print("X-AXIS nao encontrado na instrucao do grafico")
                     return response_text, None
                     
-                print(f"[DEBUG] Tentando gerar gráfico com colunas: {list(df.columns)}")
+                print(f"[DEBUG] Tentando gerar gráfico com colunas: {list(df_full.columns)}")
                 # Extração segura do Y-AXIS  
                 if "Y-AXIS:" in graph_part:
                     y_axis = graph_part.split("Y-AXIS:")[1].split("|")[0].strip()
@@ -464,7 +477,7 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
                 print(f"Parametros do grafico - Tipo: {graph_type}, X: {x_axis}, Y: {y_axis}, Color: {color}")
                 
                 # Converte dados para DataFrame
-                df_data = pd.DataFrame(data)
+                df_data = df_full
                 print(f"[DEBUG] Tentando gerar gráfico com colunas: {list(df_data.columns)}")
                 # Aplica fuzzy matching para garantir que os nomes de colunas existem no DataFrame
                 # Garante que os nomes das colunas não tenham espaços/quebras de linha
@@ -504,7 +517,7 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
         if export_requested:
             try:
                 # Gerar Excel
-                excel_bytes = generate_excel_bytes(data)
+                excel_bytes = generate_excel_bytes(df_full.to_dict(orient='records'))
                 if excel_bytes:
                     excel_filename = f"dados_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
                     excel_link = create_styled_download_button(excel_bytes, excel_filename, "Excel")

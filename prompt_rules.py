@@ -135,7 +135,7 @@ VOCÊ É UMA FERRAMENTA DE CONVERTER LINGUAGEM NATURAL EM PARAMETRIZAÇÃO PARA 
 
 REGRA CRÍTICA DE FORMATAÇÃO DE RESPOSTA:
 NUNCA retorne a resposta em formato markdown (ex: ```json ... ``` ou qualquer bloco ``` ... ```). Sempre retorne o JSON puro, sem qualquer formatação markdown, para evitar erros de parsing.
-NUNCA, EM HIPÓTESE ALGUMA, gere comentários SQL (nem --, nem /* ... */) em nenhuma query. Comentários SQL não são permitidos e causam erro de sintaxe.
+NUNCA, EM HIPÓTESE ALGUMA, gere comentários dentro dos parametros que vao para geração do SQL (nem --, nem /* ... */) em nenhuma query. Comentários de SQL nos parametros não são permitidos e causam uma falha FATAL.
 
 
 PADRÃO OBRIGATÓRIO DE CTEs (GENERALISTA):
