@@ -13,3 +13,4 @@ mercadopago
 sentence-transformers
 numpy
 annoy
+sqlparse

@@ -451,12 +451,6 @@ class MessageHandler:
 
             self._end_timing("preparacao_parametros")
 
-            # Validar full_table_id
-            self._start_timing("validacao_table_id", typing_placeholder)
-            full_table_id = serializable_params.get("full_table_id")
-            if not self._validate_table_id(full_table_id, prompt, serializable_params):
-                return
-            self._end_timing("validacao_table_id")
 
             self.flow_path.append("construindo_query")
 
@@ -552,22 +546,6 @@ class MessageHandler:
             self.flow_path.append("erro_function_call")
             self._handle_error(typing_placeholder, prompt, f"Erro no processamento da função: {str(e)}", traceback.format_exc())
 
-    def _validate_table_id(self, full_table_id: str, prompt: str, serializable_params: Dict) -> bool:
-        """Valida se o full_table_id é válido"""
-        if not full_table_id:
-            self.flow_path.append("erro_table_id_ausente")
-            error_msg = f"full_table_id ausente nos parâmetros: {serializable_params}"
-            self._log_validation_error(prompt, "missing_table_id", error_msg, serializable_params)
-            return False
-        
-        expected_full_table_ids = [f"{PROJECT_ID}.{DATASET_ID}.{table_name}" for table_name in TABLES_CONFIG.keys()]
-        if full_table_id not in expected_full_table_ids:
-            self.flow_path.append("erro_table_id_invalido")
-            error_msg = f"Invalid full_table_id: {full_table_id} | Available tables: {expected_full_table_ids}"
-            self._log_validation_error(prompt, "invalid_full_table_id", error_msg, serializable_params, {"requested_full_table_id": full_table_id, "available_full_table_ids": expected_full_table_ids})
-            return False
-            
-        return True
 
     def _handle_query_error(self, typing_placeholder, prompt: str, raw_data: Dict, query: str, serializable_params: Dict) -> None:
         """Trata erros de execução da query"""

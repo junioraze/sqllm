@@ -40,10 +40,6 @@ def initialize_model():
         parameters={
             "type": "object",
             "properties": {
-                "full_table_id": {
-                    "type": "string",
-                    "description": "ID completo da tabela no BigQuery (PROJECT.DATASET.TABLE). Deve ser um dos listados acima. Sempre sem crase."
-                },
                 "cte": {
                     "type": "string",
                     "description": "CTE (Common Table Expression). O campo 'cte' DEVE ser SEMPRE preenchido, mesmo para queries simples. Estruture toda consulta usando CTE, por exemplo: WITH t1 AS (SELECT ... FROM ... WHERE ...). Nunca deixe vazio."
@@ -61,11 +57,7 @@ def initialize_model():
                     "type": "string",
                     "description": "Condições WHERE (SQL puro)"
                 },
-                "group_by": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Campos para GROUP BY (DEVEM estar no SELECT)"
-                },
+                # REMOVIDO: group_by externo. Agrupamento deve ser feito apenas dentro do CTE.
                 "order_by": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -80,17 +72,17 @@ def initialize_model():
                     "description": "LIMIT (número máximo de registros). NUNCA use junto com QUALIFY"
                 }
             },
-            "required": ["full_table_id", "select"]
+            "required": ["select","cte","from_table","order_by"]
         }
     )
 
     model = genai.GenerativeModel(
         model_name=MODEL_NAME,
         generation_config={
-            "temperature": 0.2,
+            "temperature": 0.1,
             "top_p": 0.95,
             "top_k": 40,
-            "max_output_tokens": 8192,
+            "max_output_tokens": 16000,
         },
         system_instruction=base_instruction,
         tools=[query_func]
@@ -99,6 +91,7 @@ def initialize_model():
     return model
 
 def refine_with_gemini_rag(model, user_question: str, user_id: str = "default"):
+    # O print de debug só pode ser chamado após a atribuição de rag_context
     """
     Processa pergunta usando sistema RAG otimizado + orientações SQL
     """
@@ -109,6 +102,13 @@ def refine_with_gemini_rag(model, user_question: str, user_id: str = "default"):
     try:
         # Obtém contexto otimizado do RAG de negócios
         rag_context = get_optimized_business_context(user_question)
+        # Garante que o contexto seja sempre string (nunca dict)
+        if isinstance(rag_context, dict):
+            import json
+            rag_context = json.dumps(rag_context, ensure_ascii=False, indent=2)
+        elif isinstance(rag_context, list):
+            import json
+            rag_context = '\n'.join([json.dumps(item, ensure_ascii=False, indent=2) if isinstance(item, dict) else str(item) for item in rag_context])
 
         # Obtém orientações SQL específicas
         from sql_pattern_rag import get_sql_guidance_for_query
@@ -140,6 +140,10 @@ REGRAS PARA COMPARAÇÕES TEMPORAIS:
             "sql_guidance_sent": sql_guidance,
             "sql_guidance_length": len(sql_guidance) if sql_guidance else 0,
         }
+        # DEBUG: Sempre printa o prompt final enviado ao Gemini
+        print("\n[DEBUG][GEMINI_PROMPT] Prompt final enviado ao Gemini:\n" + optimized_prompt)
+        print("[DEBUG][RAG_CONTEXT] Contexto RAG injetado:\n" + str(rag_context))
+        print("[DEBUG][SQL_GUIDANCE] Orientações SQL injetadas:\n" + str(sql_guidance))
 
         # Processa com Gemini
         try:
@@ -469,11 +473,11 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
                 # Garante que os nomes das colunas não tenham espaços/quebras de linha
                 x_axis_clean = x_axis.strip() if isinstance(x_axis, str) else x_axis
                 y_axis_clean = y_axis.strip() if isinstance(y_axis, str) else y_axis
-                color_clean = color.strip() if isinstance(color, str) else color
+                color_axis_clean = color.strip() if isinstance(color, str) else color
 
                 x_axis_real = fuzzy_column(x_axis_clean, list(df_data.columns))
                 y_axis_real = fuzzy_column(y_axis_clean, list(df_data.columns))
-                color_real = fuzzy_column(color_clean, list(df_data.columns)) if color_clean else None
+                color_real = fuzzy_column(color_axis_clean, list(df_data.columns)) if color_axis_clean else None
                 fig = generate_chart(df_data, graph_type, x_axis_real, y_axis_real, color_real)
                 
                 if fig:

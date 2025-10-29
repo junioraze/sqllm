@@ -2,6 +2,8 @@ from google.cloud import bigquery
 from config import PROJECT_ID, DATASET_ID
 import ast
 import re
+import sqlparse
+from config import TABLES_CONFIG
 
 client = bigquery.Client()
 
@@ -50,38 +52,79 @@ def _parse_list_param(param, param_name="param"):
     print(f"DEBUG - {param_name} processado: {result}")
     return result
 
-def execute_query(query: str):
-    """Executa uma query SQL no BigQuery."""
+
+def validate_sql_query(query: str) -> dict:
+    """Valida sintaxe SQL usando sqlparse."""
     try:
-        # Aplica correções automáticas de SQL
-        original_query = query
-        corrected_query = fix_sql_issues(query)
-        
-        # Log das correções aplicadas
-        if original_query != corrected_query:
-            log_sql_correction(original_query, corrected_query, "execute_query")
-        
+        parsed = sqlparse.parse(query)
+        if not parsed or not parsed[0].tokens:
+            return {"valid": False, "error": "Query vazia ou inválida."}
+        # Pode adicionar mais regras de validação aqui
+        return {"valid": True}
+    except Exception as e:
+        return {"valid": False, "error": str(e)}
+
+def execute_query(query: str):
+    """Executa uma query SQL no BigQuery, validando sintaxe antes."""
+    # Aplica correções automáticas de SQL
+    original_query = query
+    corrected_query = fix_sql_issues(query)
+
+    # Log das correções aplicadas
+    if original_query != corrected_query:
+        log_sql_correction(original_query, corrected_query, "execute_query")
+
+
+
+    # Validação de sintaxe local
+    validation = validate_sql_query(corrected_query)
+    if not validation["valid"]:
+        print(f"ERRO SINTAXE SQL: {validation['error']}")
+        print(f"SQL gerado com erro:\n{corrected_query}")
+        raise ValueError(f"Erro de sintaxe SQL: {validation['error']}\nSQL: {corrected_query}")
+
+    # Validação extra: hífen fora de nomes de tabela/alias (concatenação errada)
+    # Exemplo: ...ecPedidosVenda`-public-data...
+    hyphen_pattern = r"`-[\w\-\.]+`"
+    if re.search(hyphen_pattern, corrected_query):
+        print(f"ERRO DE CONCATENAÇÃO: hífen '-' fora de nomes de tabela/alias detectado.")
+        print(f"SQL gerado com erro:\n{corrected_query}")
+        raise ValueError(f"Erro de concatenação: hífen '-' fora de nomes de tabela/alias detectado.\nSQL: {corrected_query}")
+
+    try:
         job_config = bigquery.QueryJobConfig(
             maximum_bytes_billed=100_000_000,
             job_timeout_ms=30000  # 30 segundos timeout
         )
         query_job = client.query(corrected_query, job_config=job_config)
-        
+
         # Executa e converte resultados
         results = []
         for row in query_job.result(timeout=30):
             results.append(dict(row))
-            
+
         return results
-        
+
     except Exception as e:
         print(f"ERRO QUERY: {str(e)}")
-        return {"error": str(e), "query": query}
+        print(f"SQL gerado com erro:\n{corrected_query}")
+        return {
+            "error": str(e),
+            "query": corrected_query
+        }
 
 def build_query(params: dict) -> str:
     # Função utilitária para normalizar nome de tabela removendo crases
     def normalize_table_id(table_id):
+        # Remove crase e espaços, para validação
         return table_id.replace('`', '').strip()
+
+    def ensure_crase(table_id):
+        # Garante crase ao redor do nome da tabela
+        t = table_id.strip()
+        if not (t.startswith('`') and t.endswith('`')):
+            return f'`{t}`'
+        return t
 
     # Apenas constrói a query fielmente conforme os parâmetros recebidos
     original_params = params.copy()
@@ -94,141 +137,47 @@ def build_query(params: dict) -> str:
     # Debug: log dos parâmetros corrigidos
     print(f"DEBUG - Parâmetros recebidos no build_query: {corrected_params}")
 
-    full_table_id = corrected_params.get("full_table_id")
-    if not full_table_id:
-        raise ValueError("full_table_id é obrigatório")
+    # Novo padrão: referência de tabela sempre extraída do FROM da primeira CTE
+    def extract_table_from_cte(cte):
+        """Extrai o nome da tabela original do FROM da primeira CTE."""
+        match = re.search(r"FROM\s+([`\w\.]+)", cte, re.IGNORECASE)
+        if match:
+            return match.group(1).replace('`', '').strip()
+        return None
 
-    # Exemplo de validação (substitua pelo local correto do seu projeto):
-    # available_tables = ... (lista de tabelas disponíveis)
-    # if not any(normalize_table_id(full_table_id) == normalize_table_id(t) for t in available_tables):
-    #     raise ValueError(f"Invalid full_table_id: {full_table_id}")
-    # Para validação, compara tanto com quanto sem crases
-    def normalize_table_id(table_id):
-        return table_id.replace('`', '').strip()
-    # Sempre monta o SQL com crases
-    if not (full_table_id.startswith('`') and full_table_id.endswith('`')):
-        full_table_id_sql = f'`{full_table_id}`'
+    cte = corrected_params.get("cte", "")
+    table_name_in_cte = extract_table_from_cte(cte)
+    # Monta referência correta do BigQuery
+    if table_name_in_cte and table_name_in_cte in TABLES_CONFIG:
+        correct_table_ref = f"{PROJECT_ID}.{DATASET_ID}.{table_name_in_cte}"
     else:
-        full_table_id_sql = full_table_id
+        # Se vier valor errado, tenta corrigir para a primeira tabela do config
+        correct_table_ref = f"{PROJECT_ID}.{DATASET_ID}.{list(TABLES_CONFIG.keys())[0]}"
+
+    # Corrige o nome da tabela no CTE se necessário
+    # Só substitui se for uma tabela do projeto/dataset do config
+    # Só substitui se vier no padrão projeto.dataset.tabela
+    bq_table_pattern = re.compile(rf"{PROJECT_ID}\.{DATASET_ID}\.(\w+)")
+    match_bq_table = bq_table_pattern.search(table_name_in_cte or "")
+    if match_bq_table:
+        table_base = match_bq_table.group(1)
+        if table_base in TABLES_CONFIG.keys():
+            expected_ref = f"{PROJECT_ID}.{DATASET_ID}.{table_base}"
+            cte = re.sub(rf"FROM\s+([`\w\.]+)", f"FROM `{expected_ref}`", cte, flags=re.IGNORECASE)
+            corrected_params["cte"] = cte
 
 
     # 1. Normaliza listas e corrige múltiplos agrupamentos
     select = _parse_list_param(corrected_params.get("select", ["*"]), "select")
-    group_by = _parse_list_param(corrected_params.get("group_by"), "group_by")
+    # group_by removido: agrupamento deve ocorrer apenas dentro do CTE
     order_by = _parse_list_param(corrected_params.get("order_by"), "order_by")
     # Garante ordenação do eixo X (data/temporal) no ORDER BY
     temporal_fields = [f for f in select if re.search(r"data|mes|ano|dia|hora", f, re.IGNORECASE)]
-    # Extrai nome do campo (remove alias)
     temporal_fields = [f.split(" AS ")[0].strip() for f in temporal_fields]
     for tf in temporal_fields:
         if tf not in order_by:
             order_by.append(tf)
-
-    # 2. Corrige múltiplos agrupamentos e dimensões
-    def get_non_agg_fields(select_list):
-        fields = []
-        for sel in select_list:
-            if re.search(r"(SUM|COUNT|AVG|MIN|MAX)\s*\(", sel, re.IGNORECASE):
-                continue
-            m = re.search(r"^([\w\.]+)(\s+AS\s+([\w\.]+))?", sel, re.IGNORECASE)
-            if m:
-                field = m.group(1)
-                fields.append(field)
-        return fields
-
-    join_dims = set()
-    from_table = corrected_params.get("from_table")
-    if from_table:
-        join_matches = re.findall(r"ON\s+([\w\.]+)\s*=\s*([\w\.]+)", str(from_table), re.IGNORECASE)
-        for left, right in join_matches:
-            join_dims.add(left)
-            join_dims.add(right)
-
-    cte_fields = set()
-    cte = corrected_params.get("cte")
-    if cte:
-        cte_blocks = re.findall(r"(SELECT[\s\S]+?)(?:\)|$)", cte, re.IGNORECASE)
-        if cte_blocks:
-            last_cte_select = cte_blocks[-1]
-            select_matches = re.findall(r"SELECT\s+([\w\.,\s]+)\s+FROM", last_cte_select, re.IGNORECASE)
-            if select_matches:
-                for match in select_matches:
-                    for field in match.split(','):
-                        field = field.strip()
-                        if not re.search(r"(SUM|COUNT|AVG|MIN|MAX)\s*\(", field, re.IGNORECASE):
-                            field = field.split(' AS ')[0].strip()
-                            cte_fields.add(field)
-
-    has_agg = any(re.search(r"(SUM|COUNT|AVG|MIN|MAX)\s*\(", sel, re.IGNORECASE) for sel in select)
-    # Extrai campos não agregados da última CTE utilizada como base
-    last_cte_fields = set()
-    if cte:
-        # Busca a última CTE (usada como base)
-        cte_blocks = re.findall(r"(\w+)\s+AS\s*\(([^)]*)\)", cte, re.IGNORECASE)
-        if cte_blocks:
-            last_cte_name, last_cte_sql = cte_blocks[-1]
-            # Extrai campos do SELECT da última CTE (inclui prefixos, ignora agregados)
-            select_match = re.search(r"SELECT\s+([\w\.,' %\-]+)\s+FROM", last_cte_sql, re.IGNORECASE)
-            if select_match:
-                for field in select_match.group(1).split(','):
-                    field = field.strip()
-                    if not re.search(r"(SUM|COUNT|AVG|MIN|MAX|COUNT\s*\()", field, re.IGNORECASE):
-                        # Remove alias, preserva prefixo
-                        field = field.split(' AS ')[0].strip()
-                        last_cte_fields.add(field)
-            # Também busca campos com prefixo (ex: t1.Pessoa) e sem alias
-            select_prefix_match = re.findall(r"(\w+\.\w+)", last_cte_sql)
-            for field in select_prefix_match:
-                if not re.search(r"(SUM|COUNT|AVG|MIN|MAX|COUNT\s*\()", field, re.IGNORECASE):
-                    last_cte_fields.add(field)
-
-    # Lista de campos válidos (deve ser parametrizada ou extraída do meta, aqui hardcoded para exemplo)
-    valid_fields = set([
-        "Data", "Hora", "Pessoa", "Mensagem", "DataLastValue", "DataLookupPrevious", "PessoaLastValue", "DataHoraD", "Assunto", "Intencao", "Entidades", "Sentimento", "AcaoSugerida", "MessageWordCount", "TimeDiff", "DataRank", "MessagenLen"
-    ])
-    # Inclui todos os campos de categorização (dimensões não agregadas, JOIN, CTE, última CTE base) no SELECT e GROUP BY, filtrando apenas campos válidos
-    # No SELECT principal, só incluir nomes de colunas válidos e sem prefixo/alias
-    required_fields = (set(get_non_agg_fields(select)) | join_dims | cte_fields | set(group_by) | last_cte_fields)
-    required_fields = set([f.split('.')[-1] for f in required_fields if f.split('.')[-1] in valid_fields])
-    filtered_group_by = list(dict.fromkeys([g for g in group_by if g in required_fields]))
-    for f in required_fields:
-        if f not in filtered_group_by:
-            print(f"[CORREÇÃO GROUP_BY] Adicionando campo obrigatório ao group_by: {f}")
-            filtered_group_by.append(f)
-    # Garante que cada campo não agregado só seja adicionado se o nome final (após AS) não estiver presente
-    select_aliases = set()
-    for sel in select:
-        # Extrai alias do campo (após AS), se existir, senão o próprio campo
-        m = re.search(r'AS\s+(\w+)$', sel, re.IGNORECASE)
-        if m:
-            select_aliases.add(m.group(1).strip())
-        else:
-            # Se não tem alias, pega o nome do campo (com ou sem prefixo)
-            field = sel.split('.')[-1].strip()
-            select_aliases.add(field)
-    for f in required_fields:
-        alias = f.split('.')[-1]
-        if alias not in select_aliases:
-            print(f"[CORREÇÃO SELECT] Adicionando campo não agregado ao SELECT: {f}")
-            select.append(f + f' AS {alias}')
-            select_aliases.add(alias)
-    # Remove duplicidade no SELECT (mantendo ordem)
-    seen = set()
-    select_clean = []
-    for s in select:
-        alias = None
-        m = re.search(r'AS\s+(\w+)$', s, re.IGNORECASE)
-        if m:
-            alias = m.group(1).strip()
-        else:
-            alias = s.split('.')[-1].strip()
-        if alias not in seen:
-            select_clean.append(s)
-            seen.add(alias)
-    select = select_clean
-    if not has_agg and filtered_group_by:
-        print("[CORREÇÃO GROUP_BY] Removendo todos os campos do group_by pois SELECT final não tem agregação.")
-        filtered_group_by = []
+    # Toda lógica de agrupamento depende apenas do CTE. Nenhum group_by externo é usado ou processado.
 
     # 3. Garante que select não fique vazio
     if not select:
@@ -278,15 +227,23 @@ def build_query(params: dict) -> str:
         else:
             with_clause = f"WITH {cte_clean}\n"
 
-    # 5. Caminho único: se não houver CTE, usa full_table_id como from_table automaticamente
-    if cte:
-        if not from_table or not str(from_table).strip():
-            raise ValueError("O parâmetro 'from_table' é obrigatório e deve ser passado explicitamente pelo modelo quando houver CTE.")
+        # Não exige mais o parâmetro 'from_table' explicitamente quando houver CTE; referência é extraída do CTE.
+        # O from_table no SELECT final deve ser sempre um alias de CTE, nunca referência de tabela completa
+        from_table = corrected_params.get('from_table', '').strip()
+        # Se vier vazio, erro explícito
+        if not from_table:
+            raise ValueError("O parâmetro 'from_table' deve ser o alias de uma CTE gerada pelo modelo. Nenhum alias foi fornecido.")
+        # Se vier nome de tabela completa, converte para alias
+        if from_table in TABLES_CONFIG.keys():
+            # Assume que existe uma CTE com esse nome
+            pass
+        elif '.' in from_table:
+            # Se vier nome completo, pega só o alias
+            from_table = from_table.split('.')[-1].replace('`','').strip()
     else:
         if not from_table or not str(from_table).strip():
-            from_table = full_table_id
-    if from_table == corrected_params.get("full_table_id") and not (from_table.startswith('`') and from_table.endswith('`')):
-        from_table = f'`{from_table}`'
+            from_table = correct_table_ref
+    # from_table já definido pelo padrão novo, não depende mais de full_table_id
 
     # 6. Monta demais cláusulas
     where = f" WHERE {corrected_params['where']}" if corrected_params.get("where") else ""
@@ -304,7 +261,7 @@ def build_query(params: dict) -> str:
         else:
             select_final.append(s)
     # Remove GROUP BY do SELECT final
-    group_by_sql = ""
+    # group_by_sql removido
     # Garante que todos os campos do eixo X e do parâmetro order_by estejam presentes
     if not order_by:
         temporal_fields = [f for f in select_final if re.search(r"data|mes|ano|dia|hora", f, re.IGNORECASE)]
@@ -312,8 +269,6 @@ def build_query(params: dict) -> str:
         for tf in temporal_fields:
             if tf not in order_by:
                 order_by.append(tf)
-        if not order_by and filtered_group_by:
-            order_by.append(filtered_group_by[0])
     order_by_sql = f" ORDER BY {', '.join(order_by)}" if order_by else ""
     qualify = f" QUALIFY {corrected_params['qualify']}" if corrected_params.get("qualify") else ""
     limit = f" LIMIT {int(corrected_params['limit'])}" if corrected_params.get("limit") else ""

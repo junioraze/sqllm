@@ -58,15 +58,35 @@ class SQLPatternRAG:
             annoy_metadata = {}
             idx = 0
             for pattern_id, pattern_data in sql_patterns.items():
+                # keywords e use_cases: garantir que são listas
+                keywords = pattern_data.get('keywords', [])
+                if not isinstance(keywords, list):
+                    keywords = [keywords] if keywords else []
+                use_cases = pattern_data.get('use_cases', [])
+                if not isinstance(use_cases, list):
+                    use_cases = [use_cases] if use_cases else []
+
+                # function_call_example: pode ser dict, list, ou outro
+                fc = pattern_data.get('function_call_example')
+                function_call_str = None
+                if fc is not None:
+                    if isinstance(fc, (dict, list)):
+                        try:
+                            function_call_str = json.dumps(fc, ensure_ascii=False)
+                        except Exception:
+                            function_call_str = str(fc)
+                    else:
+                        function_call_str = str(fc)
+
                 self.patterns[pattern_id] = SQLPattern(
                     pattern_id=pattern_id,
                     description=pattern_data.get('description', ''),
-                    keywords=pattern_data.get('keywords', []),
+                    keywords=keywords,
                     pattern_type=pattern_data.get('pattern_type', ''),
                     sql_template=pattern_data.get('sql_template'),
                     parameters_template=pattern_data.get('parameters_template'),
-                    example=pattern_data.get('example'),
-                    use_cases=pattern_data.get('use_cases', [])
+                    example=function_call_str,
+                    use_cases=use_cases
                 )
                 # Gera embedding e adiciona ao Annoy
                 emb = self._generate_embedding(pattern_data.get('description', ''))
@@ -122,13 +142,7 @@ class SQLPatternRAG:
     def get_sql_guidance(self, user_query: str, top_k: int = 2, min_score: float = 1.5) -> str:
         """
         Retorna orientações SQL específicas para a pergunta do usuário
-        
-        Args:
-            user_query (str): Pergunta do usuário
-            top_k (int): Número máximo de padrões a retornar
-            min_score (float): Score mínimo para considerar padrão relevante
-        Returns:
-            str: Contexto SQL formatado para o Gemini
+        Agora exibe function_call_example como string ao invés de sql_example.
         """
         relevant_patterns = self.identify_sql_pattern(user_query, min_score=min_score)
         if not relevant_patterns:
@@ -141,7 +155,13 @@ class SQLPatternRAG:
             context_parts.append(f"{i+1}. PADRÃO: {pattern.description.upper()}")
             context_parts.append(f"   Tipo: {pattern.pattern_type}")
             context_parts.append(f"   Template: {pattern.sql_template}")
-            context_parts.append(f"   Exemplo: {pattern.example}")
+            # Exibe function_call_example como string
+            if pattern.example is not None:
+                context_parts.append(f"   Function Call Example: {pattern.example}")
+                if pattern.example is not None:
+                    context_parts.append(f"   Function Call Example: {pattern.example}")
+                else:
+                    context_parts.append("   Function Call Example: None")
             context_parts.append("")
         context_parts.append("PRÁTICAS RECOMENDADAS BIGQUERY:")
         context_parts.extend(self._get_bigquery_best_practices())

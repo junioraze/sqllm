@@ -178,47 +178,75 @@ Domínio: {metadata.get('domain', '')}
         return context
 
     def _create_full_content(self, table_name: str, table_config: Dict[str, Any]) -> str:
-        """Cria conteúdo completo para embedding"""
+        """Cria conteúdo completo para embedding, usando function_call_example como exemplo relevante"""
         metadata = table_config.get('metadata', {})
         business_rules = table_config.get('business_rules', {})
         fields = table_config.get('fields', {})
         usage_examples = table_config.get('usage_examples', {})
-        
+
         # Extrai todas as regras
         all_rules = []
         for rule in business_rules.get('critical_rules', []):
             all_rules.append(rule.get('description', ''))
         for rule in business_rules.get('query_rules', []):
             all_rules.append(rule.get('description', ''))
-        
+
         # Extrai todos os campos (usando 'name' corretamente)
         all_fields = []
-        for category_fields in fields.values():
+        if isinstance(fields, dict):
+            field_sources = fields.values()
+        elif isinstance(fields, list):
+            field_sources = fields
+        else:
+            field_sources = []
+        for category_fields in field_sources:
             if isinstance(category_fields, list):
                 for field in category_fields:
                     if isinstance(field, dict):
                         all_fields.append(f"{field.get('name', '')} {field.get('description', '')}")
-        
-        # Extrai exemplos
+            elif isinstance(category_fields, dict):
+                all_fields.append(f"{category_fields.get('name', '')} {category_fields.get('description', '')}")
+
+        # Extrai exemplos: usa apenas function_call_example como string, sem fallback
         all_examples = []
-        for category_examples in usage_examples.values():
+        if isinstance(usage_examples, dict):
+            example_sources = usage_examples.values()
+        elif isinstance(usage_examples, list):
+            example_sources = usage_examples
+        else:
+            example_sources = []
+        for category_examples in example_sources:
             if isinstance(category_examples, list):
                 for example in category_examples:
                     if isinstance(example, dict):
-                        all_examples.append(example.get('description', ''))
-        
+                        fc = example.get('function_call_example')
+                        if fc is not None:
+                            try:
+                                fc_str = json.dumps(fc, ensure_ascii=False)
+                            except Exception:
+                                fc_str = str(fc)
+                            all_examples.append(fc_str)
+            elif isinstance(category_examples, dict):
+                fc = category_examples.get('function_call_example')
+                if fc is not None:
+                    try:
+                        fc_str = json.dumps(fc, ensure_ascii=False)
+                    except Exception:
+                        fc_str = str(fc)
+                    all_examples.append(fc_str)
+
         content = f"""
         Tabela: {table_name}
         Descrição: {metadata.get('description', '')}
         Domínio: {metadata.get('domain', '')}
-        
+
         Regras: {' '.join(all_rules)}
-        
+
         Campos: {' '.join(all_fields)}
-        
+
         Exemplos: {' '.join(all_examples)}
         """.strip()
-        
+
         return content
     
     def _generate_embedding(self, text: str) -> List[float]:

@@ -8,6 +8,18 @@ REFINE_ANALYSIS_INSTRUCTION = """
     - Evite respostas secas: sempre agregue valor com contexto e visão estratégica.
     """
 
+CHART_EXPORT_INSTRUCTIONS = """
+INSTRUÇÕES DE GRÁFICO/EXPORTAÇÃO:
+- Só gere visualização gráfica se explicitamente solicitado pelo usuário.
+- O gráfico deve sempre usar o eixo X conforme definido no SELECT final (ex: campo_periodo, campo_eixo_x, campo_categoria).
+- Use o tipo de gráfico mais adequado ao contexto: barras para comparações, linhas para séries temporais, pizza para proporções, etc.
+- Sempre inclua legenda, título e rótulos claros nos eixos.
+- Exporte os dados em formato tabular antes de gerar o gráfico.
+- Nunca inclua dados ou campos não presentes no SELECT final.
+- Se solicitado exportação, gere CSV ou Excel com os campos do SELECT final, sem agregações extras.
+"""
+
+
 # Função utilitária para obter instrução de refino/tabularização
 def get_refine_analysis_instruction():
     return REFINE_ANALYSIS_INSTRUCTION
@@ -77,16 +89,17 @@ WITH cte_agregacao AS (
     FROM nome_da_tabela
     WHERE ...
     GROUP BY campo_periodo, campo_eixo_x
-)
-SELECT campo_periodo, campo_eixo_x, valor_total
-FROM cte_agregacao
-ORDER BY campo_periodo, campo_eixo_x
+5. Sempre use o nome da tabela original conforme listado no contexto, apenas dentro do FROM da primeira CTE. Nunca invente ou modifique o nome da tabela.
+6. Use apenas os campos listados no contexto de metadados da tabela (nunca invente nomes).
+7. Preencha todos os parâmetros do function_call: select, where, order_by, cte, qualify, limit, etc. Nunca inclua group_by nem full_table_id como parâmetro externo. O agrupamento deve ser feito apenas dentro do CTE.
 
 REGRAS ESPECÍFICAS PARA MONTAGEM DE QUERY:
 4. O campo 'from_table' DEVE referenciar o alias definido na CTE (ex: 't1', ou um JOIN entre aliases definidos na CTE). Nunca use o nome da tabela original diretamente no FROM se houver CTE.
 5. Nomes de tabela SEMPRE no formato {PROJECT_ID}.{DATASET_ID}.nome_da_tabela, usando apenas UM acento grave (`) ao redor do nome da tabela, nunca dois e nunca sem acento. O backend NÃO adiciona nem remove acentos graves: o modelo é responsável por garantir o formato correto, exatamente como o BigQuery espera.
 6. Use apenas os campos listados no contexto de metadados da tabela (nunca invente nomes).
-7. Preencha todos os parâmetros do function_call: full_table_id, select, where, group_by, order_by, cte, qualify, limit, etc.
+7. Preencha todos os parâmetros do function_call: select, where, order_by, cte, qualify, limit, etc. Nunca inclua group_by nem full_table_id como parâmetro externo. O agrupamento deve ser feito apenas dentro do CTE.
+REGRAS PARA AGRUPAMENTO:
+O agrupamento (GROUP BY) deve ser sempre feito dentro do CTE de agregação. Nunca inclua parâmetro group_by externo no function_call. O SELECT final só projeta e ordena os campos já agregados/agrupados definidos nas CTEs.
 8. Para análises temporais, use EXTRACT() ou FORMAT_DATE() explicitamente no SELECT, GROUP BY e ORDER BY.
 9. Para rankings, use QUALIFY ROW_NUMBER() OVER (...), nunca LIMIT.
 10. Para comparações entre grupos/categorias, use CTE + JOIN entre aliases.
@@ -118,69 +131,49 @@ ORDER BY campo_agrupado
 
 # Função para construir instrução dinâmica das tabelas/campos válidos
 
+
 def build_tables_fields_instruction():
-    if not TABLES_CONFIG:
-        return "Nenhuma tabela configurada."
-    instr = "\n=== TABELAS E CAMPOS DISPONÍVEIS ===\n"
-    for table, conf in TABLES_CONFIG.items():
-        instr += f"\nTabela: `{PROJECT_ID}.{DATASET_ID}.{table}`\n"
-        if 'metadata' in conf:
-            instr += f"Descrição: {conf['metadata'].get('description','')}\n"
-        else:
-            instr += f"Descrição: {conf.get('description','')}\n"
-        # Campos detalhados
-        if 'fields' in conf:
-            for cat, fields in conf['fields'].items():
-                if isinstance(fields, list) and fields:
-                    instr += f"{cat}:\n"
-                    for field in fields:
-                        if not isinstance(field, dict) or 'name' not in field:
-                            continue
-                        instr += f"  - {field['name']} ({field.get('type','')})"
-                        if field.get('description'):
-                            instr += f" | {field['description']}"
-                        # Exemplos
-                        if field.get('examples') and isinstance(field['examples'], list) and field['examples']:
-                            exemplos = ', '.join(str(e) for e in field['examples'][:5])
-                            instr += f" | exemplos: {exemplos}"
-                        # Padrão de busca
-                        if field.get('search_pattern'):
-                            instr += f" | busca: {field['search_pattern']}"
-                        # Conversão/uso
-                        if field.get('conversion'):
-                            instr += f" | conversão: {field['conversion']}"
-                        if field.get('usage'):
-                            instr += f" | uso: {field['usage']}"
-                        instr += "\n"
-    return instr
+    return """
+PADRÃO OBRIGATÓRIO DE CTEs (GENERALISTA):
 
-# Instruções para gráfico/exportação (apenas para refino, nunca na function_call)
-CHART_EXPORT_INSTRUCTIONS = """
-INSTRUÇÕES PARA GRÁFICO/EXPORTAÇÃO (APENAS SE O USUÁRIO SOLICITAR):
-- Só gere gráfico se o usuário pedir explicitamente (gráfico, visualização, plot, curva, barra, linha, etc).
-- Nunca gere gráfico por padrão.
-- Se solicitado, inclua no final da resposta:
-    GRAPH-TYPE: [tipo] | X-AXIS: [coluna] | Y-AXIS: [coluna] | COLOR: [coluna]
-    Tipos suportados: bar, line
-- Só use como COLOR colunas que estejam presentes no resultado da consulta. Se não houver coluna adequada para COLOR, omita o parâmetro COLOR.
-- Nunca assuma que existe uma coluna chamada "ano", "categoria" ou similar: sempre verifique as colunas reais do resultado antes de definir COLOR.
-- Para exportação, só gere links ou instruções se o usuário pedir (exportar, excel, csv, baixar, download).
+Toda query deve ser estruturada usando múltiplas CTEs, cada uma com responsabilidade única:
+...existing code...
+
+REGRAS CRÍTICAS PARA O SELECT FINAL:
+- O SELECT final NUNCA deve conter GROUP BY ou agregação (SUM, COUNT, AVG, etc). Toda agregação deve ocorrer dentro de uma CTE específica.
+- O SELECT final só pode projetar campos simples ou aliases definidos nas CTEs (ex: total, quantidade, valor_normalizado). Nunca inclua funções de agregação, expressões ou cálculos no SELECT final.
+- Se precisar de um valor agregado, defina o alias na CTE e use apenas o alias no SELECT final.
+- O SELECT final apenas projeta os campos agregados e agrupados definidos nas CTEs e ordena para garantir o eixo X correto no gráfico.
+- Nunca gere dois SELECTs seguidos na query final; o SELECT principal deve ser separado das definições de CTE.
+
+Exemplo INCORRETO:
+SELECT campo_agrupado, SUM(valor) AS total FROM cte_agregacao
+Exemplo CORRETO:
+SELECT campo_agrupado, total FROM cte_agregacao
+
+O GROUP BY pode conter múltiplos campos/dimensões conforme o contexto da pergunta (ex: campo_periodo, campo_eixo_x, campo_categoria, etc). Sempre inclua todos os campos não agregados do SELECT no GROUP BY da CTE de agrupamento.
+Só inclua no SELECT final colunas agregadas ou agrupadas (SUM, COUNT, AVG) já definidas nas CTEs, usando apenas o alias.
+
+REGRAS DE ORDENAÇÃO (ORDER BY):
+- A ordenação (ORDER BY) deve ocorrer sempre no SELECT final, nunca dentro das CTEs.
+- Priorize SEMPRE o campo de período (ex: campo_periodo, campo_data, campo_mes, campo_ano) para ordenação.
+- Se não existir campo de período, use o campo principal do eixo X (ex: campo_eixo_x, campo_categoria) ou a ordem natural dos registros.
+- Nunca ordene por valores agregados (ex: SUM, COUNT) no SELECT final, apenas pelos campos de dimensão/eixo X ou aliases definidos.
+
+Exemplo generalista:
+WITH cte_agregacao AS (
+    SELECT campo_periodo, campo_eixo_x, SUM(campo_valor) AS valor_total
+    FROM nome_da_tabela
+    WHERE ...
+    GROUP BY campo_periodo, campo_eixo_x
+)
+SELECT campo_periodo, campo_eixo_x, valor_total
+FROM cte_agregacao
+ORDER BY campo_periodo, campo_eixo_x
 """
-
-# Exemplos de uso e melhores práticas (pode ser expandido)
-EXAMPLES_AND_BEST_PRACTICES = """
-EXEMPLOS DE USO E MELHORES PRÁTICAS:
-- Para perguntas como "top 5 produtos e evolução mensal": use CTE para identificar o top N e depois filtrar a evolução.
-- Para comparações entre anos: use CTEs separadas para cada ano e UNION ALL.
-- Para rankings: QUALIFY ROW_NUMBER() OVER (...)
-- Para análises temporais: FORMAT_DATE('%Y-%m', campo_data) AS periodo_mes
-- Sempre trate divisões por zero com CASE WHEN ...
-"""
-
-# Função utilitária para obter instrução completa para function_call
 
 def get_sql_functioncall_instruction():
-    return SQL_FUNCTIONCALL_INSTRUCTIONS + build_tables_fields_instruction() + "\n" + EXAMPLES_AND_BEST_PRACTICES
+    return SQL_FUNCTIONCALL_INSTRUCTIONS
 
 # Função utilitária para obter instrução de gráfico/exportação para refino
 
