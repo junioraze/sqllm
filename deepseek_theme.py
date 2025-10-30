@@ -64,8 +64,8 @@ DEEPSEEK_DARK_THEME = """
     padding: 2rem !important;
     margin: 1rem !important;
     transition: all 0.3s ease !important;
-    max-width: none !important;
-    width: auto !important;
+    max-width: 95vw !important;
+    width: 95vw !important;
 }
 
 /* OCULTA ELEMENTOS STREAMLIT - FUNCIONA EM TODOS OS TEMAS */

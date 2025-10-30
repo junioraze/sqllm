@@ -641,9 +641,6 @@ def should_reuse_data(model, current_prompt: str, user_history: list = None) -> 
     return {"should_reuse": False, "reason": "Nova consulta necessária"}
 
 def generate_chart(data, chart_type, x_axis, y_axis, color=None):
-    # Limite de caracteres para itens da legenda/categorias
-    LEGEND_LABEL_MAXLEN = 22
-
     # Função especialista para garantir correspondência segura do alias
     import re
     def clean_alias(alias):
@@ -658,22 +655,19 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
                 return col
         raise ValueError(f"Alias '{alias}' não encontrado nas colunas do DataFrame: {columns}")
 
-    # Trunca os labels da coluna de cor se necessário
+    # Coluna de cor
     color_real = None
     if color:
         try:
             color_real = get_real_column(color, data.columns)
-            data[color_real] = data[color_real].astype(str).apply(lambda x: x[:LEGEND_LABEL_MAXLEN] + '…' if len(x) > LEGEND_LABEL_MAXLEN else x)
         except Exception as e:
             print(f"Coluna de cor '{color}' não encontrada, gráfico será gerado sem cor.")
             color_real = None
 
-    # Trunca os labels da coluna de categorias (x_axis) se for string/categórica
+    # Coluna de categorias (x_axis)
     if x_axis:
         try:
             x_axis_real = get_real_column(x_axis, data.columns)
-            if data[x_axis_real].dtype == object or str(data[x_axis_real].dtype).startswith('str'):
-                data[x_axis_real] = data[x_axis_real].astype(str).apply(lambda x: x[:LEGEND_LABEL_MAXLEN] + '…' if len(x) > LEGEND_LABEL_MAXLEN else x)
         except Exception as e:
             print(f"Erro ao validar coluna X: {e}")
             return None
