@@ -63,8 +63,8 @@ def initialize_model():
                     "items": {"type": "string"},
                     "description": (
                         "Lista de campos para o SELECT final. "
-                        "Inclua aliases definidos nas CTEs e também campos simples disponíveis no resultado do FROM (colunas originais que não foram alteradas por expressão/alias). "
-                        "Nunca use expressões originais diretamente, apenas aliases ou campos simples que realmente existem no resultado do FROM."
+                        "Inclua aliases definidos nas CTEs e/ou campos simples disponíveis no resultado das colunas presentes nas tabelas do parametro from_table. "
+                        "Nunca use expressões originais diretamente, apenas aliases ou campos simples que realmente existem no resultado das tabelas do parametro from_table."
                     )
                 },
                 "order_by": {
@@ -72,15 +72,15 @@ def initialize_model():
                     "items": {"type": "string"},
                     "description": (
                         "Lista de campos para ORDER BY no SELECT final. "
-                        "Use apenas aliases ou campos simples que existem no resultado do FROM. "
-                        "Nunca use expressões, apenas nomes de colunas/aliases que estão disponíveis após o FROM."
+                        "Use apenas aliases ou campos simples que existem no resultado das colunas presentes nas tabelas do parametro from_table. "
+                        "Nunca use expressões, apenas nomes de colunas/aliases que estão disponíveis nas tabelas do parametro from_table."
                     )
                 },
                 "where": {
                     "type": "string",
                     "description": (
                         "Condições para o WHERE do SELECT final. "
-                        "Filtre usando apenas aliases ou campos simples que existem no resultado do FROM. "
+                        "Filtre usando apenas aliases ou campos simples que existem no resultado das colunas presentes nas tabelas do parametro from_table. "
                         "Para rankings, filtre pelo campo analítico criado na CTE (ex: ranking <= N)."
                     )
                 }
