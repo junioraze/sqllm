@@ -14,16 +14,25 @@ def show_aggrid_table(data: list, theme: str = "streamlit", height: int = 350, f
         st.info("Nenhum dado tabular disponível para exibir.")
         return
     df = pd.DataFrame(data)
-    # Controle de exibição: mostra só os 10 primeiros, com opção de expandir
-    # Ícone simples para expandir: '[ ]' no topo da tabela
+    # Exibe os 10 primeiros registros SEM botões de download
     if len(df) > 10:
         st.markdown("<div class='section-label'>dados (primeiros 10 registros)</div>", unsafe_allow_html=True)
-        st.markdown(_render_custom_table(df.head(10)), unsafe_allow_html=True)
-        with st.expander("Exibir todos os registros", expanded=False):
-            st.markdown(_render_custom_table(df), unsafe_allow_html=True)
+        st.markdown(_render_custom_table(df.head(10), show_export_buttons=False), unsafe_allow_html=True)
+        # Spoiler para até 100 registros
+        max_spoiler = min(len(df), 100)
+        with st.expander(f"Exibir até {max_spoiler} registros", expanded=False):
+            st.markdown(_render_custom_table(df.head(max_spoiler), show_export_buttons=False), unsafe_allow_html=True)
     else:
         st.markdown("<div class='section-label'>dados</div>", unsafe_allow_html=True)
-        st.markdown(_render_custom_table(df), unsafe_allow_html=True)
+        st.markdown(_render_custom_table(df, show_export_buttons=False), unsafe_allow_html=True)
+
+    # Botões de download para o dataset completo (fora do spoiler)
+    if len(df) > 0:
+        excel_bytes = generate_excel_bytes(df.to_dict(orient="records"))
+        csv_bytes = generate_csv_bytes(df.to_dict(orient="records"))
+        excel_btn = create_styled_download_button(excel_bytes, "dados_completos.xlsx", "Excel")
+        csv_btn = create_styled_download_button(csv_bytes, "dados_completos.csv", "CSV")
+        st.markdown(f"<div style='display:inline-flex;gap:0.3rem;vertical-align:middle;margin-top:0.3em;margin-bottom:0.2em;'>{excel_btn}{csv_btn}</div>", unsafe_allow_html=True)
 
     # Se for numérico, mostra sumário analítico dentro de um expander fechado
     if not df.empty:
@@ -53,13 +62,7 @@ def _render_custom_table(df, small=False, show_index=False, bar_columns=None):
     if df.empty:
         return "<em>Nenhum dado disponível</em>"
     table_class = "custom-table small-table" if small else "custom-table"
-    # Botões de exportação mini (xls/csv)
-    excel_bytes = generate_excel_bytes(df.to_dict(orient="records"))
-    csv_bytes = generate_csv_bytes(df.to_dict(orient="records"))
-    excel_btn = create_styled_download_button(excel_bytes, "dados.xlsx", "Excel")
-    csv_btn = create_styled_download_button(csv_bytes, "dados.csv", "CSV")
-    export_buttons = f"<div style='display:inline-flex;gap:0.3rem;vertical-align:middle;margin-top:0.3em;margin-bottom:0.2em;'>{excel_btn}{csv_btn}</div>"
-    html = f'<div style="overflow-x:auto;"><table class="{table_class}">'
+    html = f'<div style="overflow-x:auto;"><table class="{table_class}">' 
     # Cabeçalho
     html += "<thead><tr>"
     if show_index:
@@ -96,7 +99,65 @@ def _render_custom_table(df, small=False, show_index=False, bar_columns=None):
             else:
                 html += f'<td style="text-align:left;">{display_val}</td>'
         html += "</tr>"
-    html += "</tbody></table>" + export_buttons + "</div>"
+    html += "</tbody></table></div>"
+    
+def _render_custom_table(df, small=False, show_index=False, bar_columns=None, show_export_buttons=True):
+    """
+    Renderiza um DataFrame como tabela HTML customizada, elegante e responsiva ao tema.
+    show_index: se True, mostra o índice como primeira coluna.
+    bar_columns: lista de colunas para exibir barra de volume proporcional.
+    show_export_buttons: se True, exibe botões de exportação (Excel/CSV) abaixo da tabela.
+    """
+    if df.empty:
+        return "<em>Nenhum dado disponível</em>"
+    table_class = "custom-table small-table" if small else "custom-table"
+    html = f'<div style="overflow-x:auto;"><table class="{table_class}">' 
+    # Cabeçalho
+    html += "<thead><tr>"
+    if show_index:
+        html += f'<th>{df.index.name or ""}</th>'
+    for col in df.columns:
+        html += f'<th>{col}</th>'
+    html += "</tr></thead>"
+    # Prepara escala para barras
+    bar_max = {}
+    if bar_columns:
+        for col in bar_columns:
+            if col in df.columns:
+                vals = pd.to_numeric(df[col], errors="coerce")
+                bar_max[col] = vals.max() if vals.notnull().any() else 1
+    # Corpo
+    html += "<tbody>"
+    for idx, row in df.iterrows():
+        html += "<tr>"
+        if show_index:
+            html += f'<td style="font-weight:600;text-align:left;">{idx}</td>'
+        for col, val in row.items():
+            display_val = val
+            if pd.notnull(val) and isinstance(val, (int, float)):
+                if isinstance(val, int):
+                    display_val = f"{val:,}".replace(",", ".")
+                else:
+                    display_val = f"{val:,.4f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            elif pd.isnull(val):
+                display_val = ""
+            if bar_columns and col in bar_max and pd.notnull(val):
+                width = int(100 * float(val) / bar_max[col]) if bar_max[col] else 0
+                bar_html = f'<div style="height:0.9em;width:{width}%;background:linear-gradient(90deg,var(--text-accent),var(--bg-tertiary));border-radius:4px;"></div>'
+                html += f'<td style="position:relative;text-align:left;">{display_val}<div style="margin-top:0.15em;">{bar_html}</div></td>'
+            else:
+                html += f'<td style="text-align:left;">{display_val}</td>'
+        html += "</tr>"
+    html += "</tbody></table>"
+    # Botões de exportação (apenas se show_export_buttons=True)
+    if show_export_buttons:
+        excel_bytes = generate_excel_bytes(df.to_dict(orient="records"))
+        csv_bytes = generate_csv_bytes(df.to_dict(orient="records"))
+        excel_btn = create_styled_download_button(excel_bytes, "dados.xlsx", "Excel")
+        csv_btn = create_styled_download_button(csv_bytes, "dados.csv", "CSV")
+        export_buttons = f"<div style='display:inline-flex;gap:0.3rem;vertical-align:middle;margin-top:0.3em;margin-bottom:0.2em;'>{excel_btn}{csv_btn}</div>"
+        html += export_buttons
+    html += "</div>"
     # CSS customizado responsivo ao tema
     css = '''
     <style>
