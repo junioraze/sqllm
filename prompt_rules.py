@@ -147,10 +147,15 @@ PADRÃO OBRIGATÓRIO DE CTEs (GENERALISTA):
 - Comparação/análise (ex: JOINs, pivots, cálculos finais) — nomeie como cte_comparacao, cte_pivot.
 - Nunca misture transformação e análise na mesma CTE.
 - Use nomes descritivos e consistentes para CTEs e aliases de campos. 
+- Ao construir queries com múltiplas CTEs, garanta que cada SELECT/CTE só utilize campos disponíveis a partir da CTE/tabela anterior. Nunca referencie campos que não foram projetados ou transformados. Se fizer JOIN entre CTEs, valide os campos de ambos os lados. O SELECT final deve usar apenas campos/aliases disponíveis nas fontes declaradas no FROM.
+- Cada CTE que tenha dependencia de outra CTE só pode projetar campos simples ou aliases definidos nas CTEs (ex: total, quantidade, valor_normalizado). Precisamos manter as referências corretas das colunas de cada CTE para evitar quebra. 
+- Cada CTE que tenha dependencia de outra CTE NUNCA deve conter funções/extratos sobre campos que já foram convertidos em aliases nas CTEs. Use apenas os aliases definidos e as colunas que nao foram alteradas o nome mas estao presente na CTE consultada.
+
 
 REGRAS CRÍTICAS PARA O SELECT FINAL:
 - O SELECT final NUNCA deve conter GROUP BY ou agregação (SUM, COUNT, AVG, etc). Toda agregação deve ocorrer dentro de uma CTE específica.
 - O SELECT final só pode projetar campos simples ou aliases definidos nas CTEs (ex: total, quantidade, valor_normalizado). Nunca inclua funções de agregação, expressões ou cálculos no SELECT final.
+- O SELECT final NUNCA deve conter funções/extratos sobre campos que já foram convertidos em aliases nas CTEs. Use apenas os aliases definidos e as colunas que nao foram alteradas o nome mas estao presente na CTE consultada.
 - Se precisar de um valor agregado, defina o alias na CTE e use apenas o alias no SELECT final.
 - O SELECT final apenas projeta os campos agregados e agrupados definidos nas CTEs e ordena para garantir o eixo X correto no gráfico.
 - Nunca gere dois SELECTs seguidos na query final; o SELECT principal deve ser separado das definições de CTE.

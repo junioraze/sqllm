@@ -145,16 +145,11 @@ def build_query(params: dict) -> str:
 
     cte = corrected_params.get("cte", "")
     table_name_in_cte = extract_table_from_cte(cte)
-    # Monta referência correta do BigQuery
     if table_name_in_cte and table_name_in_cte in TABLES_CONFIG:
         correct_table_ref = f"{PROJECT_ID}.{DATASET_ID}.{table_name_in_cte}"
     else:
-        # Se vier valor errado, tenta corrigir para a primeira tabela do config
         correct_table_ref = f"{PROJECT_ID}.{DATASET_ID}.{list(TABLES_CONFIG.keys())[0]}"
 
-    # Corrige o nome da tabela no CTE se necessário
-    # Só substitui se for uma tabela do projeto/dataset do config
-    # Só substitui se vier no padrão projeto.dataset.tabela
     bq_table_pattern = re.compile(rf"{PROJECT_ID}\.{DATASET_ID}\.(\w+)")
     match_bq_table = bq_table_pattern.search(table_name_in_cte or "")
     if match_bq_table:
@@ -164,39 +159,27 @@ def build_query(params: dict) -> str:
             cte = re.sub(rf"FROM\s+([`\w\.]+)", f"FROM `{expected_ref}`", cte, flags=re.IGNORECASE)
             corrected_params["cte"] = cte
 
-
-    # 1. Normaliza listas e corrige múltiplos agrupamentos
     select = _parse_list_param(corrected_params.get("select", ["*"]), "select")
-    # group_by removido: agrupamento deve ocorrer apenas dentro do CTE
     order_by = _parse_list_param(corrected_params.get("order_by"), "order_by")
-    # Garante ordenação do eixo X (data/temporal) no ORDER BY
     temporal_fields = [f for f in select if re.search(r"data|mes|ano|dia|hora", f, re.IGNORECASE)]
     temporal_fields = [f.split(" AS ")[0].strip() for f in temporal_fields]
     for tf in temporal_fields:
         if tf not in order_by:
             order_by.append(tf)
-    # Toda lógica de agrupamento depende apenas do CTE. Nenhum group_by externo é usado ou processado.
-
-    # 3. Garante que select não fique vazio
     if not select:
         select = ["*"]
 
-
-    # 4. Suporte a CTE (Common Table Expressions) - usa 'cte' se presente, sem duplicar 'WITH'
     with_clause = ""
     query = ""
+    from_table = corrected_params.get('from_table', '').strip()
+
     if cte:
         cte_clean = cte.strip()
         if cte_clean.upper().startswith("WITH "):
             cte_clean = cte_clean[5:].lstrip()
-        # Só retorna o bloco do CTE se ele for uma query completa (WITH ... SELECT ...), ou seja, se o parâmetro for uma query final e não apenas CTEs
-        # Só retorna o bloco do CTE se ele for uma query completa (WITH ... SELECT ... GROUP BY ...) e não apenas CTEs
         is_full_query = False
         cte_upper = cte.strip().upper()
         if cte_upper.startswith("WITH"):
-            # Verifica se há apenas CTEs ou se há um SELECT principal após o bloco WITH
-            # Considera query completa apenas se o último SELECT vier após o bloco de CTEs
-            # Busca o último SELECT e verifica se ele está fora dos parênteses das CTEs
             par_count = 0
             last_select_pos = -1
             for i, char in enumerate(cte):
@@ -204,17 +187,14 @@ def build_query(params: dict) -> str:
                 elif char == ')': par_count -= 1
                 if cte[i:i+6].upper() == 'SELECT' and par_count == 0:
                     last_select_pos = i
-            # Se o último SELECT está fora dos parênteses das CTEs, é uma query completa
             if last_select_pos != -1:
                 is_full_query = True
         if is_full_query:
             query_clean = re.sub(r'[\n\t]+', ' ', cte)
             query_clean = re.sub(r' +', ' ', query_clean)
-            # Adiciona ORDER BY apenas ao SELECT final, nunca dentro de CTEs
             order_by = _parse_list_param(corrected_params.get("order_by"), "order_by")
             if order_by:
                 order_by_clause = f" ORDER BY {', '.join(order_by)}"
-                # Só adiciona ORDER BY se não existir e apenas ao final da query
                 if "ORDER BY" not in query_clean.upper():
                     query_clean = query_clean.strip()
                     query_clean += order_by_clause
@@ -223,42 +203,29 @@ def build_query(params: dict) -> str:
         else:
             with_clause = f"WITH {cte_clean}\n"
 
-        # Não exige mais o parâmetro 'from_table' explicitamente quando houver CTE; referência é extraída do CTE.
-        # O from_table no SELECT final deve ser sempre um alias de CTE, nunca referência de tabela completa
-        from_table = corrected_params.get('from_table', '').strip()
-        # Se vier vazio, erro explícito
+        # NOVO: se from_table contém expressão complexa (JOIN, ON, etc), não modificar
         if not from_table:
-            raise ValueError("O parâmetro 'from_table' deve ser o alias de uma CTE gerada pelo modelo. Nenhum alias foi fornecido.")
-        # Se vier nome de tabela completa, converte para alias
-        if from_table in TABLES_CONFIG.keys():
-            # Assume que existe uma CTE com esse nome
-            pass
+            raise ValueError("O parâmetro 'from_table' deve ser o alias de uma CTE gerada pelo modelo ou expressão de JOIN. Nenhum valor foi fornecido.")
+        # Se for JOIN ou expressão complexa, usa como está
+        if any(x in from_table.upper() for x in ["JOIN", " ON ", " AS "]):
+            pass  # usa como está
+        elif from_table in TABLES_CONFIG.keys():
+            pass  # usa como está
         elif '.' in from_table:
-            # Se vier nome completo, pega só o alias
             from_table = from_table.split('.')[-1].replace('`','').strip()
     else:
         if not from_table or not str(from_table).strip():
             from_table = correct_table_ref
-    # from_table já definido pelo padrão novo, não depende mais de full_table_id
 
-    # 6. Monta demais cláusulas
     where = f" WHERE {corrected_params['where']}" if corrected_params.get("where") else ""
-    # O SELECT final nunca deve ter GROUP BY ou agregação, apenas projeção dos campos já agregados/agrupados definidos nas CTEs
-    # Remove agregações do SELECT final
     select_final = []
     for s in select:
-        # Se for agregação (SUM, COUNT, AVG, etc), só inclui se vier como campo já definido (ex: quantidade)
         if re.search(r"(SUM|COUNT|AVG|MIN|MAX)\s*\(", s, re.IGNORECASE):
-            # Tenta extrair alias
             m = re.search(r"AS\s+(\w+)$", s, re.IGNORECASE)
             if m:
                 select_final.append(m.group(1).strip())
-            # Se não tem alias, ignora agregação no SELECT final
         else:
             select_final.append(s)
-    # Remove GROUP BY do SELECT final
-    # group_by_sql removido
-    # Garante que todos os campos do eixo X e do parâmetro order_by estejam presentes
     if not order_by:
         temporal_fields = [f for f in select_final if re.search(r"data|mes|ano|dia|hora", f, re.IGNORECASE)]
         temporal_fields = [f.split(" AS ")[0].strip() for f in temporal_fields]
@@ -268,26 +235,21 @@ def build_query(params: dict) -> str:
     order_by_sql = f" ORDER BY {', '.join(order_by)}" if order_by else ""
     limit = f" LIMIT {int(corrected_params['limit'])}" if corrected_params.get("limit") else ""
 
-    # Se vier filtro de ranking, inclua no WHERE
     where_clause = where
     if corrected_params.get("where") and "ranking <= " in corrected_params["where"]:
-        # Já está no WHERE
         pass
     elif corrected_params.get("ranking_filter"):
-        # Se vier ranking_filter separado, inclua no WHERE
         if where_clause:
             where_clause += f" AND {corrected_params['ranking_filter']}"
         else:
             where_clause = f" WHERE {corrected_params['ranking_filter']}"
 
-    # Monta query principal sem GROUP BY/agregação no SELECT final
+    # Monta query principal, usando from_table como está (pode ser JOIN)
     query = f"{with_clause}SELECT {', '.join(select_final)} FROM {from_table}{where_clause}{order_by_sql}{limit}"
 
-    # 8. Remove espaços
     query_clean = re.sub(r'[\n\t]+', ' ', query)
     query_clean = re.sub(r' +', ' ', query_clean)
 
-    # 9. Remove comentários SQL antes de retornar e logar
     query_no_comments = remove_sql_comments(query_clean.strip())
     print(f"DEBUG - Query construída:\n{query_no_comments}")
     return query_no_comments

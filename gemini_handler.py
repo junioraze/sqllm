@@ -42,34 +42,50 @@ def initialize_model():
             "properties": {
                 "cte": {
                     "type": "string",
-                    "description": "CTE (Common Table Expression). O campo 'cte' DEVE ser SEMPRE preenchido, mesmo para queries simples. Estruture toda consulta usando CTE, por exemplo: WITH t1 AS (SELECT ... FROM ... WHERE ...). Nunca deixe vazio. ATENÇÃO: NUNCA, EM HIPÓTESE ALGUMA, gere comentários SQL (nem --, nem /* ... */) em nenhuma query. Comentários SQL não são permitidos e causam erro de sintaxe."
+                    "description": (
+                        "Bloco WITH contendo todas as CTEs necessárias para a consulta. "
+                        "Sempre preencha este campo, mesmo para queries simples. "
+                        "Exemplo: WITH t1 AS (SELECT ... FROM ... WHERE ...), t2 AS (...). "
+                        "Nunca inclua o SELECT final aqui. "
+                        "Jamais gere comentários SQL (nem --, nem /* ... */) em nenhuma parte da query."
+                    )
                 },
                 "from_table": {
                     "type": "string",
-                    "description": "FROM ou JOIN a ser usado na query final. O campo 'from_table' DEVE ser o alias definido na CTE (ex: 't1', ou um JOIN entre aliases definidos na CTE). Nunca use o nome da tabela original diretamente no FROM se houver CTE."
+                    "description": (
+                        "Alias ou JOIN entre aliases definidos nas CTEs para o SELECT final. "
+                        "Exemplo: 't1' ou 't1 JOIN t2 ON ...'. "
+                        "Nunca use o nome da tabela original diretamente no FROM se houver CTE."
+                    )
                 },
                 "select": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Campos para SELECT com ALIASES obrigatórios para gráficos. Use AS mes, AS valor_total, AS quantidade. Exemplo: ['EXTRACT(MONTH FROM <<coluna_periodo>>) AS mes', 'SUM(<<coluna_de_valor>>) AS valor_total']"
+                    "description": (
+                        "Lista de campos para o SELECT final. "
+                        "Inclua aliases definidos nas CTEs e também campos simples disponíveis no resultado do FROM (colunas originais que não foram alteradas por expressão/alias). "
+                        "Nunca use expressões originais diretamente, apenas aliases ou campos simples que realmente existem no resultado do FROM."
+                    )
                 },
-                "where": {
-                    "type": "string",
-                    "description": "Condições WHERE (SQL puro)"
-                },
-                # REMOVIDO: group_by externo. Agrupamento deve ser feito apenas dentro do CTE.
                 "order_by": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Campos para ORDER BY"
+                    "description": (
+                        "Lista de campos para ORDER BY no SELECT final. "
+                        "Use apenas aliases ou campos simples que existem no resultado do FROM. "
+                        "Nunca use expressões, apenas nomes de colunas/aliases que estão disponíveis após o FROM."
+                    )
                 },
-                # Para rankings, crie o campo analítico (ROW_NUMBER, RANK, etc) na CTE e filtre no SELECT final usando WHERE ranking <= N.
-                "limit": {
-                    "type": "integer",
-                    "description": "LIMIT (número máximo de registros). NUNCA use junto com QUALIFY"
+                "where": {
+                    "type": "string",
+                    "description": (
+                        "Condições para o WHERE do SELECT final. "
+                        "Filtre usando apenas aliases ou campos simples que existem no resultado do FROM. "
+                        "Para rankings, filtre pelo campo analítico criado na CTE (ex: ranking <= N)."
+                    )
                 }
             },
-            "required": ["select","cte","from_table","order_by"]
+            "required": ["select", "cte", "from_table", "order_by"]
         }
     )
 
