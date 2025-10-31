@@ -160,6 +160,9 @@ class BusinessMetadataRAGV2:
                 desc = f"[{label}] {field.get('name')} ({field.get('type')}) — {field.get('description', '').strip()}"
                 if field.get('type', '') == 'TIMESTAMP' and field.get('conversion', ''):
                     desc += f" | Conversão recomendada: {field.get('conversion', '')}"
+                # Adiciona search_pattern se for string e existir
+                if field.get('type', '').upper() == 'STRING' and field.get('search_pattern', ''):
+                    desc += f" | search_pattern: {field.get('search_pattern')}"
                 result.append(desc)
             return result
 
