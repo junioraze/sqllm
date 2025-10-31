@@ -55,7 +55,8 @@ class BusinessMetadataRAGV2:
     def _load_sentence_transformer(self):
         try:
             from sentence_transformers import SentenceTransformer
-            self.st_model = SentenceTransformer(self.embedding_model)
+                # Força o uso de CPU explicitamente
+            self.st_model = SentenceTransformer(self.embedding_model, device='cpu')
             self._has_st = True
             print(f"[RAG] Modelo sentence-transformers carregado com sucesso: {self.embedding_model}")
         except Exception as e:
