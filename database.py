@@ -143,21 +143,26 @@ def build_query(params: dict) -> str:
             return match.group(1).replace('`', '').strip()
         return None
 
+
+    def clean_cte_block(cte: str) -> str:
+        """
+        Remove o SELECT final embutido do campo CTE, deixando só as definições das CTEs.
+        """
+        # Busca o fechamento da última CTE (último ')')
+        last_close = cte.rfind(')')
+        if last_close != -1:
+            after = cte[last_close+1:].strip()
+            if after.upper().startswith('SELECT'):
+                return cte[:last_close+1]
+        return cte
+
     cte = corrected_params.get("cte", "")
+    cte = clean_cte_block(cte)
     table_name_in_cte = extract_table_from_cte(cte)
     if table_name_in_cte and table_name_in_cte in TABLES_CONFIG:
         correct_table_ref = f"{PROJECT_ID}.{DATASET_ID}.{table_name_in_cte}"
     else:
         correct_table_ref = f"{PROJECT_ID}.{DATASET_ID}.{list(TABLES_CONFIG.keys())[0]}"
-
-    bq_table_pattern = re.compile(rf"{PROJECT_ID}\.{DATASET_ID}\.(\w+)")
-    match_bq_table = bq_table_pattern.search(table_name_in_cte or "")
-    if match_bq_table:
-        table_base = match_bq_table.group(1)
-        if table_base in TABLES_CONFIG.keys():
-            expected_ref = f"{PROJECT_ID}.{DATASET_ID}.{table_base}"
-            cte = re.sub(rf"FROM\s+([`\w\.]+)", f"FROM `{expected_ref}`", cte, flags=re.IGNORECASE)
-            corrected_params["cte"] = cte
 
     select = _parse_list_param(corrected_params.get("select", ["*"]), "select")
     order_by = _parse_list_param(corrected_params.get("order_by"), "order_by")
@@ -177,36 +182,11 @@ def build_query(params: dict) -> str:
         cte_clean = cte.strip()
         if cte_clean.upper().startswith("WITH "):
             cte_clean = cte_clean[5:].lstrip()
-        is_full_query = False
-        cte_upper = cte.strip().upper()
-        if cte_upper.startswith("WITH"):
-            par_count = 0
-            last_select_pos = -1
-            for i, char in enumerate(cte):
-                if char == '(': par_count += 1
-                elif char == ')': par_count -= 1
-                if cte[i:i+6].upper() == 'SELECT' and par_count == 0:
-                    last_select_pos = i
-            if last_select_pos != -1:
-                is_full_query = True
-        if is_full_query:
-            query_clean = re.sub(r'[\n\t]+', ' ', cte)
-            query_clean = re.sub(r' +', ' ', query_clean)
-            order_by = _parse_list_param(corrected_params.get("order_by"), "order_by")
-            if order_by:
-                order_by_clause = f" ORDER BY {', '.join(order_by)}"
-                if "ORDER BY" not in query_clean.upper():
-                    query_clean = query_clean.strip()
-                    query_clean += order_by_clause
-            print(f"DEBUG - Query construída:\n{query_clean}")
-            return query_clean.strip()
-        else:
-            with_clause = f"WITH {cte_clean}\n"
+        with_clause = f"WITH {cte_clean}\n"
 
         # NOVO: se from_table contém expressão complexa (JOIN, ON, etc), não modificar
         if not from_table:
             raise ValueError("O parâmetro 'from_table' deve ser o alias de uma CTE gerada pelo modelo ou expressão de JOIN. Nenhum valor foi fornecido.")
-        # Se for JOIN ou expressão complexa, usa como está
         if any(x in from_table.upper() for x in ["JOIN", " ON ", " AS "]):
             pass  # usa como está
         elif from_table in TABLES_CONFIG.keys():
@@ -233,7 +213,7 @@ def build_query(params: dict) -> str:
             if tf not in order_by:
                 order_by.append(tf)
     order_by_sql = f" ORDER BY {', '.join(order_by)}" if order_by else ""
-    limit = f" LIMIT {int(corrected_params['limit'])}" if corrected_params.get("limit") else ""
+    limit = ""  # LIMIT descontinuado, ranking já é feito via window function/where
 
     where_clause = where
     if corrected_params.get("where") and "ranking <= " in corrected_params["where"]:
@@ -245,7 +225,7 @@ def build_query(params: dict) -> str:
             where_clause = f" WHERE {corrected_params['ranking_filter']}"
 
     # Monta query principal, usando from_table como está (pode ser JOIN)
-    query = f"{with_clause}SELECT {', '.join(select_final)} FROM {from_table}{where_clause}{order_by_sql}{limit}"
+    query = f"{with_clause}SELECT {', '.join(select_final)} FROM {from_table}{where_clause}{order_by_sql}"
 
     query_clean = re.sub(r'[\n\t]+', ' ', query)
     query_clean = re.sub(r' +', ' ', query_clean)
