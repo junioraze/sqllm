@@ -325,7 +325,7 @@ Domínio: {metadata.get('domain', '')}
         except Exception as e:
             print(f"Erro ao atualizar cache: {e}")
     
-    def retrieve_relevant_context(self, user_query: str, max_results: int = 3, similarity_threshold: float = 0.3) -> List[str]:
+    def retrieve_relevant_context(self, user_query: str, max_results: int = 1, similarity_threshold: float = 0.30) -> List[str]:
         """Recupera contexto relevante usando Annoy, com logging e threshold adaptativo"""
         try:
             from annoy import AnnoyIndex

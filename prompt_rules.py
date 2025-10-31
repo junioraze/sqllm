@@ -150,7 +150,7 @@ PADRÃO OBRIGATÓRIO DE CTEs (GENERALISTA):
 - Ao construir queries com múltiplas CTEs, garanta que cada SELECT/CTE só utilize campos disponíveis a partir da CTE/tabela anterior. Nunca referencie campos que não foram projetados ou transformados. Se fizer JOIN entre CTEs, valide os campos de ambos os lados. O SELECT final deve usar apenas campos/aliases disponíveis nas fontes declaradas no FROM.
 - Cada CTE que tenha dependencia de outra CTE só pode projetar campos simples ou aliases definidos nas CTEs (ex: total, quantidade, valor_normalizado). Precisamos manter as referências corretas das colunas de cada CTE para evitar quebra. 
 - Cada CTE que tenha dependencia de outra CTE NUNCA deve conter funções/extratos sobre campos que já foram convertidos em aliases nas CTEs. Use apenas os aliases definidos e as colunas que nao foram alteradas o nome mas estao presente na CTE consultada.
-
+- Cada CTE que tenha dependencia de outra CTE NUNCA deve conter o nome da tabela do Bigquery, se ela depende de outra CTE deve usar o alias da CTE na qual depende no FROM para manter a consistencia.
 
 REGRAS CRÍTICAS PARA O SELECT FINAL:
 - O SELECT final NUNCA deve conter GROUP BY ou agregação (SUM, COUNT, AVG, etc). Toda agregação deve ocorrer dentro de uma CTE específica.

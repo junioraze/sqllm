@@ -48,6 +48,7 @@ def initialize_model():
                         "Exemplo: WITH t1 AS (SELECT ... FROM ... WHERE ...), t2 AS (...). "
                         "Nunca inclua o SELECT final aqui. "
                         "Jamais gere comentários SQL (nem --, nem /* ... */) em nenhuma parte da query."
+                        "CTE's que tem dependencia de outras CTE's NUNCA devem consultar diretamente o BQ, elas devem ter no from a referencia a CTE da qual dependem."
                     )
                 },
                 "from_table": {
