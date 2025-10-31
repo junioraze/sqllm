@@ -24,7 +24,7 @@ from utils import (
 from config import STANDARD_ERROR_MESSAGE, PROJECT_ID, DATASET_ID, TABLES_CONFIG
 from logger import log_interaction
 from deepseek_theme import show_typing_animation, show_dynamic_processing_animation, get_step_display_info
-
+from prompt_rules import get_adaptation_prompt
 # Sistema RAG obrigatório
 from business_metadata_rag import get_business_rag_instance
 from ai_metrics import ai_metrics
@@ -338,25 +338,74 @@ class MessageHandler:
             raise Exception(f"Falha na reutilização de dados: {e}")
 
     def _process_new_query_flow(self, typing_placeholder, prompt: str) -> None:
-        """Etapa 2b: Processar nova consulta SQL usando sistema RAG otimizado"""
+        """Etapa 2b: Processar nova consulta SQL usando sistema RAG otimizado, com adaptação inteligente via Gemini"""
         self.flow_path.append("iniciando_nova_consulta_rag")
+
+        # Recupera histórico do usuário (última pergunta válida)
+        user_history = get_user_history(self.user_id)
+        last_question = None
+        if user_history and len(user_history) > 0:
+            # Garante que pega a última pergunta do usuário correto e que não deu erro
+            for interaction in user_history:
+                if interaction.get('status', 'OK') == 'OK' and interaction.get('question'):
+                    last_question = interaction.get('question')
+                    break
+
+        # Importa o prompt de adaptação do prompt_rules
         
-        # Usa sistema RAG diretamente
+        adaptation_prompt_template = get_adaptation_prompt()
+
+        # Monta prompt para Gemini adaptar/refinar
+        if last_question:
+            adaptation_prompt = adaptation_prompt_template.format(
+                last_question=last_question,
+                nova_pergunta=prompt
+            )
+            # Usa Gemini para adaptar/refinar
+            model = getattr(st.session_state, "model", None)
+            try:
+                response = model.generate_content(adaptation_prompt)
+                # Extrai texto da resposta
+                adapted_prompt = prompt  # fallback
+                if hasattr(response, 'candidates') and response.candidates:
+                    candidate = response.candidates[0]
+                    if hasattr(candidate, 'content') and candidate.content:
+                        if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                            part = candidate.content.parts[0]
+                            if hasattr(part, 'text') and part.text and part.text.strip():
+                                adapted_prompt = part.text.strip()
+                print(f"[DEBUG] Adapted query: {adapted_prompt}")
+            except Exception as e:
+                print(f"[ERROR] Falha ao adaptar prompt via Gemini: {e}")
+                adapted_prompt = prompt
+        else:
+            adapted_prompt = prompt
+
+        # Usa sistema RAG diretamente com a pergunta adaptada
         self._start_timing("processamento_rag", typing_placeholder)
         self.flow_path.append("usando_sistema_rag")
-        
-        # Processa com RAG (função retorna diretamente function_call ou text)
-        response = refine_with_gemini_rag(self.model, prompt, self.user_id)
-        # Se resposta for tuple, armazena tech_details para uso posterior
+        response = refine_with_gemini_rag(self.model, adapted_prompt, self.user_id)
         if isinstance(response, tuple) and len(response) == 2:
             _, tech_details = response
             self._last_rag_tech_details = tech_details
         else:
             self._last_rag_tech_details = None
         self._end_timing("processamento_rag")
-        
-        # Processa a resposta diretamente
-        self._handle_gemini_response(typing_placeholder, prompt, response)
+        self._handle_gemini_response(typing_placeholder, adapted_prompt, response)
+        # Salva a interação apenas se não houve erro
+        if self._last_rag_tech_details and self._last_rag_tech_details.get('response_type', '') != 'error':
+            from cache_db import save_interaction
+            save_interaction(
+                user_id=self.user_id,
+                question=adapted_prompt,
+                function_params=None,
+                query_sql=None,
+                raw_data=None,
+                raw_response=None,
+                refined_response=None,
+                tech_details=None,
+                status="OK"
+            )
 
     def _handle_gemini_response(self, typing_placeholder, prompt: str, response) -> None:
     # Loga o objeto de retorno e seu tipo para diagnóstico

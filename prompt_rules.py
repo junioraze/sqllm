@@ -10,7 +10,7 @@ REFINE_ANALYSIS_INSTRUCTION = """
 
 CHART_EXPORT_INSTRUCTIONS = """
 INSTRUÇÕES DE GRÁFICO/EXPORTAÇÃO:
-- Só gere visualização gráfica se explicitamente solicitado pelo usuário.
+- [EXTREMAMENTE IMPORTANTE] Só gere visualização gráfica se explicitamente solicitado pelo usuário no prompt.
 - O gráfico deve sempre usar o eixo X conforme definido no SELECT final (ex: campo_periodo, campo_eixo_x, campo_categoria).
 - Use o tipo de gráfico mais adequado ao contexto: barras para comparações, linhas para séries temporais, pizza para proporções, etc.
 - Sempre inclua legenda, título e rótulos claros nos eixos.
@@ -193,3 +193,18 @@ def get_sql_functioncall_instruction():
 
 def get_chart_export_instruction():
     return CHART_EXPORT_INSTRUCTIONS
+
+def get_adaptation_prompt():
+    """
+    Retorna o template de prompt para adaptação/refinamento de perguntas via Gemini.
+    Use .format(last_question=..., nova_pergunta=...) para preencher.
+    """
+    return (
+        "Histórico da última pergunta do usuário:\n"
+        '"{last_question}"\n\n'
+        "Nova mensagem do usuário:\n"
+        '"{nova_pergunta}"\n\n'
+        "Se a nova mensagem for uma continuidade, refinamento ou modificação da consulta anterior, gere uma nova pergunta completa e adaptada, mantendo o contexto e agregando o novo comando.\n"
+        "Se for um novo assunto, apenas devolva a nova mensagem sem adaptação.\n"
+        "A resposta deve ser apenas a pergunta final a ser processada pelo sistema."
+    )
