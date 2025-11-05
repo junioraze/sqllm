@@ -1153,9 +1153,9 @@ TEST_QUESTIONS = [
         "test_number": 2
     },
     {
-        "question": "Compare as vendas de veiculo entre os meses existentes de 2023 e 2024.?",
+        "question": "qual total de carros e motos vendidos em 2024 por uf?",
         "expected_table": "drvy_VeiculosVendas",
-        "keywords": ["veiculo", "mes", "venda"],
+        "keywords": ["veiculo", "total", "venda"],
         "test_number": 3
     },
     {

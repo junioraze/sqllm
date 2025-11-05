@@ -262,8 +262,7 @@ with st.container():
             
             # Exibe gráfico após grid
             if tech and tech.get("chart_info") and tech["chart_info"].get("fig"):
-                import plotly.graph_objs as go
-                fig = go.Figure(tech["chart_info"]["fig"])
+                fig = tech["chart_info"]["fig"]
                 st.markdown("<div style='margin-top:0.5em; margin-bottom:0.5em;'></div>", unsafe_allow_html=True)
                 # Garante que o gráfico ocupe todo o espaço horizontal do container
                 st.plotly_chart(

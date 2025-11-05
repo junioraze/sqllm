@@ -187,15 +187,60 @@ CONVERSÃO CORRETA DO DATA_DA_VENDA (STRING '2025-09-02 00:00:00'):
 - Depois: EXTRACT(MONTH FROM [resultado acima]) para apenas mês
 """
 
+        # Detecta se é pergunta sobre comparações (múltiplos períodos/categorias)
+        comparison_keywords = ['comparacao', 'comparação', 'vs', 'versus', 'diferenca', 'diferença', 'evolucao', 'evolução', 'por ano', 'por mes', 'por mês', 'por periodo', 'por período']
+        has_comparison = any(keyword in user_question.lower() for keyword in comparison_keywords)
+        
+        comparison_guidance = ""
+        if has_comparison:
+            comparison_guidance = """
+
+⚠️  FORMATO DE RESULTADO PARA COMPARAÇÕES (MUITO IMPORTANTE):
+Se o resultado precisa comparar múltiplos períodos/categorias:
+- NÃO use PIVOT (colunas como 'ano_2024', 'ano_2025')
+- USE formato "LONG" com colunas: [coluna_agrupamento] | [categoria/período] | [valor]
+
+EXEMPLO ERRADO (PIVOT):
+  mes | ano_2024 | ano_2025
+  1   | 3092     | 3827
+  2   | 3357     | 3585
+
+EXEMPLO CORRETO (LONG/MELTED):
+  mes | ano | quantidade
+  1   | 2024 | 3092
+  1   | 2025 | 3827
+  2   | 2024 | 3357
+  2   | 2025 | 3585
+
+O formato LONG permite:
+✅ Colorir linhas/barras por categoria/período
+✅ Comparação lado-a-lado no gráfico
+✅ Legendas automáticas
+❌ PIVOT não funciona bem com gráficos de comparação
+"""
+
         # Cria prompt otimizado com ambos os contextos
+        # 🔥 CRITICAL: Coloca REGRAS CRÍTICAS PRIMEIRO, antes da pergunta!
         optimized_prompt = f"""
+⛔⛔⛔ REGRAS CRÍTICAS OBRIGATÓRIAS (LEIA PRIMEIRO ANTES DE TUDO) ⛔⛔⛔
+
+Se a pergunta envolve FILTROS específicos de negócio (tipo de produto, tipo de contrato, etc):
+- SEMPRE aplique os filtros conforme as REGRAS CRÍTICAS na seção CONTEXTO DE NEGÓCIO
+- Exemplo: "Para filtro por tipo de veículo use Negocio_CC: '2R' para motos, '4R' para carros"
+- Se pergunta pede "carros" → DEVE gerar: WHERE Negocio_CC = '4R'
+- Se pergunta pede "motos" → DEVE gerar: WHERE Negocio_CC = '2R'
+- NUNCA retorne dados sem aplicar esses filtros - é erro crítico!
+
+================================================================================
+
+PERGUNTA DO USUÁRIO:
 {user_question}
 
 CONTEXTO DE NEGÓCIO (baseado na pergunta):
 {rag_context}
 
 ORIENTAÇÕES SQL/BIGQUERY (baseado no tipo de análise):
-{sql_guidance}{date_guidance}
+{sql_guidance}{date_guidance}{comparison_guidance}
 
 INSTRUÇÕES CRÍTICAS:
 
@@ -670,6 +715,37 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
                 df_data = df_full
                 print(f"[DEBUG] Colunas disponíveis: {list(df_data.columns)}")
                 
+                # 🔥 NOVO: Auto-detecta e converte PIVOT → MELTED ANTES de extrair parâmetros
+                import re
+                value_cols = [col for col in df_data.columns if col != x_axis and re.match(r'.*_\d{4}', col)]
+                if len(value_cols) > 1:
+                    print(f"🔄 [MELT] Detectado formato PIVOT com colunas: {value_cols}")
+                    print(f"   Convertendo de PIVOT para MELTED...")
+                    
+                    # Faz MELT
+                    df_melted = df_data.melt(
+                        id_vars=[x_axis],
+                        value_vars=value_cols,
+                        var_name='categoria',
+                        value_name='valor'
+                    )
+                    
+                    # Extrai o valor numérico da categoria (ex: "ano_2024" → "2024")
+                    df_melted['categoria'] = df_melted['categoria'].str.replace(r'^.*_', '', regex=True)
+                    
+                    print(f"✅ [MELT] Conversão bem-sucedida!")
+                    print(f"   Forma original: {df_data.shape} → Forma melted: {df_melted.shape}")
+                    print(f"   Novas colunas: {list(df_melted.columns)}")
+                    
+                    # Usa dados MELTED
+                    df_data = df_melted
+                    # Atualiza Y para 'valor' (coluna do MELT)
+                    y_axis = 'valor'
+                    # Se não tinha color, usa 'categoria' automaticamente
+                    if not color:
+                        color = 'categoria'
+                        print(f"✅ Auto-detectado 'categoria' como COLOR para dados MELTED")
+                
                 # Garante que os nomes das colunas não tenham espaços/quebras de linha
                 x_axis_clean = x_axis.strip() if isinstance(x_axis, str) else x_axis
                 y_axis_clean = y_axis.strip() if isinstance(y_axis, str) else y_axis
@@ -848,6 +924,7 @@ def should_reuse_data(model, current_prompt: str, user_history: list = None) -> 
             }
     
     return {"should_reuse": False, "reason": "Nova consulta necessária"}
+
 
 def generate_chart(data, chart_type, x_axis, y_axis, color=None):
     """

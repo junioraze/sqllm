@@ -1,4 +1,3 @@
-
 from google.cloud import bigquery
 from config import PROJECT_ID, DATASET_ID
 import ast
@@ -295,26 +294,26 @@ def build_query(params: dict) -> str:
             return match.group(1).replace('`', '').strip()
         return None
 
-    def clean_cte_block(cte: str) -> str:
-        """
-        Remove o SELECT final embutido do campo CTE, deixando só as definições das CTEs.
-        """
-        # Busca o fechamento da última CTE (último ')')
-        last_close = cte.rfind(')')
-        if last_close != -1:
-            after = cte[last_close+1:].strip()
-            if after.upper().startswith('SELECT'):
-                return cte[:last_close+1]
-        return cte
-
-    cte_cleaned = clean_cte_block(cte)
-    table_name_in_cte = extract_table_from_cte(cte_cleaned)
+    cte = corrected_params.get("cte", "")
+    table_name_in_cte = extract_table_from_cte(cte)
     if table_name_in_cte and table_name_in_cte in TABLES_CONFIG:
         correct_table_ref = f"{PROJECT_ID}.{DATASET_ID}.{table_name_in_cte}"
     else:
         correct_table_ref = f"{PROJECT_ID}.{DATASET_ID}.{list(TABLES_CONFIG.keys())[0]}"
 
-    # Processa campos temporais para order_by
+    bq_table_pattern = re.compile(rf"{PROJECT_ID}\.{DATASET_ID}\.(\w+)")
+    match_bq_table = bq_table_pattern.search(table_name_in_cte or "")
+    if match_bq_table:
+        table_base = match_bq_table.group(1)
+        if table_base in TABLES_CONFIG.keys():
+            expected_ref = f"{PROJECT_ID}.{DATASET_ID}.{table_base}"
+            # 🔥 FIX: Usar count=1 para substituir apenas o PRIMEIRO FROM (o principal)
+            # Evita substituir FROM dentro de EXTRACT(), CAST(), etc
+            cte = re.sub(rf"FROM\s+([`\w\.]+)", f"FROM `{expected_ref}`", cte, flags=re.IGNORECASE, count=1)
+            corrected_params["cte"] = cte
+
+    select = _parse_list_param(corrected_params.get("select", ["*"]), "select")
+    order_by = _parse_list_param(corrected_params.get("order_by"), "order_by")
     temporal_fields = [f for f in select if re.search(r"data|mes|ano|dia|hora", f, re.IGNORECASE)]
     temporal_fields = [f.split(" AS ")[0].strip() for f in temporal_fields]
     for tf in temporal_fields:
@@ -327,14 +326,40 @@ def build_query(params: dict) -> str:
     query = ""
     from_table = corrected_params.get('from_table', '').strip()
 
-    if cte_cleaned:
-        cte_clean = cte_cleaned.strip()
+    if cte:
+        cte_clean = cte.strip()
         if cte_clean.upper().startswith("WITH "):
             cte_clean = cte_clean[5:].lstrip()
-        with_clause = f"WITH {cte_clean}\n"
+        is_full_query = False
+        cte_upper = cte.strip().upper()
+        if cte_upper.startswith("WITH"):
+            par_count = 0
+            last_select_pos = -1
+            for i, char in enumerate(cte):
+                if char == '(': par_count += 1
+                elif char == ')': par_count -= 1
+                if cte[i:i+6].upper() == 'SELECT' and par_count == 0:
+                    last_select_pos = i
+            if last_select_pos != -1:
+                is_full_query = True
+        if is_full_query:
+            query_clean = re.sub(r'[\n\t]+', ' ', cte)
+            query_clean = re.sub(r' +', ' ', query_clean)
+            order_by = _parse_list_param(corrected_params.get("order_by"), "order_by")
+            if order_by:
+                order_by_clause = f" ORDER BY {', '.join(order_by)}"
+                if "ORDER BY" not in query_clean.upper():
+                    query_clean = query_clean.strip()
+                    query_clean += order_by_clause
+            print(f"DEBUG - Query construída:\n{query_clean}")
+            return query_clean.strip()
+        else:
+            with_clause = f"WITH {cte_clean}\n"
 
+        # NOVO: se from_table contém expressão complexa (JOIN, ON, etc), não modificar
         if not from_table:
             raise ValueError("O parâmetro 'from_table' deve ser o alias de uma CTE gerada pelo modelo ou expressão de JOIN. Nenhum valor foi fornecido.")
+        # Se for JOIN ou expressão complexa, usa como está
         if any(x in from_table.upper() for x in ["JOIN", " ON ", " AS "]):
             pass  # usa como está
         elif from_table in TABLES_CONFIG.keys():
@@ -346,29 +371,22 @@ def build_query(params: dict) -> str:
             from_table = correct_table_ref
 
     where = f" WHERE {corrected_params['where']}" if corrected_params.get("where") else ""
-    
-    # Processa SELECT final (remove funções de agregação se tiver alias)
     select_final = []
     for s in select:
         if re.search(r"(SUM|COUNT|AVG|MIN|MAX)\s*\(", s, re.IGNORECASE):
             m = re.search(r"AS\s+(\w+)$", s, re.IGNORECASE)
             if m:
                 select_final.append(m.group(1).strip())
-            else:
-                select_final.append(s)
         else:
             select_final.append(s)
-    
-    # Garante order_by com campos temporais
     if not order_by:
         temporal_fields = [f for f in select_final if re.search(r"data|mes|ano|dia|hora", f, re.IGNORECASE)]
         temporal_fields = [f.split(" AS ")[0].strip() for f in temporal_fields]
         for tf in temporal_fields:
             if tf not in order_by:
                 order_by.append(tf)
-    
     order_by_sql = f" ORDER BY {', '.join(order_by)}" if order_by else ""
-    limit = ""
+    limit = f" LIMIT {int(corrected_params['limit'])}" if corrected_params.get("limit") else ""
 
     where_clause = where
     if corrected_params.get("where") and "ranking <= " in corrected_params["where"]:
@@ -379,12 +397,12 @@ def build_query(params: dict) -> str:
         else:
             where_clause = f" WHERE {corrected_params['ranking_filter']}"
 
-    # Monta query principal
-    query = f"{with_clause}SELECT {', '.join(select_final)} FROM {from_table}{where_clause}{order_by_sql}"
+    # Monta query principal, usando from_table como está (pode ser JOIN)
+    query = f"{with_clause}SELECT {', '.join(select_final)} FROM {from_table}{where_clause}{order_by_sql}{limit}"
 
     query_clean = re.sub(r'[\n\t]+', ' ', query)
     query_clean = re.sub(r' +', ' ', query_clean)
 
     query_no_comments = remove_sql_comments(query_clean.strip())
-    print(f"DEBUG - Query construída (montagem padrão):\n{query_no_comments}")
+    print(f"DEBUG - Query construída:\n{query_no_comments}")
     return query_no_comments

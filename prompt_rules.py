@@ -351,6 +351,42 @@ DESCRIÇÃO DA TABELA:
                     for example in field_conv['examples']:
                         instruction += f"      - {example}\n"
         
+        # 🔥 NOVO: SEÇÃO DE REGRAS CRÍTICAS DE NEGÓCIO
+        business_rules = table_config.get('business_rules', {})
+        critical_rules = business_rules.get('critical_rules', [])
+        query_rules = business_rules.get('query_rules', [])
+        
+        if critical_rules:
+            instruction += f"""
+
+🎯 REGRAS CRÍTICAS DE NEGÓCIO (DEVE SEGUIR SEMPRE):
+
+"""
+            for rule in critical_rules:
+                rule_text = rule.get('rule', '')
+                rule_context = rule.get('context', '')
+                rule_priority = rule.get('priority', 'media')
+                
+                priority_icon = "🔴" if rule_priority == "alta" else "🟡"
+                instruction += f"""
+{priority_icon} {rule_text}
+   CONTEXTO: {rule_context}
+"""
+        
+        if query_rules:
+            instruction += f"""
+
+📋 REGRAS DE QUERY (PADRÕES RECOMENDADOS):
+
+"""
+            for rule in query_rules:
+                rule_text = rule.get('rule', '')
+                rule_context = rule.get('context', '')
+                instruction += f"""
+• {rule_text}
+  EXEMPLO: {rule_context}
+"""
+
         # Instrução crítica
         instruction += f"""
 
