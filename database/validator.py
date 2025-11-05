@@ -13,8 +13,8 @@ import re
 import json
 from typing import Dict, Tuple, Optional
 import google.generativeai as genai
-from config import MODEL_NAME
-from prompt_rules import get_sql_refinement_instruction
+from config.settings import MODEL_NAME
+from llm_handlers.prompt_rules import get_sql_refinement_instruction
 
 class QueryValidator:
     """Valida e refina queries SQL com retry automático"""

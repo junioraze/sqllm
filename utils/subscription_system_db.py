@@ -5,9 +5,9 @@ import streamlit as st
 import json
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
-from user_database import db
-from auth_system import get_current_user
-from deepseek_theme import fix_alert_visibility
+from utils.user_database import db
+from utils.auth_system import get_current_user
+from ui.deepseek_theme import fix_alert_visibility
 
 class SubscriptionSystem:
     

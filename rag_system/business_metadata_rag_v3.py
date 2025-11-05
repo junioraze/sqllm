@@ -46,7 +46,7 @@ class BusinessMetadataRAGv3:
     """RAG especializado com Multi-Factor Table Scoring"""
     
     def __init__(self, config_path: str = "tables_config.json"):
-        self.config_path = config_path
+        self.config_path = self._find_config_path(config_path)
         self.config = self._load_config()
         self.table_metadata = self._extract_metadata()
         
@@ -57,6 +57,29 @@ class BusinessMetadataRAGv3:
         else:
             print("[RAG v3] Aviso: sentence-transformers não disponível, usando fallback")
             self.embedder = None
+    
+    def _find_config_path(self, config_path: str) -> str:
+        """Procura config em múltiplas localizações (multi-path lookup)"""
+        possible_paths = [
+            config_path,  # Path fornecido
+            os.path.abspath(config_path),  # Caminho absoluto do fornecido
+            os.path.join(os.path.dirname(__file__), "..", "config", "tables_config.json"),  # config/
+            os.path.join(os.path.dirname(__file__), "..", "tables_config.json"),  # raiz/
+            os.path.join(os.getcwd(), "config", "tables_config.json"),  # cwd/config/
+            os.path.join(os.getcwd(), "tables_config.json"),  # cwd/
+            "tables_config.json",  # cwd fallback
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                print(f"[RAG v3] Config encontrado: {os.path.abspath(path)}")
+                return os.path.abspath(path)
+        
+        # Se nenhum encontrado, retornar o primeiro (vai falhar com mensagem clara)
+        print(f"[RAG v3] ⚠️ Nenhum config encontrado nas localizações:")
+        for path in possible_paths:
+            print(f"          - {os.path.abspath(path)}")
+        return os.path.abspath(config_path)
     
     def _load_config(self) -> Dict[str, Any]:
         """Carrega arquivo de configuração"""

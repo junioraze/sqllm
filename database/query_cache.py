@@ -1,9 +1,14 @@
 import duckdb
 import json
+import os
 from datetime import datetime
 
 # test_rag.py
-from business_metadata_rag import BusinessMetadataRAGV2
+from rag_system.business_metadata_rag import BusinessMetadataRAGV2
+
+# Definir caminho do cache DB relativo ao projeto
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CACHE_DB_PATH = os.path.join(PROJECT_ROOT, "cache.db")
 
 def test_rag_system():
     rag = BusinessMetadataRAGV2()
@@ -37,7 +42,9 @@ def query_cache():
     """Executa consultas úteis no cache DuckDB"""
     
     try:
-        conn = duckdb.connect('cache.db')
+        # Garantir que o diretório existe
+        os.makedirs(os.path.dirname(CACHE_DB_PATH), exist_ok=True)
+        conn = duckdb.connect(CACHE_DB_PATH)
         
         print("=" * 60)
         print("🔍 CONSULTA DO CACHE DUCKDB")

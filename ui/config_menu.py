@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Sistema de Configurações - APENAS FUNÇÕES AUXILIARES"""
 import streamlit as st
-from deepseek_theme import apply_selected_theme
+from ui.deepseek_theme import apply_selected_theme
 
 def apply_user_preferences():
     """Aplica preferências do usuário - SIMPLES"""
@@ -15,8 +15,8 @@ def initialize_user_config():
 
 def check_feature_access(feature_name):
     """Verifica acesso a funcionalidades premium"""
-    from subscription_system_db import SubscriptionSystem
-    from auth_system import get_current_user
+    from utils.subscription_system_db import SubscriptionSystem
+    from utils.auth_system import get_current_user
     
     current_user = get_current_user()
     if current_user:

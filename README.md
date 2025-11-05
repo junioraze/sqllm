@@ -1,309 +1,518 @@
-# SQLLM — Sistema de Análise de Dados com IA
+# 🤖 GL SQL LM - Sistema de Análise de Dados com IA
 
-Sistema avançado que converte linguagem natural em consultas SQL usando IA (Google Gemini) com interface web Streamlit. O sistema é modular, seguro e altamente configurável para diferentes domínios de negócio.
----
-
-## 📁 Arquivos de Configuração do Sistema
-
-### 1. `config.py`
-Arquivo central de configuração. Carrega variáveis do `.env`, configurações do cliente (`client_config.json`) e das tabelas (`tables_config.json`). Define mensagens padrão de erro e funções utilitárias para modo empresarial.
-
-### 2. `client_config.json`
-Personaliza a interface, exemplos, domínio de negócio e limitações do sistema para cada cliente. Define título, subtítulo, exemplos de perguntas, restrições e mensagem padrão de erro.
-
-### 3. `credentials.json`
-Arquivo de autenticação simples para homologação. Utilizado apenas para testes locais, contém dados mínimos para login ou integração básica. Não possui mecanismos avançados de segurança e não deve ser usado em produção. Nunca versionar em repositórios públicos.
-
-### 4. `payment_config.json`
-Configura credenciais, URLs, parâmetros de pagamento e planos de assinatura. Utilizado para integração com MercadoPago, controle de limites e funcionalidades de cada plano.
-
-### 5. `requirements.txt`
-Lista todas as dependências Python necessárias para rodar o sistema.
+Sistema inteligente de análise de dados que utiliza Large Language Models (Gemini) e Retrieval-Augmented Generation (RAG) para converter perguntas em linguagem natural em queries SQL complexas, executadas automaticamente no Google BigQuery.
 
 ---
 
-## 📁 Arquivos de Contexto para o Modelo (Geração de SQL)
+## 📋 Estrutura do Projeto
 
-### 1. `sql_patterns.json`
-Arquivo central que define todos os padrões de queries SQL que o sistema pode gerar. Cada padrão é um objeto com:
-- `description`: Explica o objetivo e as regras do padrão.
-- `keywords`: Palavras-chave que ativam o padrão.
-- `pattern_type`: Tipo do padrão (ex: cte_group_comparison, cte_simple_count, cte_ranking, etc).
-- `variables`: Variáveis a serem substituídas no template.
-- `sql_template`: Template SQL parametrizado (pode ser omitido se o padrão for mais complexo).
-- `example`: Exemplo concreto de uso.
-- `function_call_example`: Estrutura de chamada do padrão pelo sistema (campos, CTEs, filtros, ordenação).
-- `use_cases`: Casos de uso típicos.
+```
+gl_sqllm/
+├── config/                      # 🔧 Configurações e schemas
+│   ├── settings.py             # Carregamento de configs (multi-path lookup)
+│   ├── google_auth.py          # Autenticação Google Cloud (NOVO)
+│   ├── tables_config.json      # Metadados das tabelas (USER-SPECIFIC)
+│   ├── client_config.json      # Configuração de cliente (USER-SPECIFIC)
+│   ├── credentials.json        # Credenciais autenticação (USER-SPECIFIC)
+│   ├── payment_config.json     # Configuração de pagamentos (USER-SPECIFIC)
+│   ├── rate_limit_state.json   # Estado dos limites (USER-SPECIFIC)
+│   ├── sql_patterns.json       # Padrões SQL reutilizáveis
+│   └── __init__.py
+│
+├── database/                    # 💾 Camada de persistência
+│   ├── query_builder.py        # Construção e validação de queries
+│   ├── query_cache.py          # Cache de queries executadas
+│   ├── validator.py            # Validação de SQL com Gemini
+│   ├── sql_validator_v2.py     # Validador SQL v2
+│   └── __init__.py
+│
+├── llm_handlers/                # 🤖 Integração com modelos de IA
+│   ├── gemini_handler.py       # Interface com Gemini API
+│   ├── prompt_rules.py         # Regras de prompts e templates
+│   └── __init__.py
+│
+├── rag_system/                  # 🧠 Sistema de Retrieval-Augmented Generation
+│   ├── manager.py              # Gerenciador singleton de RAG (NOVO)
+│   ├── business_metadata_rag_v3.py    # RAG v3: Multi-factor scoring
+│   ├── business_metadata_rag.py       # RAG v2: Fallback
+│   ├── sql_pattern_rag.py             # RAG para padrões SQL
+│   ├── sql_pattern_rag_v2.py          # RAG v2 para padrões
+│   └── __init__.py
+│
+├── ui/                          # 🎨 Interface com Streamlit
+│   ├── main.py                 # App principal
+│   ├── deepseek_theme.py       # Temas e estilização
+│   ├── config_menu.py          # Menu de configuração
+│   └── __init__.py
+│
+├── utils/                       # 🛠️ Utilitários gerais
+│   ├── cache.py                # Cache de interações (DuckDB)
+│   ├── logger.py               # Logging estruturado
+│   ├── metrics.py              # Coleta de métricas
+│   ├── rate_limit.py           # Sistema de rate limiting
+│   ├── auth_system.py          # Autenticação de usuários
+│   ├── image_utils.py          # Utilidades de imagens
+│   ├── helpers.py              # Funções auxiliares
+│   └── __init__.py
+│
+├── generators/                  # 🔨 Ferramentas de geração
+│   ├── table_config_generator.py   # Gerador automático de schemas
+│   ├── cli.py                      # Interface CLI
+│   ├── __main__.py                 # Entry point
+│   └── __init__.py
+│
+├── tests/                       # 🧪 Testes
+│   ├── test_backend_flow.py    # Testes end-to-end do backend
+│   └── __init__.py
+│
+├── docs/                        # 📖 Documentação
+│   ├── logtable.sql            # Schema de log no BigQuery
+│   └── __init__.py
+│
+├── etc/                         # 🎨 Recursos estáticos
+│   ├── planos.py               # Configuração de planos
+│   └── __init__.py
+│
+├── .streamlit/                  # ⚙️ Configuração do Streamlit
+│   └── config.toml
+│
+├── requirements.txt            # Dependências Python
+├── .gitignore                  # Arquivos ignorados pelo Git
+├── .env                        # Variáveis de ambiente (USER-SPECIFIC)
+├── gl_sqllm.service            # Serviço systemd
+└── README.md                   # Este arquivo
+```
 
-**Exemplo real de padrão:**
+---
+
+## 🚀 Instalação e Configuração
+
+### Pré-requisitos
+
+- **Python 3.11+**
+- **Git**
+- **Google Cloud Project** com BigQuery habilitado
+- **Gemini API Key**
+- **Linux/macOS** (ou WSL no Windows)
+
+### Passo 1: Clonar o Repositório
+
+```bash
+git clone https://github.com/junioraze/sqllm.git
+cd gl_sqllm
+```
+
+### Passo 2: Criar Ambiente Virtual
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate  # No Windows: .venv\Scripts\activate
+```
+
+### Passo 3: Instalar Dependências
+
+```bash
+pip install -r requirements.txt
+```
+
+### Passo 4: Configurar Credenciais (⚠️ IMPORTANTE)
+
+Você precisa criar os seguintes arquivos em `config/`:
+
+#### 1. **gl.json** - Credenciais Google Cloud
+Baixe do Google Cloud Console:
+- Vá para: Cloud Console → Service Accounts
+- Crie uma conta de serviço com permissões para BigQuery
+- Baixe o JSON e salve em `config/gl.json`
+
 ```json
 {
-  "description": "Comparação entre grupos/categorias usando CTEs...",
-  "keywords": ["maior que", "superou", "comparar X com Y", ...],
-  "pattern_type": "cte_group_comparison",
-  "variables": ["period_field", "group_field", "value_field", "table", "filters", "group_x", "group_y"],
-  "function_call_example": {
-    "select": ["mes", "valor_{city1}", "valor_{city2}"],
-    "cte": "WITH cte_limpeza AS (...) ...",
-    "from_table": "cte_comparacao",
-    "order_by": ["mes"]
-  },
-  "use_cases": ["em quais meses as vendas de Crato superaram Salvador"]
+  "type": "service_account",
+  "project_id": "seu-projeto-id",
+  "private_key_id": "...",
+  "private_key": "...",
+  "client_email": "...",
+  "client_id": "...",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "...",
+  "client_x509_cert_url": "..."
 }
 ```
 
-**Boas práticas ao editar:**
-- Sempre explique claramente a lógica e as restrições do padrão.
-- Inclua exemplos reais e casos de uso.
-- Mantenha o template SQL aderente às melhores práticas do BigQuery.
-- Atualize as palavras-chave para garantir boa cobertura sem ambiguidade.
-- Siga as regras de CTE e nomenclatura descritas em `bigquery_best_practices` dentro do próprio arquivo.
-- Nunca insira comentários no SQL gerado.
-
-**Lista dos principais padrões disponíveis:**
-- `group_comparison`: Comparação entre grupos/categorias usando CTEs.
-- `simple_count_cte`: Contagem simples de registros com CTE de limpeza.
-- `top_n_ranking_with_cte`: Ranking top N com CTE de agregação e filtro.
-- `temporal_comparison_cte`: Comparação temporal multi-período.
-- `percentage_breakdown_cte`: Análise de participação percentual.
-- `growth_analysis_cte`: Análise de crescimento ano a ano.
-- `text_search_complex_cte`: Busca textual complexa com múltiplos filtros.
-- `regional_analysis_cte`: Análise regional combinando vendas e métricas socioeconômicas.
-- `monthly_trend_detailed_cte`: Tendências mensais detalhadas.
-- `customer_analysis_cte`: Segmentação e análise de clientes.
-
-**Regras críticas e melhores práticas (extraídas do próprio arquivo):**
-- SEMPRE use CTEs para organizar queries complexas, cada CTE com responsabilidade única.
-- CTE de limpeza: apenas conversões (CAST, EXTRACT, UPPER, etc).
-- CTE de agregação: SUM, COUNT, AVG com GROUP BY.
-- CTE de análise: cálculos finais, rankings, comparações.
-- NUNCA misture transformação e análise na mesma CTE.
-- Use nomes descritivos para CTEs.
-- Para buscas textuais: UPPER(campo) LIKE UPPER('%valor%').
-- Para rankings: crie o campo analítico (ROW_NUMBER, RANK, etc) na CTE e filtre no SELECT final usando WHERE ranking <= N.
-- Prefira CTEs sobre subqueries aninhadas para melhor legibilidade.
-- Nunca insira comentários (-- ou /**/ ou qualquer que seja) no código gerado.
-
-**Como editar/adicionar padrões:**
-- Siga o modelo dos padrões existentes.
-- Explique claramente o objetivo, regras e variáveis.
-- Teste as alterações executando perguntas relacionadas na interface do sistema.
-
----
-
-### 2. `tables_config.json`
-Arquivo que descreve as tabelas do banco de dados, campos, tipos, regras de negócio e exemplos de queries. Cada tabela possui:
-- `metadata`: Informações como nome, descrição, domínio, última atualização e referência BigQuery.
-- `business_rules`: Regras críticas e de consulta (ex: sempre usar QTE para contagem, nunca usar LIMIT com QUALIFY).
-- `fields`: Campos divididos em temporais, dimensionais, métricas e filtros, com tipos, descrições, exemplos e padrões de busca.
-- `usage_examples`: Exemplos reais de perguntas e queries SQL.
-
-**Exemplo real de estrutura:**
+#### 2. **credentials.json** - Autenticação de Usuários
 ```json
 {
-  "metadata": {
-    "table_id": "ecPedidosVenda",
-    "bigquery_table": "bigquery-for-ml.apecommerce.ecPedidosVenda",
-    "description": "Tabela principal de pedidos de e-commerce...",
-    "domain": "ecommerce_vendas",
-    "last_updated": "2025-10-09"
-  },
-  "business_rules": {
-    "critical_rules": [ ... ],
-    "query_rules": [ ... ]
-  },
-  "fields": {
-    "temporal_fields": [ ... ],
-    "dimension_fields": [ ... ],
-    "metric_fields": [ ... ],
-    "filter_fields": [ ... ]
-  },
-  "usage_examples": [ ... ]
+  "login": "seu_usuario@email.com",
+  "password": "sua_senha_criptografada"
 }
 ```
 
-**Boas práticas ao editar:**
-- Atualize descrições e regras sempre que houver mudança de negócio.
-- Inclua exemplos de queries para cada novo campo ou métrica.
-- Siga o padrão de nomenclatura e tipos para garantir integração com o sistema.
-- Use sempre os padrões de busca e conversão recomendados (ex: UPPER + LIKE para texto, SAFE_CAST para datas).
+#### 3. **client_config.json** - Configuração do Cliente
 
-**Exemplo de uso real:**
-Pergunta: "Top 5 lojas por volume de vendas"
+Define o título, domínio de negócio, limites e exemplos do sistema. **Campos suportados:**
+
 ```json
 {
-  "select": ["pedido_sg_loja", "total_sales_volume"],
-  "order_by": ["total_sales_volume DESC"],
-  "limit": 5,
-  "cte": "WITH cte_agregacao AS (SELECT pedido_sg_loja, SUM(valorLInhaPedidoNF) AS total_sales_volume FROM ecPedidosVenda GROUP BY pedido_sg_loja)",
-  "from_table": "cte_agregacao"
+  "app_title": "Sistema de Análise de Dados",
+  "app_subtitle": "Assistente de IA para análise de dados",
+  "business_domain": "dados",
+  "data_source": "tabelas configuradas",
+  "rate_limit_description": "requisições",
+  "examples": [
+    "- Qual foi o volume de vendas no último mês?",
+    "- Me mostre a distribuição por região",
+    "- Quais são os produtos mais vendidos?"
+  ],
+  "limitations": {
+    "data_access": "Este assistente só pode consultar as tabelas configuradas no sistema.",
+    "cross_reference": "Não é possível acessar ou cruzar dados de outras tabelas ou fontes externas.",
+    "single_query": "Apenas uma consulta por vez é permitida.",
+    "temporal_comparisons": "Para comparações temporais, utilize perguntas claras.",
+    "model_understanding": "O modelo pode não compreender perguntas muito vagas.",
+    "data_freshness": "Resultados são baseados nos dados mais recentes disponíveis."
+  },
+  "error_message": "Não foi possível processar sua solicitação no momento. Nossa equipe técnica foi notificada e está analisando a situação. Tente reformular sua pergunta ou entre em contato conosco."
 }
 ```
-SQL gerado:
-```sql
-WITH cte_agregacao AS (SELECT pedido_sg_loja, SUM(valorLInhaPedidoNF) AS total_sales_volume FROM ecPedidosVenda GROUP BY pedido_sg_loja)
-SELECT pedido_sg_loja, total_sales_volume FROM cte_agregacao ORDER BY total_sales_volume DESC LIMIT 5;
+
+**Uso nos arquivos:**
+- `app_title`: Exibido no título da página (Streamlit)
+- `app_subtitle`: Subtítulo da aplicação
+- `business_domain`: Contexto do negócio (e.g., "vendas", "RH", "financeiro")
+- `examples`: Exemplos de perguntas mostrados na tela inicial
+- `limitations`: Restrições do sistema (exibidas no help)
+- `error_message`: Mensagem padrão para erros (nunca mostrar stack trace ao usuário)
+
+#### 4. **payment_config.json** - Configuração de Pagamentos (Opcional)
+```json
+{
+  "enabled": false,
+  "stripe_key": "sua_chave_stripe"
+}
 ```
 
----
+#### 5. **.env** - Variáveis de Ambiente
+```env
+ENVIRONMENT=prod
+GEMINI_API_KEY=sua_chave_gemini_aqui
+PROJECT_ID=seu-projeto-gcp
+DATASET_ID=seu_dataset
+```
 
-## 📁 Regras, Práticas e Fluxos do Sistema
+### Passo 5: Configurar tables_config.json
 
-- Todas as queries geradas seguem as regras de CTE, nomenclatura e boas práticas do BigQuery.
-- O sistema utiliza RAG duplo: Business RAG (metadados e regras de negócio) e SQL Pattern RAG (templates SQL e melhores práticas).
-- Visualização automática: Geração de gráficos a partir dos resultados, conforme regras do arquivo `sql_patterns.json`.
-- Cache multinível: DuckDB e memória para performance.
-- Autenticação, rate limiting e compliance.
-
----
-
-## 📚 Templates e Guia para Arquivos de Configuração
-
-### 1. Como criar e manter o `tables_config.json`
-
-Este arquivo define o esquema, regras e exemplos de uso para cada tabela do projeto. Siga o template abaixo para criar novas tabelas ou editar existentes:
+Este arquivo define os metadados das suas tabelas. Exemplo:
 
 ```json
 {
-  "nomeDaTabela": {
+  "drvy_VeiculosVendas": {
     "metadata": {
-      "table_id": "nomeDaTabela",
-      "bigquery_table": "projeto.dataset.nomeDaTabela",
-      "description": "Descrição detalhada da tabela.",
-      "domain": "dominio_negocio",
-      "last_updated": "YYYY-MM-DD"
-    },
-    "business_rules": {
-      "critical_rules": [
-        {
-          "rule": "Regra crítica",
-          "priority": "alta",
-          "context": "Contexto de aplicação"
-        }
-      ],
-      "query_rules": [
-        {
-          "rule": "Regra de query",
-          "context": "Contexto de aplicação"
-        }
-      ]
+      "table_id": "drvy_VeiculosVendas",
+      "bigquery_table": "project.dataset.drvy_VeiculosVendas",
+      "description": "Tabela de vendas de veículos",
+      "domain": "vendas",
+      "keywords": ["venda", "veículo", "carro", "moto"]
     },
     "fields": {
-      "temporal_fields": [
-        {
-          "name": "campo_data",
-          "type": "DATE",
-          "description": "Data do evento",
-          "conversion": "SAFE_CAST(campo_data AS DATE)"
-        }
-      ],
-      "dimension_fields": [
-        {
-          "name": "campo_categoria",
-          "type": "STRING",
-          "description": "Categoria do evento"
-        }
-      ],
-      "metric_fields": [
-        {
-          "name": "campo_valor",
-          "type": "FLOAT64",
-          "description": "Valor do evento",
-          "aggregations": ["SUM", "AVG"]
-        }
-      ],
-      "filter_fields": [
-        {
-          "name": "campo_filtro",
-          "type": "STRING",
-          "description": "Filtro de evento"
-        }
-      ]
+      "temporal_fields": [{"name": "data_venda", "type": "DATE"}],
+      "dimension_fields": [{"name": "tipo_veiculo", "type": "STRING"}],
+      "metric_fields": [{"name": "valor_venda", "type": "FLOAT64"}]
     },
-    "usage_examples": [
-      {
-        "question": "Exemplo de pergunta",
-        "function_call_example": {
-          "select": ["campo_categoria", "campo_valor"],
-          "order_by": ["campo_valor DESC"],
-          "limit": 5,
-          "cte": "WITH cte_agregacao AS (SELECT campo_categoria, SUM(campo_valor) AS campo_valor FROM nomeDaTabela GROUP BY campo_categoria)",
-          "from_table": "cte_agregacao"
-        },
-        "sql_example": "WITH cte_agregacao AS (SELECT campo_categoria, SUM(campo_valor) AS campo_valor FROM nomeDaTabela GROUP BY campo_categoria) SELECT campo_categoria, campo_valor FROM cte_agregacao ORDER BY campo_valor DESC LIMIT 5;"
-      }
-    ]
-  }
-}
-```
-
-**Boas práticas:**
-- Use apenas nomes de campos presentes no BigQuery.
-- Documente regras críticas e exemplos reais.
-- Atualize `last_updated` sempre que alterar a estrutura.
-- Para múltiplas tabelas, adicione novas chaves no topo do JSON.
-
----
-
-### 2. Como criar e manter o `sql_patterns.json`
-
-Este arquivo centraliza padrões de queries SQL, templates, exemplos e regras para orientar o modelo Gemini e o pipeline.
-
-```json
-{
-  "sql_patterns": {
-    "simple_count_cte": {
-      "description": "Contagem simples usando CTE.",
-      "keywords": ["contar", "quantidade"],
-      "pattern_type": "cte_simple_count",
-      "variables": ["table", "filters", "count_field"],
-      "sql_template": "WITH cte_limpeza AS (SELECT {count_field} FROM {table} WHERE {filters}) SELECT COUNT({count_field}) AS total_registros FROM cte_limpeza",
-      "example": "WITH cte_limpeza AS (SELECT id FROM tabela WHERE status = 'ATIVO') SELECT COUNT(id) AS total_registros FROM cte_limpeza",
-      "function_call_example": {
-        "select": ["total_registros"],
-        "cte": "WITH cte_limpeza AS (SELECT id FROM tabela WHERE status = 'ATIVO')",
-        "from_table": "cte_limpeza",
-        "order_by": []
-      },
-      "use_cases": ["contar registros ativos"]
+    "business_rules": {
+      "critical_rules": ["Sempre filtrar por ano >= 2023"]
     }
-  },
-  "bigquery_best_practices": {
-    "cte_guidelines": [
-      "SEMPRE use CTEs para organizar queries complexas.",
-      "Nunca insira comentários no código gerado."
-    ],
-    "performance_tips": [
-      "Prefira CTEs sobre subqueries aninhadas.",
-      "Use UPPER(campo) LIKE UPPER('%valor%') para buscas case-insensitive."
-    ],
-    "common_mistakes": [
-      "Misturar transformação e análise na mesma CTE.",
-      "Esquecer GROUP BY quando usar agregações."
-    ],
-    "critical_rules": [
-      "TOP 5 como padrão quando não especificado número no ranking.",
-      "Nunca insira comentários no código gerado."
-    ]
-  },
-  "chart": {
-    "description": "Geração de gráfico a partir do resultado da consulta SQL.",
-    "template": "GRAPH-TYPE: {graph_type} | X-AXIS: {x_axis} | Y-AXIS: {y_axis} | COLOR: {color}",
-    "rules": [
-      "Para comparações temporais: GRAPH-TYPE: line | X-AXIS: periodo | Y-AXIS: valor | COLOR: serie"
-    ]
   }
 }
 ```
 
-**Boas práticas:**
-- Adicione novos padrões conforme surgirem novos tipos de perguntas.
-- Inclua exemplos reais e templates parametrizados.
-- Documente variáveis e casos de uso para cada padrão.
-- Atualize as seções de boas práticas e erros comuns conforme o projeto evolui.
-- Nunca insira comentários SQL nos templates.
+---
+
+## 🔐 Segurança e .gitignore
+
+### Arquivos que NÃO devem ser versionados (USER-SPECIFIC)
+
+Os seguintes arquivos contêm informações sensíveis e **NUNCA** devem ser commitados:
+
+```
+gl.json                    # Google Cloud credentials (CRÍTICO)
+client_config.json        # Client configuration
+credentials.json          # User credentials
+payment_config.json       # Payment configuration
+rate_limit_state.json     # Runtime state
+cache.meta.json          # Cache metadata
+sql_patterns_cache.*     # Cache files
+ai_metrics.db            # Metrics database
+users_new.db*            # User database
+.env                     # Environment variables
+.streamlit/secrets.toml  # Streamlit secrets
+```
+
+Todos esses arquivos já estão em `.gitignore`. Se você adicionar algum arquivo novo de configuração, adicione também ao `.gitignore`:
+
+```bash
+echo "meu_novo_arquivo.json" >> .gitignore
+git add .gitignore
+git commit -m "Add new config file to gitignore"
+```
 
 ---
 
-> **Referências:**
-> - As seções 1 e 2 deste README agora apontam para os templates e instruções acima. Sempre consulte esta seção ao criar ou alterar os arquivos `tables_config.json` e `sql_patterns.json`.
+## 🎯 Como Usar
+
+### Modo Desenvolvimento
+
+```bash
+# Com auto-reload de RAG ao editar tables_config.json
+export ENVIRONMENT=dev
+streamlit run ui/main.py
+```
+
+### Modo Produção
+
+```bash
+# Otimizado para performance
+export ENVIRONMENT=prod
+streamlit run ui/main.py --server.port 8052 --server.address 0.0.0.0
+```
+
+### Executar Testes
+
+```bash
+# Teste end-to-end do backend
+python tests/test_backend_flow.py
+
+# Teste específico
+python tests/test_backend_flow.py --test-id 1
+```
+
+### Como Serviço Systemd
+
+```bash
+# Copiar arquivo de serviço
+sudo cp gl_sqllm.service /etc/systemd/system/
+
+# Ativar serviço
+sudo systemctl enable gl_sqllm.service
+sudo systemctl start gl_sqllm.service
+
+# Verificar status
+sudo systemctl status gl_sqllm.service
+
+# Ver logs
+sudo journalctl -u gl_sqllm.service -f
+```
+
+---
+
+## 🔧 Dependências Principais
+
+### Dependências de Produção
+
+```
+streamlit               # Framework web
+google-cloud-bigquery   # Acesso ao BigQuery
+google-generativeai     # API Gemini
+pandas                  # Manipulação de dados
+plotly                  # Visualizações interativas
+duckdb                  # Cache local
+sentence-transformers   # Embeddings para RAG
+annoy                   # Índice vetorial
+```
+
+Para versões específicas, veja `requirements.txt`:
+
+```bash
+cat requirements.txt
+```
+
+---
+
+## 🧠 Sistema RAG (Retrieval-Augmented Generation)
+
+### Como Funciona
+
+1. **RAG Manager** (`rag_system/manager.py`) - Singleton centralizado
+   - Carrega `tables_config.json` com multi-path lookup
+   - Inicializa RAG v3 com validação de embeddings
+   - Em dev mode: detecta mudanças e recarrega automaticamente
+
+2. **RAG v3** (`rag_system/business_metadata_rag_v3.py`) - Multi-factor scoring
+   - Scoring em 5 dimensões: semântica, keywords, domínio, temporal, métricas
+   - Pré-computa embeddings com `sentence-transformers`
+   - Identifica melhor tabela para pergunta do usuário
+
+3. **Fallback RAG v2** - Para compatibilidade
+   - Índice Annoy com cache
+   - Busca vetorial rápida
+
+### Auto-reload em Desenvolvimento
+
+```bash
+export ENVIRONMENT=dev
+# Editar config/tables_config.json → RAG recarrega automaticamente
+vim config/tables_config.json
+```
+
+---
+
+## 📊 Google Cloud Setup
+
+### Criar Projeto GCP
+
+1. Acesse [Google Cloud Console](https://console.cloud.google.com)
+2. Crie novo projeto
+3. Habilite APIs:
+   - BigQuery API
+   - Generative AI API
+4. Crie Service Account com permissões BigQuery
+5. Baixe JSON e salve como `config/gl.json`
+
+### Estrutura BigQuery Esperada
+
+```sql
+-- Dataset contendo suas tabelas
+CREATE DATASET IF NOT EXISTS seu_dataset;
+
+-- Exemplo de tabela
+CREATE TABLE seu_dataset.drvy_VeiculosVendas (
+  data_venda DATE,
+  tipo_veiculo STRING,
+  valor_venda FLOAT64,
+  ...
+);
+
+-- Tabela de logs do sistema (automática)
+CREATE TABLE seu_dataset.sqllm_logs (
+  timestamp TIMESTAMP,
+  user_id STRING,
+  pergunta STRING,
+  sql_gerada STRING,
+  resultado JSON,
+  ...
+);
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### Erro: `DefaultCredentialsError: File gl.json was not found`
+
+**Solução:** 
+- Verificar se `config/gl.json` existe
+- Verificar permissões: `ls -la config/gl.json`
+- Se não existir, baixe do Google Cloud Console
+
+```bash
+ls -la config/gl.json
+```
+
+### Erro: `Config não encontrado: tables_config.json`
+
+**Solução:**
+- Arquivo deve estar em `config/tables_config.json`
+- Sistema procura em múltiplas localizações automaticamente
+- Verificar path: `cat config/tables_config.json | head`
+
+### RAG não inicializa
+
+**Solução:**
+- Verificar `config/tables_config.json` é JSON válido
+- Verificar `sentence-transformers` instalado: `pip list | grep sentence`
+- Ver logs: `tail -50 /var/log/syslog`
+
+### Cache.db permission denied
+
+**Solução:**
+```bash
+# Corrigir permissões
+sudo chown $USER:$USER cache.db
+chmod 666 cache.db
+```
+
+---
+
+## 📈 Arquitetura de Fluxo
+
+```
+PERGUNTA EM PORTUGUÊS
+        ↓
+    RAG SYSTEM
+        ├─ RAG v3 (identificar tabela)
+        └─ RAG Padrões (padrões SQL)
+        ↓
+  GEMINI API
+        ├─ Extrai parâmetros
+        └─ Gera função SQL
+        ↓
+  BUILD QUERY
+        ├─ Valida parâmetros
+        └─ Monta SQL final
+        ↓
+ BIGQUERY EXECUTE
+        ├─ Executa query
+        └─ Retorna resultados
+        ↓
+    ANÁLISE GEMINI
+        ├─ Interpreta dados
+        ├─ Gera gráficos
+        └─ Resume insights
+        ↓
+   RESPOSTA AO USUÁRIO
+```
+
+---
+
+## 🔍 Multi-path Lookup Pattern
+
+Sistema de busca de arquivos em múltiplas localizações (implementado em todos os módulos):
+
+```python
+possible_paths = [
+    "config/arquivo.json",           # Primeira escolha (recomendado)
+    "../config/arquivo.json",        # Relativa ao módulo
+    "arquivo.json",                  # Raiz/cwd
+]
+
+for path in possible_paths:
+    if os.path.exists(path):
+        return path
+```
+
+Garante funcionamento independente do local de execução!
+
+---
+
+## 📞 Suporte
+
+- **Issues:** GitHub Issues
+- **Documentação:** Este README
+- **Logs:** `sudo journalctl -u gl_sqllm.service -f`
+- **Teste direto:** `python tests/test_backend_flow.py`
+
+---
+
+## 📝 Licença
+
+Projeto proprietário. Todos os direitos reservados.
+
+---
+
+## ✨ Features Principais
+
+- ✅ Conversão automática NL → SQL via Gemini
+- ✅ RAG inteligente para seleção de tabelas
+- ✅ Cache distribuído com DuckDB
+- ✅ Validação de queries com Gemini
+- ✅ Análise de resultados automática
+- ✅ Geração de gráficos interativos
+- ✅ Sistema de rate limiting
+- ✅ Autenticação de usuários
+- ✅ Logging completo em BigQuery
+- ✅ Deploy como serviço systemd
+
+---
+
+**Última atualização:** Novembro 2025
+**Versão:** 3.0 (Reorganizada com multi-path lookup)

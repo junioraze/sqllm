@@ -21,12 +21,15 @@ from datetime import datetime
 from typing import Dict, List, Any, Tuple
 from pathlib import Path
 
+# Adicionar raiz do projeto ao path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # Imports do projeto
-from gemini_handler import initialize_model, refine_with_gemini_rag
-from business_metadata_rag import BusinessMetadataRAGV2
-from sql_pattern_rag import SQLPatternRAG
-from database import build_query, execute_query
-from query_validator import QueryValidator
+from llm_handlers.gemini_handler import initialize_model, refine_with_gemini_rag
+from rag_system.business_metadata_rag import BusinessMetadataRAGV2
+from rag_system.sql_pattern_rag import SQLPatternRAG
+from database.query_builder import build_query, execute_query
+from database.validator import QueryValidator
 
 
 class TestResultsManager:
@@ -245,7 +248,7 @@ class BackendFlowTester:
                     print(f"   🔄 RAG acertou a tabela! Tentando refinar SQL com Gemini...")
                     
                     try:
-                        from gemini_handler import refine_sql_with_error
+                        from llm_handlers.gemini_handler import refine_sql_with_error
                         
                         refined_result, refined_tech_details = refine_sql_with_error(
                             model=self.gemini_model,
@@ -331,8 +334,8 @@ class BackendFlowTester:
     def _get_business_context(self, question: str = "") -> str:
         """Recupera contexto de negócio via RAG v3 (prioriza tabela mais relevante)"""
         try:
-            from config import TABLES_CONFIG
-            from business_metadata_rag_v3 import BusinessMetadataRAGv3
+            from config.settings import TABLES_CONFIG
+            from rag_system.business_metadata_rag_v3 import BusinessMetadataRAGv3
             
             # USAR RAG v3 para identificar melhores tabelas
             try:
@@ -404,7 +407,26 @@ Domínio: {domain}
         """Recupera padrões SQL disponíveis"""
         try:
             import json
-            with open("sql_patterns.json", "r", encoding="utf-8") as f:
+            import os
+            
+            # Procurar sql_patterns.json em várias localizações
+            possible_paths = [
+                os.path.join(os.path.dirname(__file__), "..", "config", "sql_patterns.json"),
+                os.path.join(os.path.dirname(__file__), "..", "sql_patterns.json"),
+                "sql_patterns.json",
+            ]
+            
+            patterns_file = None
+            for path in possible_paths:
+                if os.path.exists(path):
+                    patterns_file = path
+                    break
+            
+            if not patterns_file:
+                print("⚠️  sql_patterns.json não encontrado")
+                return ""
+            
+            with open(patterns_file, "r", encoding="utf-8") as f:
                 patterns = json.load(f)
             
             patterns_list = patterns.get("sql_patterns", {})

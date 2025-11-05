@@ -3,11 +3,11 @@
 
 import streamlit as st
 from typing import Dict, List
-from subscription_system_db import SubscriptionSystem
-from auth_system import get_current_user, logout_user
-from user_database import db
-from deepseek_theme import create_usage_indicator
-from config_menu import render_config_menu
+from utils.subscription_system_db import SubscriptionSystem
+from utils.auth_system import get_current_user, logout_user
+from utils.user_database import db
+from ui.deepseek_theme import create_usage_indicator
+from ui.config_menu import render_config_menu
 
 def render_payment_ui():
     """Interface principal de pagamentos"""

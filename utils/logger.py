@@ -1,9 +1,12 @@
+# 🔐 Configurar Google Auth PRIMEIRO (antes de google.cloud)
+from config import google_auth
+
 from google.cloud import bigquery
 from datetime import datetime
 import uuid
 import json
 import os
-from config import DATASET_LOG_ID, CLIENTE_NAME, MAX_RATE_LIMIT
+from config.settings import DATASET_LOG_ID, CLIENTE_NAME, MAX_RATE_LIMIT
 
 client = bigquery.Client()
 

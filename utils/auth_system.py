@@ -6,9 +6,9 @@ import re
 import json
 import os
 from typing import Tuple, Dict, Optional
-from user_database import db
-from deepseek_theme import get_login_theme, get_enhanced_cards_theme, get_expert_login_theme
-from config import is_empresarial_mode
+from utils.user_database import db
+from ui.deepseek_theme import get_login_theme, get_enhanced_cards_theme, get_expert_login_theme
+from config.settings import is_empresarial_mode
 
 class AuthSystem:
     @staticmethod
@@ -74,7 +74,24 @@ def ensure_empresarial_user():
         return
         
     try:
-        with open("credentials.json", "r", encoding="utf-8") as f:
+        # Procurar credentials.json em várias localizações
+        possible_paths = [
+            os.path.join(os.path.dirname(__file__), "..", "config", "credentials.json"),
+            os.path.join(os.path.dirname(__file__), "..", "credentials.json"),
+            "credentials.json",
+        ]
+        
+        credentials_file = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                credentials_file = path
+                break
+        
+        if not credentials_file:
+            print("⚠️ Arquivo credentials.json não encontrado")
+            return
+        
+        with open(credentials_file, "r", encoding="utf-8") as f:
             credentials = json.load(f)
         
         email = credentials.get("login", "admin@empresa.com")
@@ -119,7 +136,7 @@ def render_auth_system():
     st.markdown(get_enhanced_cards_theme(), unsafe_allow_html=True)
     
     # CORREÇÃO: Aplica cores de input específica para data-baseweb="input"
-    from deepseek_theme import fix_baseweb_input_dark_theme
+    from ui.deepseek_theme import fix_baseweb_input_dark_theme
     fix_baseweb_input_dark_theme()
     
     # CSS para o novo layout 1-1 + 222
@@ -182,9 +199,19 @@ def render_auth_system():
         # MODO EMPRESARIAL - Layout 1-1 + 222
         col1, col2 = st.columns(2)
         with col1:
-            from image_utils import get_base64_image
-            logo_path = os.path.join(os.path.dirname(__file__), "etc", "desc_logo.jpg")
-            logo_b64 = get_base64_image(logo_path)
+            from utils.image_utils import get_base64_image
+            # Multi-path lookup para desc_logo.jpg
+            possible_paths = [
+                os.path.join(os.path.dirname(__file__), "..", "etc", "desc_logo.jpg"),  # Relativa a utils/
+                os.path.join(os.getcwd(), "etc", "desc_logo.jpg"),                        # Raiz do projeto
+                "etc/desc_logo.jpg",                                                       # Cwd
+            ]
+            logo_path = None
+            for path in possible_paths:
+                if os.path.exists(path):
+                    logo_path = path
+                    break
+            logo_b64 = get_base64_image(logo_path) if logo_path else None
             if logo_b64:
                 logo_html = f"<img src='data:image/jpeg;base64,{logo_b64}' alt='ViaQuest' class='login-logo-img'/>"
             else:
@@ -227,8 +254,8 @@ def render_auth_system():
         
         with col1:
             # Coluna 1 - Logo (mesma altura do quadro)
-            from image_utils import get_base64_image
-            logo_path = os.path.join(os.path.dirname(__file__), "etc", "desc_logo.jpg")
+            from utils.image_utils import get_base64_image
+            logo_path = os.path.join(os.path.dirname(__file__), "..", "etc", "desc_logo.jpg")
             logo_b64 = get_base64_image(logo_path)
             
             if logo_b64:

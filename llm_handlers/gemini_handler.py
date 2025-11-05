@@ -5,21 +5,21 @@ Gemini Handler Limpo com Sistema RAG Puro
 
 import google.generativeai as genai
 from google.generativeai.types import Tool, FunctionDeclaration
-from config import MODEL_NAME, TABLES_CONFIG, PROJECT_ID, DATASET_ID
+from config.settings import MODEL_NAME, TABLES_CONFIG, PROJECT_ID, DATASET_ID
 from utils.metrics import TokenUsageMetric
 import re
 import json
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from utils import create_styled_download_button, generate_excel_bytes, generate_csv_bytes, dict_to_markdown_table, show_aggrid_table
+from utils.helpers import create_styled_download_button, generate_excel_bytes, generate_csv_bytes, dict_to_markdown_table, show_aggrid_table
 from datetime import datetime
 import time
 import os
 import streamlit as st
 # Sistema RAG obrigatório
 from rag_system.business_metadata_rag import get_business_rag_instance, get_optimized_business_context
-from utils.metrics import metrics_collector as ai_metrics
+from utils.metrics import ai_metrics
 from llm_handlers.prompt_rules import get_sql_functioncall_instruction, build_tables_fields_instruction, get_refine_analysis_instruction
 
 def initialize_model():
@@ -144,7 +144,7 @@ def refine_with_gemini_rag(model, user_question: str, user_id: str = "default"):
             rag_context = '\n'.join([json.dumps(item, ensure_ascii=False, indent=2) if isinstance(item, dict) else str(item) for item in rag_context])
 
         # Obtém orientações SQL específicas
-        from sql_pattern_rag import get_sql_guidance_for_query
+        from rag_system.sql_pattern_rag import get_sql_guidance_for_query
         sql_guidance = get_sql_guidance_for_query(user_question)
 
         # Detecta se a pergunta envolve datas/períodos
@@ -395,7 +395,6 @@ def refine_sql_with_error(model, user_question: str, error_message: str, previou
 REFINAMENTO DE QUERY SQL COM ERRO
 
 PERGUNTA ORIGINAL:
-```
 {user_question}
 
 TABELA IDENTIFICADA (CORRETA):
@@ -870,12 +869,31 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
 
 def initialize_rag_system():
     """
-    Inicializa sistema RAG
+    Inicializa sistema RAG usando o novo RAG Manager
     """
-    print("🔄 Inicializando sistema RAG...")
-    from rag_system.business_metadata_rag import get_business_rag_instance
-    get_business_rag_instance()
-    print("✅ Sistema RAG inicializado com sucesso!")
+    try:
+        print("\n" + "="*70)
+        print("[Gemini Handler] � Inicializando sistema RAG...")
+        print("="*70)
+        
+        from rag_system.manager import get_rag_manager
+        manager = get_rag_manager()
+        
+        status = manager.get_status()
+        print(f"[Gemini Handler] Status RAG: {json.dumps(status, indent=2, ensure_ascii=False)}")
+        
+        if status["initialized"]:
+            print(f"[Gemini Handler] ✅ Sistema RAG inicializado com sucesso!")
+            print(f"[Gemini Handler] ✅ Tabelas: {status['tables_count']}")
+            print(f"[Gemini Handler] ✅ Embeddings: {status['embeddings_count']}")
+        else:
+            raise RuntimeError("RAG não foi inicializado corretamente")
+        
+        print("="*70 + "\n")
+        
+    except Exception as e:
+        print(f"[Gemini Handler] ❌ ERRO ao inicializar RAG: {e}")
+        raise
 
 def should_reuse_data(current_prompt, user_history):
     """

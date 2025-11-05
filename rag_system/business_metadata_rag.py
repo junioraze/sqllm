@@ -46,8 +46,23 @@ class BusinessMetadataRAGV2:
     """Sistema RAG melhorado para metadados de negócio"""
     
     def __init__(self, config_path: str = "tables_config.json", cache_db_path: str = "cache.db"):
+        # Procurar tables_config.json em várias localizações
+        possible_paths = [
+            os.path.join(os.path.dirname(__file__), "..", "config", "tables_config.json"),
+            os.path.join(os.path.dirname(__file__), "..", "tables_config.json"),
+            "tables_config.json",
+        ]
+        
         self.config_path = config_path
-        self.cache_db_path = cache_db_path
+        for path in possible_paths:
+            if os.path.exists(path):
+                self.config_path = path
+                break
+        
+        # Usar caminho relativo ao projeto para cache
+        PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.cache_db_path = os.path.join(PROJECT_ROOT, cache_db_path)
+        
         self.embedding_model = "all-MiniLM-L6-v2"
         self._init_cache_db()
         self._load_sentence_transformer()
@@ -67,7 +82,6 @@ class BusinessMetadataRAGV2:
     def _init_cache_db(self):
         """Inicializa Annoy index para embeddings e carrega metadados"""
         from annoy import AnnoyIndex
-        import os, json
         self.annoy_dim = 384  # all-MiniLM-L6-v2
         self.annoy_index_path = self.cache_db_path.replace('.db', '.ann')
         self.annoy_meta_path = self.cache_db_path.replace('.db', '.meta.json')

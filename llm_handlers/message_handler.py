@@ -11,23 +11,23 @@ from typing import Tuple, Dict, Optional, Any
 from datetime import datetime
 
 
-from cache_db import get_user_history, get_interaction_full_data, save_interaction, log_error
-from gemini_handler import should_reuse_data, refine_with_gemini_rag, initialize_rag_system
-from database import build_query, execute_query
-from utils import (
+from utils.cache import get_user_history, get_interaction_full_data, save_interaction, log_error
+from llm_handlers.gemini_handler import should_reuse_data, refine_with_gemini_rag, initialize_rag_system
+from database.query_builder import build_query, execute_query
+from utils.helpers import (
     safe_serialize_gemini_params, 
     safe_serialize_data, 
     safe_serialize_tech_details,
     format_text_with_ia_highlighting,
     slugfy_response
 )
-from config import STANDARD_ERROR_MESSAGE, PROJECT_ID, DATASET_ID, TABLES_CONFIG
-from logger import log_interaction
-from deepseek_theme import show_typing_animation, show_dynamic_processing_animation, get_step_display_info
-from prompt_rules import get_adaptation_prompt
+from config.settings import STANDARD_ERROR_MESSAGE, PROJECT_ID, DATASET_ID, TABLES_CONFIG
+from utils.logger import log_interaction
+from ui.deepseek_theme import show_typing_animation, show_dynamic_processing_animation, get_step_display_info
+from llm_handlers.prompt_rules import get_adaptation_prompt
 # Sistema RAG obrigatório
-from business_metadata_rag import get_business_rag_instance
-from ai_metrics import ai_metrics
+from rag_system.business_metadata_rag import get_business_rag_instance
+from utils.metrics import ai_metrics
 
 
 class MessageHandler:
@@ -394,7 +394,7 @@ class MessageHandler:
         self._handle_gemini_response(typing_placeholder, adapted_prompt, response)
         # Salva a interação apenas se não houve erro
         if self._last_rag_tech_details and self._last_rag_tech_details.get('response_type', '') != 'error':
-            from cache_db import save_interaction
+            from utils.cache import save_interaction
             save_interaction(
                 user_id=self.user_id,
                 question=adapted_prompt,
@@ -543,7 +543,7 @@ class MessageHandler:
             self._start_timing("refinamento_gemini_final", typing_placeholder)
 
 
-            from gemini_handler import analyze_data_with_gemini
+            from llm_handlers.gemini_handler import analyze_data_with_gemini
 
             # Salva prompt/token info do refine_with_gemini_rag (se disponível)
             initial_prompt_info = {}
@@ -613,7 +613,7 @@ class MessageHandler:
         self._start_timing("refinamento_erro_gemini", typing_placeholder)
         
         try:
-            from gemini_handler import refine_sql_with_error
+            from llm_handlers.gemini_handler import refine_sql_with_error
             
             # Tenta refinar - passa prompt original, erro, e SQL que falhou
             refined_result, refined_tech_details = refine_sql_with_error(
@@ -633,7 +633,7 @@ class MessageHandler:
                 # Tenta executar a SQL refinada
                 self._start_timing("execucao_sql_refinada", typing_placeholder)
                 try:
-                    from database import build_query, execute_query
+                    from database.query_builder import build_query, execute_query
                     
                     refined_query = build_query(refined_result)
                     raw_data_retry = execute_query(refined_query)
@@ -648,7 +648,7 @@ class MessageHandler:
                         serializable_data = safe_serialize_data(raw_data_retry)
                         
                         # Refina resposta com Gemini
-                        from gemini_handler import analyze_data_with_gemini
+                        from llm_handlers.gemini_handler import analyze_data_with_gemini
                         refined_response, tech_details = analyze_data_with_gemini(
                             prompt=prompt,
                             data=serializable_data,

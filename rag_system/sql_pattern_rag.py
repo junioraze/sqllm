@@ -2,6 +2,7 @@
 import json
 import hashlib
 import duckdb
+import os
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 from dataclasses import dataclass, asdict
@@ -28,8 +29,23 @@ class SQLPatternRAG:
     """Sistema RAG para padrões SQL/BigQuery"""
     
     def __init__(self, patterns_file: str = "sql_patterns.json", cache_db: str = "sql_patterns_cache.db"):
+        # Procurar patterns_file em várias localizações
+        possible_paths = [
+            os.path.join(os.path.dirname(__file__), "..", "config", "sql_patterns.json"),
+            os.path.join(os.path.dirname(__file__), "..", "sql_patterns.json"),
+            "sql_patterns.json",
+        ]
+        
         self.patterns_file = patterns_file
-        self.cache_db_path = cache_db
+        for path in possible_paths:
+            if os.path.exists(path):
+                self.patterns_file = path
+                break
+        
+        # Usar caminho relativo ao projeto para cache
+        PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.cache_db_path = os.path.join(PROJECT_ROOT, cache_db)
+        
         self.patterns: Dict[str, SQLPattern] = {}
         self.annoy_dim = 384  # all-MiniLM-L6-v2
         self.annoy_index_path = self.cache_db_path.replace('.db', '.ann')
@@ -40,7 +56,6 @@ class SQLPatternRAG:
     def load_patterns(self):
         """Carrega padrões SQL do arquivo JSON e inicializa Annoy do zero, sempre que o sistema inicia. Persiste metadados."""
         try:
-            import os, json
             from annoy import AnnoyIndex
             import numpy as np
             self.annoy_meta_path = self.cache_db_path.replace('.db', '.meta.json')

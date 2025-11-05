@@ -1,9 +1,26 @@
 import json
+import os
 from datetime import datetime
-from user_database import db
+from utils.user_database import db
+
+# Procurar credentials.json em várias localizações
+possible_paths = [
+    os.path.join(os.path.dirname(__file__), "..", "config", "credentials.json"),
+    os.path.join(os.path.dirname(__file__), "..", "credentials.json"),
+    "credentials.json",
+]
+
+credentials_file = None
+for path in possible_paths:
+    if os.path.exists(path):
+        credentials_file = path
+        break
+
+if not credentials_file:
+    raise FileNotFoundError("Arquivo credentials.json não encontrado em nenhuma localização")
 
 # Lê o usuário do arquivo credentials.json
-with open('credentials.json', 'r', encoding='utf-8') as f:
+with open(credentials_file, 'r', encoding='utf-8') as f:
     creds = json.load(f)
 
 user_email = creds['login']

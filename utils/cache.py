@@ -1,13 +1,18 @@
 import duckdb
 import json
 import uuid
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 
-DB_PATH = "cache.db"
+# Definir DB_PATH relativo ao diretório do projeto
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(PROJECT_ROOT, "cache.db")
 
 def get_connection():
     """Retorna conexão com o DuckDB"""
+    # Garantir que o diretório existe
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     return duckdb.connect(DB_PATH)
 
 def init_cache_db():
@@ -342,4 +347,9 @@ def get_recent_errors(user_id: str, hours: int = 24) -> List[Dict]:
         return errors
 
 # Inicializa o banco ao importar o módulo
-init_cache_db()
+try:
+    init_cache_db()
+    print(f"[Cache] ✅ Banco inicializado: {DB_PATH}")
+except Exception as e:
+    print(f"[Cache] ⚠️  Erro ao inicializar banco: {e}")
+    raise
