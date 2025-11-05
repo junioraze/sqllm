@@ -1,3 +1,4 @@
+test_results
 *.json
 .ruff_cache
 # Ignore Python cache files

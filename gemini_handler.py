@@ -114,8 +114,27 @@ def refine_with_gemini_rag(model, user_question: str, user_id: str = "default"):
     # Inicia sessão de métricas
     session_id = ai_metrics.start_session(user_id)
     try:
-        # Obtém contexto otimizado do RAG de negócios
-        rag_context = get_optimized_business_context(user_question)
+        # Obtém contexto otimizado do RAG de negócios usando v3 (melhor)
+        try:
+            from business_metadata_rag_v3 import BusinessMetadataRAGv3
+            rag_v3 = BusinessMetadataRAGv3()
+            best_table = rag_v3.get_best_table(user_question, debug=False)
+            top_tables = rag_v3.get_top_3_tables(user_question, debug=False)
+            
+            if best_table:
+                rag_context = f"📊 Tabela identificada: {best_table}\nTabelas alternativas: {', '.join(top_tables)}\n\nUtilize a tabela identificada para construir a consulta SQL."
+                
+                # 🔥 NOVO: Injeta LISTA DE CAMPOS VÁLIDOS para a tabela identificada
+                from prompt_rules import build_field_whitelist_instruction
+                field_instruction = build_field_whitelist_instruction(best_table)
+                rag_context += "\n\n" + field_instruction
+            else:
+                # Fallback para v2
+                rag_context = get_optimized_business_context(user_question)
+        except Exception as e:
+            print(f"[RAG v3] Erro, usando fallback v2: {e}")
+            rag_context = get_optimized_business_context(user_question)
+        
         # Garante que o contexto seja sempre string (nunca dict)
         if isinstance(rag_context, dict):
             import json
@@ -128,6 +147,46 @@ def refine_with_gemini_rag(model, user_question: str, user_id: str = "default"):
         from sql_pattern_rag import get_sql_guidance_for_query
         sql_guidance = get_sql_guidance_for_query(user_question)
 
+        # Detecta se a pergunta envolve datas/períodos
+        date_keywords = ['mes', 'mês', 'ano', 'ano', 'data', 'data', 'período', 'periodo', 'trimestre', 'semana', 'dia', 'mensal', 'anual', 'diário', 'diario', 'por mês', 'por mes']
+        has_date_aggregation = any(keyword in user_question.lower() for keyword in date_keywords)
+        
+        # Cria instrução de formatação de datas se necessário
+        date_guidance = ""
+        if has_date_aggregation:
+            date_guidance = """
+
+INSTRUÇÕES CRÍTICAS PARA FORMATAÇÃO DE DATAS:
+⚠️  SEMPRE filtrar NULL antes de formatar:
+  1. Na CTE de limpeza, converta: CAST(SAFE.PARSE_TIMESTAMP('%Y-%m-%d %H:%M:%S', Data_da_Venda) AS DATE) AS data_venda
+  2. Adicione: WHERE data_venda IS NOT NULL
+  3. Só depois formate com FORMAT_DATE() ou EXTRACT()
+  
+EXEMPLOS CORRETOS:
+✅ WITH cte_limpeza AS (
+     SELECT CAST(SAFE.PARSE_TIMESTAMP('%Y-%m-%d %H:%M:%S', Data_da_Venda) AS DATE) AS data_venda
+     FROM tabela
+     WHERE Data_da_Venda IS NOT NULL
+   ),
+   cte_agregacao AS (
+     SELECT FORMAT_DATE('%Y-%m', data_venda) AS mes_ano, COUNT(*) AS total
+     FROM cte_limpeza
+     GROUP BY mes_ano
+   )
+   SELECT mes_ano, total FROM cte_agregacao ORDER BY mes_ano
+
+❌ ERRADO - gera linha com 'None':
+   SELECT FORMAT_DATE('%Y-%m', Data_da_Venda) AS mes_ano
+   FROM tabela
+   GROUP BY mes_ano  -- Agrupa NULLs também! Não converte timestamp string primeiro!
+
+CONVERSÃO CORRETA DO DATA_DA_VENDA (STRING '2025-09-02 00:00:00'):
+- Sempre usar: CAST(SAFE.PARSE_TIMESTAMP('%Y-%m-%d %H:%M:%S', Data_da_Venda) AS DATE)
+- Depois: FORMAT_DATE('%Y-%m', [resultado acima]) para mês-ano
+- Depois: EXTRACT(YEAR FROM [resultado acima]) para apenas ano
+- Depois: EXTRACT(MONTH FROM [resultado acima]) para apenas mês
+"""
+
         # Cria prompt otimizado com ambos os contextos
         optimized_prompt = f"""
 {user_question}
@@ -136,7 +195,7 @@ CONTEXTO DE NEGÓCIO (baseado na pergunta):
 {rag_context}
 
 ORIENTAÇÕES SQL/BIGQUERY (baseado no tipo de análise):
-{sql_guidance}
+{sql_guidance}{date_guidance}
 
 INSTRUÇÕES CRÍTICAS:
 
@@ -262,6 +321,113 @@ REGRAS PARA COMPARAÇÕES TEMPORAIS:
         return f"Erro interno: {str(e)}", None
     finally:
         ai_metrics.end_session(session_id)
+
+def refine_sql_with_error(model, user_question: str, error_message: str, previous_sql: str, table_name: str, best_table_score: float = None) -> tuple:
+    """
+    Refina SQL quando há erro na execução, mesmo após RAG ter acertado a tabela.
+    
+    Args:
+        model: Modelo Gemini inicializado
+        user_question: Pergunta original do usuário
+        error_message: Mensagem de erro do BigQuery
+        previous_sql: SQL que falhou
+        table_name: Tabela identificada pelo RAG (acertada)
+        best_table_score: Score do RAG para a tabela (para diagnosticar)
+    
+    Returns:
+        tuple: (response_dict, tech_details)
+    """
+    print(f"\n🔁 [REFINAMENTO] RAG acertou tabela '{table_name}' mas SQL falhou")
+    print(f"❌ Erro: {error_message}")
+    print(f"🔄 Tentando refinar SQL com Gemini...")
+    
+    try:
+        from prompt_rules import build_field_whitelist_instruction
+        field_instruction = build_field_whitelist_instruction(table_name)
+        
+        # Injeta instruções de refinamento
+        refine_prompt = f"""
+REFINAMENTO DE QUERY SQL COM ERRO
+
+PERGUNTA ORIGINAL:
+{user_question}
+
+TABELA IDENTIFICADA (CORRETA):
+{table_name}
+
+SQL QUE FALHOU:
+{previous_sql}
+
+ERRO BIGQUERY:
+{error_message}
+
+INSTRUÇÕES DE REFINAMENTO:
+1. A tabela foi CORRETAMENTE identificada como '{table_name}'
+2. O erro SQL sugere que a estrutura da query está incorreta
+3. Revise especialmente:
+   - Sintaxe de PIVOT (se usado)
+   - Alias de colunas em PIVOT
+   - Sintaxe de função window
+   - Tipos de conversão de data
+4. Gere uma SQL ALTERNATIVA que evite o erro
+
+{field_instruction}
+
+GERE UMA NOVA PROPOSTA DE SQL/CTE CORRIGIDA:
+"""
+        
+        # Chama Gemini para refinamento
+        response = model.generate_content(refine_prompt)
+        
+        if hasattr(response, 'candidates') and response.candidates:
+            candidate = response.candidates[0]
+            if hasattr(candidate, 'content') and candidate.content:
+                if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                    part = candidate.content.parts[0]
+                    if hasattr(part, 'text') and part.text:
+                        response_text = part.text.strip()
+                        
+                        # Tenta extrair JSON se o modelo retornar function_call
+                        try:
+                            import json
+                            cleaned = response_text.strip()
+                            if cleaned.startswith('```json'):
+                                cleaned = cleaned[len('```json'):].strip()
+                            if cleaned.startswith('```'):
+                                cleaned = cleaned[len('```'):].strip()
+                            if cleaned.endswith('```'):
+                                cleaned = cleaned[:-3].strip()
+                            
+                            parsed = json.loads(cleaned)
+                            if isinstance(parsed, dict):
+                                print(f"✅ Gemini retornou JSON refinado")
+                                tech_details = {
+                                    "refine_from_error": True,
+                                    "original_error": error_message,
+                                    "failed_sql": previous_sql,
+                                    "table_name": table_name,
+                                    "rag_table_score": best_table_score
+                                }
+                                return parsed, tech_details
+                        except:
+                            pass
+                        
+                        print(f"✅ Gemini retornou resposta de refinamento (texto)")
+                        tech_details = {
+                            "refine_from_error": True,
+                            "original_error": error_message,
+                            "failed_sql": previous_sql,
+                            "table_name": table_name,
+                            "rag_table_score": best_table_score
+                        }
+                        return {"refinement_suggestion": response_text}, tech_details
+        
+        print(f"⚠️  Gemini não retornou resposta válida para refinamento")
+        return None, None
+        
+    except Exception as e:
+        print(f"❌ Erro ao refinar SQL: {e}")
+        return None, None
 
 def refine_with_gemini(model, user_question: str, user_id: str = "default"):
     """
@@ -459,24 +625,33 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
                 # Parse mais robusto dos parâmetros
                 graph_type = graph_part.split("|")[0].strip().lower()
                 
+                # Validação do tipo de gráfico
+                valid_types = ['bar', 'barra', 'line', 'linha', 'scatter', 'dispersao']
+                if graph_type not in valid_types:
+                    print(f"⚠️  Tipo de gráfico inválido: '{graph_type}'. Usando 'bar' como padrão.")
+                    graph_type = 'bar'
+                
                 # Extração segura do X-AXIS
                 if "X-AXIS:" in graph_part:
                     x_axis = graph_part.split("X-AXIS:")[1].split("|")[0].strip()
                     # Remove escapes indevidos (ex: mod\_ds -> mod_ds)
-                    x_axis = x_axis.replace('\\_', '_')
+                    x_axis = x_axis.replace('\\_', '_').strip()
                 else:
-                    print("X-AXIS nao encontrado na instrucao do grafico")
-                    return response_text, None
+                    print("⚠️  X-AXIS não encontrado. Usando primeira coluna como X.")
+                    x_axis = list(df_full.columns)[0] if len(df_full.columns) > 0 else None
+                    if not x_axis:
+                        return response_text, None
                     
-                print(f"[DEBUG] Tentando gerar gráfico com colunas: {list(df_full.columns)}")
                 # Extração segura do Y-AXIS  
                 if "Y-AXIS:" in graph_part:
                     y_axis = graph_part.split("Y-AXIS:")[1].split("|")[0].strip()
                     # Remove escapes indevidos (ex: total\_vendas -> total_vendas)
-                    y_axis = y_axis.replace('\\_', '_')
+                    y_axis = y_axis.replace('\\_', '_').strip()
                 else:
-                    print("Y-AXIS nao encontrado na instrucao do grafico")
-                    return response_text, None
+                    print("⚠️  Y-AXIS não encontrado. Usando segunda coluna como Y.")
+                    y_axis = list(df_full.columns)[1] if len(df_full.columns) > 1 else None
+                    if not y_axis:
+                        return response_text, None
                     
                 # Extração segura do COLOR (opcional)
                 color = None
@@ -488,39 +663,72 @@ def analyze_data_with_gemini(prompt: str, data: list, function_params: dict = No
                     # Se color está vazio ou é "None", remove
                     if not color or color.lower() == "none" or color == "":
                         color = None
-                    else:
-                        print(f"COLOR detectado: '{color}'")
 
-                print(f"Parametros do grafico - Tipo: {graph_type}, X: {x_axis}, Y: {y_axis}, Color: {color}")
+                print(f"📊 Parâmetros do gráfico - Tipo: {graph_type}, X: {x_axis}, Y: {y_axis}, Color: {color}")
                 
                 # Converte dados para DataFrame
                 df_data = df_full
-                print(f"[DEBUG] Tentando gerar gráfico com colunas: {list(df_data.columns)}")
-                # Aplica fuzzy matching para garantir que os nomes de colunas existem no DataFrame
+                print(f"[DEBUG] Colunas disponíveis: {list(df_data.columns)}")
+                
                 # Garante que os nomes das colunas não tenham espaços/quebras de linha
                 x_axis_clean = x_axis.strip() if isinstance(x_axis, str) else x_axis
                 y_axis_clean = y_axis.strip() if isinstance(y_axis, str) else y_axis
-                color_axis_clean = color.strip() if isinstance(color, str) else color
+                color_axis_clean = color.strip() if isinstance(color, str) and color else None
 
-                x_axis_real = fuzzy_column(x_axis_clean, list(df_data.columns))
-                y_axis_real = fuzzy_column(y_axis_clean, list(df_data.columns))
-                color_real = fuzzy_column(color_axis_clean, list(df_data.columns)) if color_axis_clean else None
-                fig = generate_chart(df_data, graph_type, x_axis_real, y_axis_real, color_real)
+                # Aplica fuzzy matching para encontrar colunas reais
+                try:
+                    x_axis_real = fuzzy_column(x_axis_clean, list(df_data.columns))
+                    y_axis_real = fuzzy_column(y_axis_clean, list(df_data.columns))
+                    color_real = fuzzy_column(color_axis_clean, list(df_data.columns)) if color_axis_clean else None
+                except ValueError as ve:
+                    print(f"❌ Erro ao mapear colunas: {ve}")
+                    print(f"   X procurado: '{x_axis_clean}' → Não encontrado")
+                    print(f"   Y procurado: '{y_axis_clean}' → Não encontrado")
+                    return response_text, None
                 
-                if fig:
-                    chart_info = {
-                        "type": graph_type,
-                        "x": x_axis,
-                        "y": y_axis,
-                        "color": color,
-                        "fig": fig,
-                    }
-                    print("Grafico gerado com sucesso")
-                else:
-                    print(f"Falha ao gerar grafico. Tipo: {graph_type}, X: {x_axis}, Y: {y_axis}, Color: {color}")
+                print(f"✅ Colunas mapeadas - X: {x_axis_real}, Y: {y_axis_real}, Color: {color_real}")
+                
+                # Valida tipos de dados antes de gerar gráfico
+                try:
+                    # Verifica se as colunas existem e têm tipos válidos
+                    if x_axis_real not in df_data.columns or y_axis_real not in df_data.columns:
+                        print(f"❌ Colunas não encontradas no DataFrame")
+                        return response_text, None
+                    
+                    # Verifica se Y é numérico (para gráficos)
+                    if not pd.api.types.is_numeric_dtype(df_data[y_axis_real]):
+                        print(f"⚠️  Coluna Y '{y_axis_real}' não é numérica. Convertendo para número.")
+                        try:
+                            df_data[y_axis_real] = pd.to_numeric(df_data[y_axis_real], errors='coerce')
+                        except:
+                            print(f"❌ Não foi possível converter coluna Y para numérico")
+                            return response_text, None
+                    
+                    # Gera gráfico
+                    fig = generate_chart(df_data, graph_type, x_axis_real, y_axis_real, color_real)
+                    
+                    if fig:
+                        chart_info = {
+                            "type": graph_type,
+                            "x": x_axis,
+                            "y": y_axis,
+                            "color": color,
+                            "fig": fig,
+                        }
+                        print("✅ Gráfico gerado com sucesso")
+                    else:
+                        print(f"❌ Falha ao gerar gráfico. Tipo: {graph_type}, X: {x_axis_real}, Y: {y_axis_real}, Color: {color_real}")
+                        
+                except Exception as e:
+                    print(f"❌ Erro ao validar/gerar gráfico: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    chart_info = None
                     
             except Exception as e:
-                print(f"Erro ao processar grafico: {e}")
+                print(f"❌ Erro ao processar instrução GRAPH-TYPE: {e}")
+                import traceback
+                traceback.print_exc()
                 chart_info = None
 
         # Verificar se o usuário solicitou exportação
@@ -642,53 +850,82 @@ def should_reuse_data(model, current_prompt: str, user_history: list = None) -> 
     return {"should_reuse": False, "reason": "Nova consulta necessária"}
 
 def generate_chart(data, chart_type, x_axis, y_axis, color=None):
-    # Função especialista para garantir correspondência segura do alias
+    """
+    Gera gráfico do TIPO EXATO que o usuário solicitou.
+    ⚠️  NÃO faz fallback - se o tipo for inválido, retorna None.
+    ⚠️  SEMPRE prioriza o tipo solicitado.
+    """
     import re
+    
     def clean_alias(alias):
-        # Remove tudo que não é letra, número ou underline
+        """Remove caracteres especiais para matching de colunas"""
         return re.sub(r'[^a-zA-Z0-9_]', '', alias.strip().lower().replace(' ', '_'))
 
     def get_real_column(alias, columns):
+        """Encontra coluna real no DataFrame por alias fuzzy"""
         alias_norm = clean_alias(alias)
         for col in columns:
             col_norm = clean_alias(col)
             if col_norm == alias_norm:
                 return col
-        raise ValueError(f"Alias '{alias}' não encontrado nas colunas do DataFrame: {columns}")
+        raise ValueError(f"Coluna '{alias}' não encontrada em: {list(columns)}")
 
-    # Coluna de cor
+    # Normaliza tipo de gráfico solicitado
+    chart_type_norm = chart_type.lower().strip()
+    print(f"📊 [GRAFICO] Tipo solicitado: '{chart_type}' → Normalizado: '{chart_type_norm}'")
+    
+    # Valida tipo - se for inválido, retorna None (NÃO faz fallback!)
+    valid_types = {
+        'bar': ['bar', 'barra', 'barras', 'coluna', 'colunas'],
+        'line': ['line', 'linha', 'linhas', 'curva', 'tendencia'],
+        'scatter': ['scatter', 'dispersao', 'dispersão', 'pontos', 'ponto']
+    }
+    
+    chart_type_final = None
+    for key, aliases in valid_types.items():
+        if chart_type_norm in aliases:
+            chart_type_final = key
+            break
+    
+    if not chart_type_final:
+        # Tipo inválido - NÃO faz fallback, retorna erro
+        print(f"❌ [GRAFICO] Tipo '{chart_type}' NÃO SUPORTADO")
+        print(f"   Tipos válidos: {list(valid_types.keys())}")
+        return None
+    
+    print(f"✅ [GRAFICO] Tipo validado como: '{chart_type_final}'")
+
+    # Valida e obtém colunas reais
+    try:
+        x_axis_real = get_real_column(x_axis, data.columns)
+        y_axis_real = get_real_column(y_axis, data.columns)
+        print(f"✅ [GRAFICO] Colunas validadas - X: {x_axis_real}, Y: {y_axis_real}")
+    except ValueError as e:
+        print(f"❌ [GRAFICO] Erro de coluna: {e}")
+        return None
+
+    # Valida coluna de cor (opcional)
     color_real = None
     if color:
         try:
             color_real = get_real_column(color, data.columns)
-        except Exception as e:
-            print(f"Coluna de cor '{color}' não encontrada, gráfico será gerado sem cor.")
+            print(f"✅ [GRAFICO] Coluna de cor validada: {color_real}")
+        except ValueError as e:
+            print(f"⚠️  [GRAFICO] Coluna de cor '{color}' não encontrada - gerando sem cor")
             color_real = None
 
-    # Coluna de categorias (x_axis)
-    if x_axis:
-        try:
-            x_axis_real = get_real_column(x_axis, data.columns)
-        except Exception as e:
-            print(f"Erro ao validar coluna X: {e}")
-            return None
-
-    if y_axis:
-        try:
-            y_axis_real = get_real_column(y_axis, data.columns)
-        except Exception as e:
-            print(f"Erro ao validar coluna Y: {e}")
-            return None
+    if data.empty:
+        print(f"❌ [GRAFICO] DataFrame vazio")
+        return None
 
     import streamlit as st
 
-    # Detecta tema atual do Streamlit
+    # Detecta tema
     theme_mode = st.session_state.get('theme_mode', 'escuro')
     is_dark_theme = theme_mode == 'escuro'
 
-    # Cores adaptativas baseadas no tema
+    # Cores adaptativas
     if is_dark_theme:
-        # Tema escuro
         color_palette = [
             '#00d4ff', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6',
             '#06b6d4', '#10b981', '#f97316', '#ec4899', '#6366f1'
@@ -699,7 +936,6 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
         legend_bg = 'rgba(20, 20, 20, 0.9)'
         legend_border = 'rgba(255,255,255,0.2)'
     else:
-        # Tema claro
         color_palette = [
             '#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed',
             '#0891b2', '#065f46', '#ea580c', '#be185d', '#4338ca'
@@ -710,22 +946,18 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
         legend_bg = 'rgba(255, 255, 255, 0.95)'
         legend_border = 'rgba(0,0,0,0.1)'
 
-    if data.empty:
-        return None
-
-    # CONFIGURAÇÃO RESPONSIVA ATUALIZADA - EXTENSÃO HORIZONTAL
     layout_config = {
         'plot_bgcolor': bg_color,
         'paper_bgcolor': bg_color,
         'font': {'color': text_color, 'size': 14, 'family': 'Arial, sans-serif'},
-        'margin': {'l': 20, 'r': 20, 't': 40, 'b': 80},  # Margens pequenas para ocupar mais espaço
+        'margin': {'l': 20, 'r': 20, 't': 40, 'b': 80},
         'showlegend': True,
         'autosize': True,
         'height': 480,
         'legend': {
             'orientation': 'h',
             'yanchor': 'bottom',
-            'y': -1.2,  # Mais próximo do gráfico
+            'y': -1.2,
             'xanchor': 'center',
             'x': 0.5,
             'bgcolor': legend_bg,
@@ -749,35 +981,38 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
     }
 
     try:
-        if chart_type in ['line', 'linha']:
+        print(f"🔨 [GRAFICO] Gerando gráfico do tipo: {chart_type_final}")
+        
+        # Gera gráfico do TIPO EXATO solicitado
+        if chart_type_final == 'line':
             fig = px.line(
                 data, x=x_axis_real, y=y_axis_real, color=color_real,
                 color_discrete_sequence=color_palette,
-                line_shape='spline'
+                line_shape='spline',
+                title=f"Gráfico de Linha: {y_axis_real} por {x_axis_real}"
             )
             fig.update_traces(line=dict(width=3))
+            print(f"✅ [GRAFICO] Linha gerada com sucesso")
 
-        elif chart_type in ['bar', 'barra']:
+        elif chart_type_final == 'bar':
             fig = px.bar(
                 data, x=x_axis_real, y=y_axis_real, color=color_real,
-                color_discrete_sequence=color_palette
+                color_discrete_sequence=color_palette,
+                title=f"Gráfico de Barras: {y_axis_real} por {x_axis_real}"
             )
+            print(f"✅ [GRAFICO] Barras geradas com sucesso")
 
-        elif chart_type in ['scatter', 'dispersao']:
+        elif chart_type_final == 'scatter':
             fig = px.scatter(
                 data, x=x_axis_real, y=y_axis_real, color=color_real,
                 color_discrete_sequence=color_palette,
-                size_max=15
+                size_max=15,
+                title=f"Gráfico de Dispersão: {y_axis_real} vs {x_axis_real}"
             )
+            print(f"✅ [GRAFICO] Dispersão gerada com sucesso")
 
-        else:
-            fig = px.bar(data, x=x_axis_real, y=y_axis_real, color=color_real,
-                        color_discrete_sequence=color_palette)
-
-        # Aplica layout responsivo
+        # Aplica layout
         fig.update_layout(layout_config)
-
-        # Grid adaptativo ao tema
         fig.update_xaxes(
             showgrid=True, gridwidth=1, gridcolor=grid_color,
             showline=True, linewidth=1, linecolor=grid_color
@@ -787,7 +1022,11 @@ def generate_chart(data, chart_type, x_axis, y_axis, color=None):
             showline=True, linewidth=1, linecolor=grid_color
         )
 
+        print(f"✅ [GRAFICO] Gráfico '{chart_type_final}' finalizado com sucesso")
         return fig
+        
     except Exception as e:
-        print(f"Erro ao criar gráfico: {e}")
+        print(f"❌ [GRAFICO] Erro ao gerar gráfico do tipo '{chart_type_final}': {e}")
+        import traceback
+        traceback.print_exc()
         return None

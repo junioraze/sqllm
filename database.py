@@ -4,7 +4,9 @@ from config import PROJECT_ID, DATASET_ID
 import ast
 import re
 import sqlparse
+import pandas as pd
 from config import TABLES_CONFIG
+from query_validator import QueryValidator, validate_and_build_query
 
 # Função para remover comentários SQL
 def remove_sql_comments(query: str) -> str:
@@ -15,6 +17,61 @@ def remove_sql_comments(query: str) -> str:
     return query
 
 client = bigquery.Client()
+query_validator = QueryValidator(max_retries=2)
+
+def sort_results_by_columns(results):
+    """
+    Ordena resultados por colunas prioritárias para garantir consistência em gráficos.
+    
+    Prioridade:
+    1. Colunas com data/período (mes, ano, data, date, timestamp, etc)
+    2. Colunas numéricas após ordenadas por data
+    3. Resto dos dados
+    
+    Args:
+        results: list de dicts ou DataFrame
+        
+    Returns:
+        DataFrame ordenado ou list de dicts
+    """
+    if not results:
+        return results
+    
+    # Converte para DataFrame se for lista
+    if isinstance(results, list):
+        df = pd.DataFrame(results)
+    else:
+        df = results.copy()
+    
+    if df.empty:
+        return results
+    
+    # Identifica colunas de data/período
+    date_columns = []
+    numeric_columns = []
+    
+    for col in df.columns:
+        col_lower = col.lower()
+        # Detecta colunas de data/período
+        if any(x in col_lower for x in ['mes', 'ano', 'data', 'date', 'dia', 'mês', 'month', 'year', 'quarter', 'trimestre', 'semana', 'week', 'timestamp', 'time']):
+            date_columns.append(col)
+        # Detecta colunas numéricas
+        elif df[col].dtype in ['int64', 'float64']:
+            numeric_columns.append(col)
+    
+    # Ordena por colunas de data/período primeiro
+    sort_cols = date_columns + numeric_columns
+    if sort_cols:
+        try:
+            df = df.sort_values(by=sort_cols, ascending=True)
+        except Exception as e:
+            print(f"⚠️  Erro ao ordenar por {sort_cols}: {e}")
+            pass
+    
+    # Converte de volta para list de dicts se entrada foi list
+    if isinstance(results, list):
+        return df.to_dict('records')
+    return df
 
 def fix_sql_issues(query):
     """Função simplificada de correção SQL: remove comentários"""
@@ -74,34 +131,75 @@ def validate_sql_query(query: str) -> dict:
     except Exception as e:
         return {"valid": False, "error": str(e)}
 
-def execute_query(query: str):
-    """Executa uma query SQL no BigQuery, validando sintaxe antes."""
-    # Aplica correções automáticas de SQL
+def execute_query(query: str, user_question: str = "", gemini_model = None, validate: bool = True):
+    """
+    Executa query SQL no BigQuery com VALIDAÇÃO + RETRY AUTOMÁTICO.
+    
+    Fluxo:
+    1. Remove comentários SQL
+    2. Valida sintaxe com sqlparse
+    3. Se falhar, tenta refinar com Gemini (até 2 vezes)
+    4. Só executa no BigQuery se query passar na validação
+    
+    Parâmetros:
+    - query: SQL a executar
+    - user_question: pergunta original do usuário (para refino)
+    - gemini_model: modelo Gemini para refino automático
+    - validate: se True, faz validação + retry; se False, executa direto
+    
+    Retorna: lista de resultados ou dict com erro
+    """
+    
     original_query = query
+    
+    # STEP 1: Remove comentários
     corrected_query = fix_sql_issues(query)
-
-    # Log das correções aplicadas
+    
     if original_query != corrected_query:
         log_sql_correction(original_query, corrected_query, "execute_query")
-
-
-
-    # Validação de sintaxe local
-    validation = validate_sql_query(corrected_query)
-    if not validation["valid"]:
-        print(f"ERRO SINTAXE SQL: {validation['error']}")
-        print(f"SQL gerado com erro:\n{corrected_query}")
-        raise ValueError(f"Erro de sintaxe SQL: {validation['error']}\nSQL: {corrected_query}")
-
-    # Validação extra: hífen fora de nomes de tabela/alias (concatenação errada)
-    # Exemplo: ...ecPedidosVenda`-public-data...
+    
+    # STEP 2: VALIDAÇÃO + RETRY (novo pipeline)
+    if validate and gemini_model:
+        print("\n" + "="*70)
+        print("[PIPELINE] VALIDAÇÃO + RETRY AUTOMÁTICO INICIADO")
+        print("="*70)
+        
+        validation_result = query_validator.validate_and_refine(
+            corrected_query,
+            user_question,
+            gemini_model
+        )
+        
+        if validation_result["is_valid"]:
+            corrected_query = validation_result["query"]
+            print(f"\n✅ [PIPELINE] Query validada e pronta para BigQuery")
+            print(f"   Tentativas: {validation_result['retry_count'] + 1}")
+        else:
+            print(f"\n❌ [PIPELINE] {validation_result.get('error_message', 'Erro desconhecido')}")
+            print(f"   Erros finais: {validation_result.get('final_errors', [])}")
+            return {
+                "error": validation_result.get('error_message', 'Query não validada'),
+                "query": corrected_query,
+                "validation_history": validation_result.get('history', [])
+            }
+    else:
+        # Se validate=False, apenas faz validação básica (backward compatibility)
+        validation = validate_sql_query(corrected_query)
+        if not validation["valid"]:
+            print(f"ERRO SINTAXE SQL: {validation['error']}")
+            print(f"SQL gerado com erro:\n{corrected_query}")
+            raise ValueError(f"Erro de sintaxe SQL: {validation['error']}\nSQL: {corrected_query}")
+    
+    # STEP 3: Validação extra: hífen fora de nomes de tabela/alias
     hyphen_pattern = r"`-[\w\-\.]+`"
     if re.search(hyphen_pattern, corrected_query):
         print(f"ERRO DE CONCATENAÇÃO: hífen '-' fora de nomes de tabela/alias detectado.")
         print(f"SQL gerado com erro:\n{corrected_query}")
         raise ValueError(f"Erro de concatenação: hífen '-' fora de nomes de tabela/alias detectado.\nSQL: {corrected_query}")
 
+    # STEP 4: Executa no BigQuery
     try:
+        print(f"\n[BIGQUERY] Executando query no BigQuery...")
         job_config = bigquery.QueryJobConfig(
             maximum_bytes_billed=100_000_000,
             job_timeout_ms=30000  # 30 segundos timeout
@@ -113,15 +211,21 @@ def execute_query(query: str):
         for row in query_job.result(timeout=30):
             results.append(dict(row))
 
+        print(f"✅ [BIGQUERY] Query executada com sucesso. {len(results)} linhas retornadas.")
+        
+        # 🔥 ORDENA RESULTADOS SEMPRE (importante para gráficos com datas)
+        results = sort_results_by_columns(results)
+        
         return results
 
     except Exception as e:
-        print(f"ERRO QUERY: {str(e)}")
-        print(f"SQL gerado com erro:\n{corrected_query}")
+        print(f"❌ [BIGQUERY] ERRO: {str(e)}")
+        print(f"SQL com erro:\n{corrected_query}")
         return {
             "error": str(e),
             "query": corrected_query
         }
+
 
 def build_query(params: dict) -> str:
     # Apenas constrói a query fielmente conforme os parâmetros recebidos
@@ -147,42 +251,29 @@ def build_query(params: dict) -> str:
         
         # Remove comentários para análise mais precisa
         clean_cte = remove_sql_comments(cte_text)
+        clean_cte_upper = clean_cte.upper().strip()
         
-        # Divide em linhas para análise
-        lines = [line.strip() for line in clean_cte.split('\n') if line.strip()]
+        # Verificação simples: conta ocorrências de SELECT
+        # Query COMPLETA tem pelo menos 2 SELECTs (1+ dentro de CTE + 1 final)
+        # Query INCOMPLETA tem só 1 SELECT (dentro das CTEs)
+        select_count = clean_cte_upper.count('SELECT')
         
-        # Verifica se há um SELECT após o fechamento da última CTE
-        in_cte = False
-        cte_level = 0
-        last_was_select = False
+        # Se tem apenas 1 SELECT, é uma query incompleta
+        if select_count < 2:
+            print(f"DEBUG - is_complete_query: Apenas {select_count} SELECT encontrado(s) - INCOMPLETA")
+            return False
         
-        for line in lines:
-            upper_line = line.upper()
-            
-            if upper_line.startswith('WITH '):
-                in_cte = True
-                continue
-                
-            if in_cte:
-                # Conta parênteses para detectar fim das CTEs
-                cte_level += line.count('(') - line.count(')')
-                
-                # Se encontramos um SELECT quando não estamos mais dentro de CTEs
-                if cte_level <= 0 and upper_line.startswith('SELECT'):
-                    return True
-                    
-                # Se encontramos um SELECT que não faz parte de uma subquery dentro da CTE
-                if upper_line.startswith('SELECT') and 'FROM' in upper_line:
-                    # Verifica se é o SELECT principal (não tem WITH antes ou está após todas as CTEs)
-                    if not any('WITH' in l.upper() for l in lines[:lines.index(line)]):
-                        return True
+        # Verificação alternativa: procura pelo padrão "SELECT ... FROM"
+        # que indica um SELECT final após as CTEs
+        pattern_final_select = re.search(
+            r'\)\s*SELECT\s+.*\s+FROM\s+\w+',
+            clean_cte,
+            re.IGNORECASE | re.DOTALL
+        )
         
-        # Método alternativo: verifica padrões de query completa
-        clean_cte_upper = clean_cte.upper().replace(' ', '')
-        has_final_select = re.search(r'\)\s*SELECT\s+', clean_cte_upper) is not None
-        has_from_after_cte = re.search(r'\)\s*FROM\s+', clean_cte_upper) is not None
-        
-        return has_final_select or has_from_after_cte
+        is_complete = pattern_final_select is not None
+        print(f"DEBUG - is_complete_query: pattern_final_select={pattern_final_select is not None} - {'COMPLETA' if is_complete else 'INCOMPLETA'}")
+        return is_complete
 
     # SE a CTE já for uma query completa, usa ela diretamente
     if cte and is_complete_query(cte):

@@ -66,7 +66,11 @@ SQL_FUNCTIONCALL_INSTRUCTIONS = """
 PADRÃO OBRIGATÓRIO DE CTEs (GENERALISTA):
 
 Toda query deve ser estruturada usando múltiplas CTEs, cada uma com responsabilidade única:
-- Limpeza/conversão (ex: CAST, EXTRACT, UPPER, filtros) — nomeie como cte_limpeza, cte_preparacao. Campos que vao na instrução com o parametro conversion (normalmente campos TIMESTAMP) devem ser convertidos se utilizados. 
+- Limpeza/conversão (ex: CAST, EXTRACT, UPPER, filtros) — nomeie como cte_limpeza, cte_preparacao. 
+  ⚠️  CRÍTICO: Se um campo é STRING e vai ser usado em EXTRACT() ou comparações de data, SEMPRE faça CAST ANTES na cláusula WHERE também!
+  CORRETO: WHERE EXTRACT(YEAR FROM CAST(campo_data AS DATE)) = 2024
+  ERRADO: WHERE EXTRACT(YEAR FROM campo_data) = 2024  [campo_data é STRING]
+  Campos que vao na instrução com o parametro conversion (normalmente campos TIMESTAMP/STRING de data) devem ser convertidos quando forem ser utilizados. 
 - Agregação (ex: SUM, COUNT, AVG, GROUP BY) — nomeie como cte_agregacao, cte_agrupamento.
 - Ranking/window (ex: ROW_NUMBER, DENSE_RANK) — nomeie como cte_ranking, cte_final.
 - Comparação/análise (ex: JOINs, pivots, cálculos finais) — nomeie como cte_comparacao, cte_pivot.
@@ -74,9 +78,12 @@ Toda query deve ser estruturada usando múltiplas CTEs, cada uma com responsabil
 - Use nomes descritivos e consistentes para CTEs e aliases de campos.
 
 REGRAS CRÍTICAS PARA O SELECT FINAL:
+- O SELECT final OBRIGATORIAMENTE SEMPRE DEVE EXISTIR ao final da query - sem exceção!
 - O SELECT final NUNCA deve conter GROUP BY ou agregação (SUM, COUNT, AVG, etc). Toda agregação deve ocorrer dentro de uma CTE específica.
 - O SELECT final apenas projeta os campos agregados e agrupados definidos nas CTEs e ordena para garantir o eixo X correto no gráfico.
-- Nunca gere dois SELECTs seguidos na query final; o SELECT principal deve ser separado das definições de CTE.
+- ⚠️  CRÍTICO: SEMPRE inclua o SELECT final após as definições de CTE. Nunca deixe a query terminando no meio de uma CTE!
+- CORRETO: WITH cte_agregacao AS (...), cte_ranking AS (...) SELECT * FROM cte_ranking
+- ERRADO: WITH cte_agregacao AS (...), cte_ranking AS (...)  [SEM SELECT FINAL]
 
 O GROUP BY pode conter múltiplos campos/dimensões conforme o contexto da pergunta (ex: campo_periodo, campo_eixo_x, campo_categoria, etc). Sempre inclua todos os campos não agregados do SELECT no GROUP BY da CTE de agrupamento.
 Só inclua no SELECT final colunas agregadas ou agrupadas (SUM, COUNT, AVG) já definidas nas CTEs.
@@ -100,7 +107,12 @@ ORDER BY campo_periodo, campo_eixo_x
 
 REGRAS ESPECÍFICAS PARA MONTAGEM DE QUERY:
 4. O campo 'from_table' DEVE referenciar o alias definido na CTE (ex: 't1', ou um JOIN entre aliases definidos na CTE). Nunca use o nome da tabela original diretamente no FROM se houver CTE.
-5. Nomes de tabela SEMPRE no formato {PROJECT_ID}.{DATASET_ID}.nome_da_tabela, usando apenas UM acento grave (`) ao redor do nome da tabela, nunca dois e nunca sem acento. O backend NÃO adiciona nem remove acentos graves: o modelo é responsável por garantir o formato correto, exatamente como o BigQuery espera.
+5. ⚠️  TABELAS: SEMPRE use o formato COMPLETO com dataset: `glinhares.delivery.nome_tabela` 
+   - Exemplos CORRETOS: `glinhares.delivery.drvy_VeiculosVendas` ou `glinhares.delivery.dvry_ihs_cotas_ativas`
+   - NUNCA use apenas o nome da tabela: `drvy_VeiculosVendas` (ERRADO) 
+   - NUNCA use dataset errado ou sem dataset
+   - O acento grave ` é OBRIGATÓRIO ao redor do nome completo: ` `glinhares.delivery.nome_tabela` `
+   - Nomes de tabela SEMPRE no formato {PROJECT_ID}.{DATASET_ID}.nome_da_tabela, usando apenas UM acento grave (`) ao redor de TODA a expressão, nunca dois e nunca sem acento. O backend NÃO adiciona nem remove acentos graves: o modelo é responsável por garantir o formato correto, exatamente como o BigQuery espera.
 6. Use apenas os campos listados no contexto de metadados da tabela (nunca invente nomes).
 7. Preencha todos os parâmetros do function_call: select, where, order_by, cte,  etc.
 
@@ -122,7 +134,20 @@ Nunca assuma valores genéricos como 'S', 'N', '1', '0' só pelo nome do campo. 
 Exemplo INCORRETO: WHERE campo = 'S' (não existe valor 'S' para esse campo)
 Exemplo CORRETO: WHERE campo = 'valor_exemplo'
 Exemplo CORRETO para flag: WHERE campo_flag = 1
-ATENÇÃO: Nunca gere dois SELECTs seguidos na query final. O SELECT principal deve ser sempre separado das definições de CTE.
+
+⚠️  CRÍTICO - CAMPOS VÁLIDOS:
+- NUNCA INVENTE NOMES DE CAMPOS!
+- USE APENAS os campos listados na seção "CAMPOS DISPONÍVEIS NESTA TABELA"
+- Se não encontrar um campo exato, use um alias apropriado ou nome similar que REALMENTE EXISTE
+- Exemplo ERRADO: SELECT desc_plano (campo não existe!)
+- Exemplo CORRETO: SELECT Plano (campo que está na lista)
+- O backend NÃO valida nem corrige nomes de campos - a responsabilidade é ÚNICA do modelo!
+
+⚠️  CRÍTICO - SELECT FINAL OBRIGATÓRIO:
+- SEMPRE inclua um SELECT final ao final da query!
+- CORRETO: WITH cte_agregacao AS (...) SELECT ... FROM cte_agregacao
+- ERRADO: WITH cte_agregacao AS (...) [SEM SELECT]
+- ERRADO: Queries que terminam com definição de CTE sem SELECT
 """
 
 # Função para construir instrução dinâmica das tabelas/campos válidos
@@ -156,7 +181,9 @@ REGRAS CRÍTICAS PARA O SELECT FINAL:
 - O SELECT final NUNCA deve conter funções/extratos sobre campos que já foram convertidos em aliases nas CTEs. Use apenas os aliases definidos e as colunas que nao foram alteradas o nome mas estao presente na CTE consultada.
 - Se precisar de um valor agregado, defina o alias na CTE e use apenas o alias no SELECT final.
 - O SELECT final apenas projeta os campos agregados e agrupados definidos nas CTEs e ordena para garantir o eixo X correto no gráfico.
-- Nunca gere dois SELECTs seguidos na query final; o SELECT principal deve ser separado das definições de CTE.
+- ⚠️  CRÍTICO: O SELECT final OBRIGATORIAMENTE SEMPRE DEVE EXISTIR ao final da query - sem exceção!
+- CORRETO: WITH cte_agregacao AS (...), cte_ranking AS (...) SELECT ... FROM cte_ranking
+- ERRADO: WITH cte_agregacao AS (...), cte_ranking AS (...) [FALTANDO SELECT FINAL]
 
 Exemplo INCORRETO:
 SELECT campo_agrupado, SUM(valor) AS total FROM cte_agregacao
@@ -191,6 +218,180 @@ def get_sql_functioncall_instruction():
 
 def get_chart_export_instruction():
     return CHART_EXPORT_INSTRUCTIONS
+
+def get_sql_refinement_instruction():
+    """
+    Retorna instruções para refino de SQL quando validação falha.
+    Usado pelo query_validator para pedir ao Gemini corrigir queries problemáticas.
+    """
+    return """
+VOCÊ É UM ESPECIALISTA EM SQL BIGQUERY QUE REFINA QUERIES PROBLEMÁTICAS
+
+TAREFAS:
+1. Analisar o erro na query
+2. Manter a MESMA lógica e intenção da query original
+3. Corrigir APENAS problemas de sintaxe ou estrutura
+4. Garantir que a query esteja COMPLETA e VÁLIDA
+
+REGRAS CRÍTICAS:
+- A query DEVE ter este formato: WITH cte_name AS (...) SELECT ... FROM cte_name
+- Nunca falta SELECT final após as definições de CTEs
+- NÃO ADICIONAR comentários SQL (-- ou /* */)
+- Retornar APENAS a query SQL corrigida, sem explicações ou markdown
+- Manter todos os campos, filtros e lógica original
+
+REGRA DE COMPLETUDE:
+Se a query termina com uma CTE sem SELECT final, adicione:
+SELECT * FROM nome_ultima_cte
+
+Exemplo:
+ENTRADA: "WITH cte_x AS (SELECT ... FROM ...), cte_y AS (SELECT ... FROM cte_x)"
+SAÍDA: "WITH cte_x AS (SELECT ... FROM ...), cte_y AS (SELECT ... FROM cte_x) SELECT * FROM cte_y"
+
+RETORNE APENAS A QUERY CORRIGIDA, NADA MAIS.
+"""
+
+def build_field_whitelist_instruction(table_name):
+    """
+    Constrói instrução com LISTA DE CAMPOS VÁLIDOS para a tabela identificada.
+    DESTACA CAMPOS QUE PRECISAM DE CONVERSÃO com exemplos explícitos.
+    
+    Args:
+        table_name: str - nome da tabela (ex: "drvy_VeiculosVendas")
+    
+    Returns:
+        str - Instrução formatada com campos válidos e conversões
+    """
+    try:
+        table_config = TABLES_CONFIG.get(table_name, {})
+        
+        if not table_config:
+            return f"⚠️  Aviso: Tabela '{table_name}' não encontrada em configuração."
+        
+        # Extrai descrição da tabela
+        description = table_config.get('metadata', {}).get('description', 'Sem descrição')
+        
+        # Coleta todos os campos disponíveis da tabela
+        all_fields = []
+        fields_with_conversion = []
+        fields_info = {}
+        
+        if 'fields' in table_config:
+            for category, field_list in table_config['fields'].items():
+                if isinstance(field_list, list):
+                    for field in field_list:
+                        if isinstance(field, dict) and 'name' in field:
+                            field_name = field['name']
+                            field_type = field.get('type', 'UNKNOWN')
+                            field_desc = field.get('description', '')
+                            field_conversion = field.get('conversion', None)
+                            field_examples = field.get('examples', [])
+                            
+                            all_fields.append(field_name)
+                            fields_info[field_name] = {
+                                'type': field_type,
+                                'description': field_desc,
+                                'category': category,
+                                'conversion': field_conversion,
+                                'examples': field_examples
+                            }
+                            
+                            # Se o campo tem conversão, salva separado
+                            if field_conversion:
+                                fields_with_conversion.append({
+                                    'name': field_name,
+                                    'type': field_type,
+                                    'conversion': field_conversion,
+                                    'examples': field_examples,
+                                    'description': field_desc
+                                })
+        
+        if not all_fields:
+            return f"⚠️  Aviso: Nenhum campo encontrado para tabela '{table_name}'."
+        
+        # Agrupa campos por tipo para melhor legibilidade
+        fields_by_type = {}
+        for fname, finfo in fields_info.items():
+            ftype = finfo['type']
+            if ftype not in fields_by_type:
+                fields_by_type[ftype] = []
+            fields_by_type[ftype].append((fname, finfo['description']))
+        
+        # Constrói instrução formatada
+        instruction = f"""
+🚀 CAMPOS VÁLIDOS PARA TABELA: `glinhares.delivery.{table_name}`
+
+DESCRIÇÃO DA TABELA:
+{description}
+
+⚠️  CAMPOS OBRIGATORIAMENTE VÁLIDOS (use APENAS estes):
+"""
+        
+        # Lista campos por tipo
+        for ftype, fields_list in sorted(fields_by_type.items()):
+            instruction += f"\n{ftype} ({len(fields_list)} campos):\n"
+            for fname, fdesc in sorted(fields_list):
+                instruction += f"  - {fname}: {fdesc}\n"
+        
+        # SEÇÃO ESPECIAL: Campos que PRECISAM de conversão
+        if fields_with_conversion:
+            instruction += f"""
+
+🔥 CAMPOS QUE EXIGEM CONVERSÃO (CRÍTICO - USE EXATAMENTE COMO ESPECIFICADO):
+
+"""
+            for field_conv in fields_with_conversion:
+                instruction += f"""
+📌 CAMPO: {field_conv['name']} ({field_conv['type']})
+   DESCRIÇÃO: {field_conv['description']}
+   ✅ CONVERSÃO OBRIGATÓRIA: {field_conv['conversion']}
+"""
+                if field_conv['examples']:
+                    instruction += "   EXEMPLOS DE USO:\n"
+                    for example in field_conv['examples']:
+                        instruction += f"      - {example}\n"
+        
+        # Instrução crítica
+        instruction += f"""
+
+⚠️  REGRA CRÍTICA - VALIDAÇÃO DE CAMPOS:
+- NUNCA use campos que NÃO estão nesta lista acima!
+- Para campos que exigem CONVERSÃO (seção 🔥 acima), use EXATAMENTE a conversão especificada!
+
+⛔ AVISO CRÍTICO - NÃO USE NOMES DE EXEMPLOS COMO CAMPOS REAIS:
+- Quando você vê "COUNT(*) AS total_vendas" em um exemplo, NÃO USE "total_vendas" como nome de campo real!
+- Campos como "total_vendas", "COUNT_vendas", "quantidade_total", "valor_medio_quitacao" são NOMES INVENTADOS EM EXEMPLOS
+- Use SEMPRE as agregações reais: COUNT(*), SUM(), AVG(), MAX(), MIN()
+- Para contar registros: use COUNT(*) não "COUNT_vendas"
+- Para somar valores: use SUM(campo_real) não "soma_valores"
+- SEMPRE crie aliases com AS para seus cálculos, exemplo: SUM(QTE) AS total_veiculos
+
+- Exemplos de ERROS comuns (campos NÃO EXISTENTES):
+  ❌ DataVenda (ERRADO - use Dt_Venda ou equivalent)
+  ❌ Vendedor (ERRADO - use Nome_do_Vendedor ou equivalent)
+  ❌ Status (ERRADO - use Status_Contrato ou equivalent)
+  ❌ data_venda (ERRADO - use data real da tabela)
+  ❌ COUNT_vendas (ERRADO - é um EXEMPLO! Use COUNT(*) no lugar)
+  ❌ total_propostas (ERRADO - é um EXEMPLO! Use COUNT(DISTINCT Proposta) no lugar)
+  ❌ valor_medio_quitacao (ERRADO - é um EXEMPLO! Use AVG(SAFE_CAST(campo_real AS FLOAT64)) no lugar)
+
+- Exemplos de ERROS comuns com CONVERSÃO:
+  ❌ CAST(Dt_Venda AS DATE) - ERRADO! Use a conversão especificada na seção 🔥 acima
+  ❌ Dt_Venda - ERRADO! Campo é STRING, sempre precisa conversão
+  ❌ Usando Dt_Venda diretamente em WHERE - ERRADO! Sempre converta antes
+
+- TODOS os campos usados DEVEM estar na lista acima.
+- Se a pergunta solicita um campo que NÃO EXISTE, use o campo mais próximo que EXISTE.
+- Se nenhum campo próximo existe, notifique que o campo solicitado não está disponível.
+
+TOTAL DE CAMPOS VÁLIDOS: {len(all_fields)}
+CAMPOS QUE PRECISAM CONVERSÃO: {len(fields_with_conversion)}
+"""
+        
+        return instruction
+        
+    except Exception as e:
+        return f"Erro ao construir instrução de campos: {str(e)}"
 
 def get_adaptation_prompt():
     """

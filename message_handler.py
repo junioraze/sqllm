@@ -597,13 +597,91 @@ class MessageHandler:
 
 
     def _handle_query_error(self, typing_placeholder, prompt: str, raw_data: Dict, query: str, serializable_params: Dict) -> None:
-        """Trata erros de execução da query"""
+        """Trata erros de execução da query - tenta refinar com Gemini antes de falhar"""
         self.flow_path.append("erro_execucao_query")
         
-        error_details = f"Query Error: {raw_data['error']}"
+        error_message = raw_data['error']
+        error_details = f"Query Error: {error_message}"
         failed_query = raw_data.get('query', 'N/A')
         
-        # Log no BigQuery e DuckDB
+        print(f"\n❌ Erro SQL detectado: {error_message}")
+        print(f"📋 Query que falhou: {failed_query}")
+        
+        # TENTA REFINAR COM GEMINI ANTES DE FALHAR
+        print(f"🔄 [REFINAMENTO] Tentando refinar SQL com Gemini...")
+        self.flow_path.append("tentando_refinar_erro_sql")
+        self._start_timing("refinamento_erro_gemini", typing_placeholder)
+        
+        try:
+            from gemini_handler import refine_sql_with_error
+            
+            # Tenta refinar - passa prompt original, erro, e SQL que falhou
+            refined_result, refined_tech_details = refine_sql_with_error(
+                model=self.model,
+                user_question=prompt,
+                error_message=error_message,
+                previous_sql=failed_query,
+                table_name="unknown"  # Não sabemos a tabela em produção, mas Gemini tem contexto
+            )
+            
+            self._end_timing("refinamento_erro_gemini")
+            
+            if refined_result and isinstance(refined_result, dict):
+                print(f"✅ Gemini retornou SQL refinada")
+                self.flow_path.append("executando_sql_refinada")
+                
+                # Tenta executar a SQL refinada
+                self._start_timing("execucao_sql_refinada", typing_placeholder)
+                try:
+                    from database import build_query, execute_query
+                    
+                    refined_query = build_query(refined_result)
+                    raw_data_retry = execute_query(refined_query)
+                    
+                    self._end_timing("execucao_sql_refinada")
+                    
+                    if isinstance(raw_data_retry, dict) and "error" not in raw_data_retry:
+                        print(f"✅ SQL refinada PASSOU! Continuando com resultado...")
+                        self.flow_path.append("sucesso_sql_refinada")
+                        
+                        # Converte dados para formato serializável
+                        serializable_data = safe_serialize_data(raw_data_retry)
+                        
+                        # Refina resposta com Gemini
+                        from gemini_handler import analyze_data_with_gemini
+                        refined_response, tech_details = analyze_data_with_gemini(
+                            prompt=prompt,
+                            data=serializable_data,
+                            function_params=refined_result,
+                            query=refined_query
+                        )
+                        
+                        # Adiciona info de refinamento aos tech_details
+                        if refined_tech_details:
+                            tech_details.update(refined_tech_details)
+                        tech_details["retry_successful"] = True
+                        tech_details["original_error"] = error_message
+                        tech_details["original_query"] = failed_query
+                        
+                        self._finalize_response(typing_placeholder, refined_response, tech_details)
+                        self._save_new_interaction(prompt, refined_result, refined_query, serializable_data, refined_response, tech_details)
+                        return
+                    else:
+                        # SQL refinada também falhou
+                        retry_error = raw_data_retry.get("error", "Desconhecido") if isinstance(raw_data_retry, dict) else str(raw_data_retry)
+                        print(f"❌ SQL refinada também falhou: {retry_error}")
+                        self.flow_path.append("sql_refinada_tambem_falhou")
+                except Exception as e:
+                    print(f"❌ Erro ao executar SQL refinada: {e}")
+                    self.flow_path.append("erro_executar_sql_refinada")
+            
+        except Exception as e:
+            print(f"⚠️  Erro ao tentar refinar SQL: {e}")
+            self.flow_path.append("erro_refinar_sql")
+        
+        # Se não conseguiu refinar ou refinar também falhou, loga e retorna erro
+        print(f"❌ Falha final: não foi possível refinar ou SQL refinada também falhou")
+        
         log_interaction(
             user_input=prompt,
             function_params=serializable_params,
@@ -619,7 +697,7 @@ class MessageHandler:
             client_request_count=self.rate_limiter.state["count"],
             custom_fields={
                 "error_type": "query_execution_error",
-                "error_details": raw_data['error'],
+                "error_details": error_message,
                 "failed_query": failed_query,
                 "flow_path": " → ".join(self.flow_path)
             }
@@ -630,7 +708,7 @@ class MessageHandler:
             error_type="query_execution_error",
             error_message=error_details,
             context=f"User request: {prompt} | Failed Query: {failed_query} | Function params: {serializable_params} | Flow: {' → '.join(self.flow_path)}",
-            traceback=raw_data['error']
+            traceback=error_message
         )
         
         typing_placeholder.empty()
