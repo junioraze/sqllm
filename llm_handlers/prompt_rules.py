@@ -45,6 +45,13 @@ Todas as funções/variáveis aqui devem ser importadas e usadas por todo o pipe
 import os
 from config.settings import TABLES_CONFIG, PROJECT_ID, DATASET_ID
 
+def _format_with_config(text: str) -> str:
+    """
+    Substitui placeholders {PROJECT_ID} e {DATASET_ID} no texto com valores reais da config.
+    Garante que todos os prompts sejam generalizados para qualquer projeto/dataset.
+    """
+    return text.format(PROJECT_ID=PROJECT_ID, DATASET_ID=DATASET_ID)
+
 # Função para construir descrição detalhada das tabelas para uso em FunctionDeclaration
 def build_tables_description():
     """Gera descrição detalhada das tabelas e campos válidos para uso no FunctionDeclaration"""
@@ -107,11 +114,11 @@ ORDER BY campo_periodo, campo_eixo_x
 
 REGRAS ESPECÍFICAS PARA MONTAGEM DE QUERY:
 4. O campo 'from_table' DEVE referenciar o alias definido na CTE (ex: 't1', ou um JOIN entre aliases definidos na CTE). Nunca use o nome da tabela original diretamente no FROM se houver CTE.
-5. ⚠️  TABELAS: SEMPRE use o formato COMPLETO com dataset: `glinhares.delivery.nome_tabela` 
-   - Exemplos CORRETOS: `glinhares.delivery.drvy_VeiculosVendas` ou `glinhares.delivery.dvry_ihs_cotas_ativas`
-   - NUNCA use apenas o nome da tabela: `drvy_VeiculosVendas` (ERRADO) 
+5. ⚠️  TABELAS: SEMPRE use o formato COMPLETO com dataset: `{PROJECT_ID}.{DATASET_ID}.nome_tabela` 
+   - Exemplos CORRETOS: `{PROJECT_ID}.{DATASET_ID}.nome_tabela_1` ou `{PROJECT_ID}.{DATASET_ID}.nome_tabela_2`
+   - NUNCA use apenas o nome da tabela: `nome_tabela` (ERRADO) 
    - NUNCA use dataset errado ou sem dataset
-   - O acento grave ` é OBRIGATÓRIO ao redor do nome completo: ` `glinhares.delivery.nome_tabela` `
+   - O acento grave ` é OBRIGATÓRIO ao redor do nome completo: ` `{PROJECT_ID}.{DATASET_ID}.nome_tabela` `
    - Nomes de tabela SEMPRE no formato {PROJECT_ID}.{DATASET_ID}.nome_da_tabela, usando apenas UM acento grave (`) ao redor de TODA a expressão, nunca dois e nunca sem acento. O backend NÃO adiciona nem remove acentos graves: o modelo é responsável por garantir o formato correto, exatamente como o BigQuery espera.
 6. Use apenas os campos listados no contexto de metadados da tabela (nunca invente nomes).
 7. Preencha todos os parâmetros do function_call: select, where, order_by, cte,  etc.
@@ -212,7 +219,7 @@ ORDER BY campo_periodo, campo_eixo_x
 """
 
 def get_sql_functioncall_instruction():
-    return SQL_FUNCTIONCALL_INSTRUCTIONS
+    return _format_with_config(SQL_FUNCTIONCALL_INSTRUCTIONS)
 
 # Função utilitária para obter instrução de gráfico/exportação para refino
 
