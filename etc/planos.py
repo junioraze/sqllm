@@ -2,7 +2,7 @@
 """Página de Planos - FUNCIONAL E SIMPLES"""
 import streamlit as st
 from datetime import datetime
-from config import is_empresarial_mode
+from config.settings import is_empresarial_mode
 from config_menu import apply_user_preferences, initialize_user_config
 from auth_system import get_current_user
 from subscription_system_db import SubscriptionSystem

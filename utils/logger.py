@@ -1,5 +1,5 @@
 # 🔐 Configurar Google Auth PRIMEIRO (antes de google.cloud)
-from config import google_auth
+from config.settings import google_auth
 
 from google.cloud import bigquery
 from datetime import datetime

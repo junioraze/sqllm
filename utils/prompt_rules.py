@@ -43,7 +43,7 @@ Todas as funções/variáveis aqui devem ser importadas e usadas por todo o pipe
 """
 
 import os
-from config import TABLES_CONFIG, PROJECT_ID, DATASET_ID
+from config.settings import TABLES_CONFIG, PROJECT_ID, DATASET_ID
 
 # Função para construir descrição detalhada das tabelas para uso em FunctionDeclaration
 def build_tables_description():

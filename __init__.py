@@ -18,7 +18,7 @@ __license__ = "MIT"
 
 # Exports principais
 try:
-    from config import *
+    from config.settings import *
     from database import *
     from llm_handlers import *
     from rag_system import *
