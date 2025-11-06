@@ -1219,28 +1219,34 @@ TEST_QUESTIONS = [
     # TABELA 3: dvry_ihs_qualidade_vendas_historico (Histórico de Vendas)
     # ========================================
     {
+        "question": "Quais são os top 10 produtos mais vendidos?",
+        "expected_table": "dvry_ihs_qualidade_vendas_historico",
+        "keywords": ["produtos", "top 10", "vendidos", "ranking"],
+        "test_number": 9
+    },
+    {
         "question": "Quantas propostas de consórcio foram vendidas em 2024?",
         "expected_table": "dvry_ihs_qualidade_vendas_historico",
         "keywords": ["propostas", "consórcio", "vendidas", "histórico"],
-        "test_number": 9
+        "test_number": 10
     },
     {
         "question": "Qual é o vendedor com maior volume de propostas em 2024?",
         "expected_table": "dvry_ihs_qualidade_vendas_historico",
         "keywords": ["vendedor", "propostas", "histórico"],
-        "test_number": 10
+        "test_number": 11
     },
     {
         "question": "Evolução de vendas de consórcio por origem do contrato em 2024",
         "expected_table": "dvry_ihs_qualidade_vendas_historico",
         "keywords": ["origem", "contrato", "histórico", "evolução"],
-        "test_number": 11
+        "test_number": 12
     },
     {
         "question": "Top 5 planos de consórcio mais vendidos no histórico de vendas",
         "expected_table": "dvry_ihs_qualidade_vendas_historico",
         "keywords": ["planos", "consórcio", "histórico"],
-        "test_number": 12
+        "test_number": 13
     },
 ]
 
@@ -1249,7 +1255,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="Testa fluxo backend com validação de RAG")
-    parser.add_argument("--test-id", type=int, help="Rodar teste específico (1-12)")
+    parser.add_argument("--test-id", type=int, help="Rodar teste específico (1-13)")
     parser.add_argument("--verbose", action="store_true", help="Modo verbose")
     parser.add_argument("--user-id", default="backend_test", help="User ID para logging")
     

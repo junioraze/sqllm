@@ -18,9 +18,6 @@ import json
 from pathlib import Path
 from typing import List
 
-# 🔐 Configurar Google Auth PRIMEIRO (antes de google.cloud)
-from config.settings import google_auth
-
 from google.cloud import bigquery
 from config.settings import PROJECT_ID, DATASET_ID
 from table_config_generator import TableConfigGenerator

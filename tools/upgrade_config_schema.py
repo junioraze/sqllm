@@ -58,9 +58,34 @@ def upgrade_config(config_data):
         if "fields" in table_config:
             new_table["fields"] = table_config["fields"].copy()
         
-        # Copy usage_examples
+        # Copy/Convert usage_examples
         if "usage_examples" in table_config:
-            new_table["usage_examples"] = table_config["usage_examples"].copy()
+            ue = table_config["usage_examples"]
+            # Se for list (estrutura antiga), converter para dict (nova estrutura)
+            if isinstance(ue, list):
+                # Agrupar por tipo de query (ranking, temporal, search, etc)
+                new_ue = {}
+                for example in ue:
+                    question = example.get("question", "").lower()
+                    # Classificar por padrão
+                    if "ranking" in question or "top" in question:
+                        category = "ranking_queries"
+                    elif "tempo" in question or "mensal" in question or "temporal" in question or "mês" in question or "ano" in question:
+                        category = "temporal_analysis"
+                    elif "busca" in question or "search" in question or "qual" in question:
+                        category = "search_examples"
+                    elif "compar" in question:
+                        category = "comparison_queries"
+                    else:
+                        category = "general_examples"
+                    
+                    if category not in new_ue:
+                        new_ue[category] = []
+                    new_ue[category].append(example)
+                new_table["usage_examples"] = new_ue
+            else:
+                # Já é dict, apenas copiar
+                new_table["usage_examples"] = ue.copy()
         
         upgraded[table_id] = new_table
     

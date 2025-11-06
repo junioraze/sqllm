@@ -19,9 +19,6 @@ import re
 from datetime import datetime
 from typing import Dict, List, Any, Tuple
 
-# 🔐 Configurar Google Auth PRIMEIRO (antes de google.cloud)
-from config.settings import google_auth
-
 from google.cloud import bigquery
 import google.generativeai as genai
 from config.settings import PROJECT_ID, DATASET_ID, MODEL_NAME

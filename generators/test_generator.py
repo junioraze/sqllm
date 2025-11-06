@@ -11,7 +11,6 @@ import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config.settings import google_auth
 import google.generativeai as genai
 from google.cloud import bigquery
 from config.settings import PROJECT_ID, DATASET_ID, TABLES_CONFIG
