@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import json
 import traceback
+import pandas as pd
 from cache_db import save_interaction, log_error, get_user_history, get_interaction_full_data
 from config import MAX_RATE_LIMIT, DATASET_ID, PROJECT_ID, TABLES_CONFIG, CLIENT_CONFIG, STANDARD_ERROR_MESSAGE, is_empresarial_mode
 
@@ -322,10 +323,13 @@ if prompt:
     # Mostra animação de typing
     with st.chat_message("assistant"):
         typing_placeholder = st.empty()
+        result_container = st.container()
+        
         typing_placeholder.markdown(show_typing_animation(), unsafe_allow_html=True)
 
-    # Processa a mensagem usando o handler limpo
-    from message_handler import MessageHandler
-    handler = MessageHandler(st.session_state.model, rate_limiter, current_user['email'])
-    handler.process_message(prompt, typing_placeholder)
+        # Processa mensagem via MessageHandler (com detecção automática de Conversational Analytics)
+        from message_handler import MessageHandler
+        handler = MessageHandler(st.session_state.model, rate_limiter, current_user['email'])
+        handler.process_message(prompt, typing_placeholder)
+
 

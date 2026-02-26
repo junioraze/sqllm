@@ -529,9 +529,19 @@ def create_tech_details_spoiler(tech_details: dict) -> str:
     
     if tech_details.get("chart_info"):
         content += format_text_with_ia_highlighting("\n**Informações do Gráfico:**\n")
-        content += format_text_with_ia_highlighting(f"- Tipo: {tech_details['chart_info']['type']}\n")
-        content += f"- Eixo X: {tech_details['chart_info']['x']}\n"
-        content += f"- Eixo Y: {tech_details['chart_info']['y']}\n"
+        chart_info = tech_details['chart_info']
+        
+        if chart_info.get('type'):
+            content += format_text_with_ia_highlighting(f"- Tipo: {chart_info['type']}\n")
+        
+        if chart_info.get('x'):
+            content += f"- Eixo X: {chart_info['x']}\n"
+        
+        if chart_info.get('y'):
+            content += f"- Eixo Y: {chart_info['y']}\n"
+        
+        if chart_info.get('has_chart'):
+            content += f"- Gráfico Disponível: {chart_info['has_chart']}\n"
     
     # Adicionar informações de exportação
     if tech_details.get("export_info"):

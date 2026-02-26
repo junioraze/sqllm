@@ -28,6 +28,7 @@ from prompt_rules import get_adaptation_prompt
 # Sistema RAG obrigatório
 from business_metadata_rag import get_business_rag_instance
 from ai_metrics import ai_metrics
+from conversational_analytics_handler import ConversationalAnalyticsHandler
 
 
 class MessageHandler:
@@ -83,14 +84,22 @@ class MessageHandler:
     def process_message(self, prompt: str, typing_placeholder) -> None:
         """
         Processa uma mensagem seguindo o fluxo definido:
-        1. Verificar reutilização
-        2. Se não reutilizar: converter para SQL
-        3. Executar query no DB
-        4. Processar resposta + gráficos/export
+        1. Verificar Conversational Analytics (Natura + insights)
+        2. Verificar reutilização
+        3. Se não reutilizar: converter para SQL
+        4. Executar query no DB
+        5. Processar resposta + gráficos/export
         """
         try:
             self.flow_path = ["início"]
             self._start_timing("processo_completo", typing_placeholder)
+            
+            # Etapa 0: Verificar se deve usar Conversational Analytics
+            if self._should_use_conversational_analytics(prompt):
+                self.flow_path.append("conversational_analytics")
+                self._process_conversational_analytics(typing_placeholder, prompt)
+                self._end_timing("processo_completo")
+                return
             
             # Etapa 1: Verificar oportunidade de reutilização
             self._start_timing("verificacao_reuso", typing_placeholder)
@@ -117,6 +126,66 @@ class MessageHandler:
             print(f"🔥 HANDLER - TRACEBACK: {traceback.format_exc()}")
             self.flow_path.append("erro_geral")
             self._handle_error(typing_placeholder, prompt, str(e), traceback.format_exc())
+
+    def _should_use_conversational_analytics(self, prompt: str) -> bool:
+        """Detecta se deve usar Conversational Analytics (pergunta sobre glinhares/análises)."""
+        prompt_lower = prompt.lower()
+        
+        # Padrões que indicam Conversational Analytics para projeto glinhares
+        ca_keywords = [
+            'glinhares',
+            'veículo',
+            'veiculo',
+            'consórcio',
+            'consorcio',
+            'cota',
+            'plano',
+            'moto',
+            'carro',
+            'car',
+            'modelo',
+            'fandi',
+            'vendedor',
+            'loja',
+            'venda de',
+            'top',
+            'ranking'
+        ]
+        
+        return any(keyword in prompt_lower for keyword in ca_keywords)
+    
+    def _process_conversational_analytics(self, typing_placeholder, prompt: str) -> None:
+        """Processa pergunta usando Conversational Analytics Handler."""
+        try:
+            self._start_timing("processamento_ca", typing_placeholder)
+            typing_placeholder.markdown(
+                "🔍 **Analisando com Conversational Analytics...**",
+                unsafe_allow_html=True
+            )
+            
+            # Inicializa e executa handler
+            ca_handler = ConversationalAnalyticsHandler(user_id=self.user_id)
+            refined_response, tech_details = ca_handler.process(prompt)
+            
+            self._end_timing("processamento_ca")
+            
+            # Formata e exibe resposta
+            typing_placeholder.empty()
+            st.markdown(refined_response)
+            
+            # Exibe dados técnicos se disponível
+            if tech_details and not tech_details.get("error"):
+                self._finalize_response(
+                    typing_placeholder=typing_placeholder,
+                    response_text=refined_response,
+                    tech_details=tech_details
+                )
+        
+        except Exception as e:
+            print(f"Erro Conversational Analytics: {e}")
+            import traceback
+            traceback.print_exc()
+            typing_placeholder.error(f"❌ Erro ao processar: {str(e)}")
 
     def _check_reuse_opportunity(self, prompt: str) -> Tuple[bool, Dict]:
         """Etapa 1: Verificar se pode reutilizar dados anteriores - OTIMIZADO COM DETECÇÃO INTELIGENTE"""
