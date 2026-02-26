@@ -83,42 +83,37 @@ class MessageHandler:
         
     def process_message(self, prompt: str, typing_placeholder) -> None:
         """
-        Processa uma mensagem seguindo o fluxo definido:
-        1. Verificar Conversational Analytics (Natura + insights)
-        2. Verificar reutilização
-        3. Se não reutilizar: converter para SQL
-        4. Executar query no DB
-        5. Processar resposta + gráficos/export
+        Processa uma mensagem SEMPRE via Conversational Analytics.
+        Fluxo único: prompt → CA API → graph + table
+        Armazena resposta em st.session_state.temp_response e temp_tech_details.
         """
         try:
-            self.flow_path = ["início"]
+            self.flow_path = ["início", "conversational_analytics"]
             self._start_timing("processo_completo", typing_placeholder)
             
-            # Etapa 0: Verificar se deve usar Conversational Analytics
-            if self._should_use_conversational_analytics(prompt):
-                self.flow_path.append("conversational_analytics")
+            print(f"\n{'='*80}")
+            print(f"🔄 [MESSAGE_HANDLER] Processando pergunta: {prompt}")
+            print(f"{'='*80}")
+            print(f"📋 [STEP 0] CA PADRÃO - Processando toda pergunta via Conversational Analytics")
+            
+            try:
+                print(f"🚀 [STEP 0] Chamando _process_conversational_analytics()...")
                 self._process_conversational_analytics(typing_placeholder, prompt)
-                self._end_timing("processo_completo")
-                return
-            
-            # Etapa 1: Verificar oportunidade de reutilização
-            self._start_timing("verificacao_reuso", typing_placeholder)
-            should_reuse, reuse_data = self._check_reuse_opportunity(prompt)
-            should_reuse, reuse_data = False, False # REVER
-            self._end_timing("verificacao_reuso")
-            
-            if should_reuse and reuse_data:
-                self.flow_path.append("reuso_detectado")
-                self._start_timing("processamento_reuso", typing_placeholder)
-                self._process_reuse_flow(typing_placeholder, prompt, reuse_data)
-                self._end_timing("processamento_reuso")
-            else:
-                self.flow_path.append("nova_consulta")
-                self._start_timing("processamento_nova_consulta", typing_placeholder)
-                self._process_new_query_flow(typing_placeholder, prompt)
-                self._end_timing("processamento_nova_consulta")
+                print(f"✅ [STEP 0] _process_conversational_analytics() completou")
                 
+                # Verifica se resposta foi armazenada
+                temp_resp = st.session_state.get('temp_response')
+                print(f"✅ [STEP 0] st.session_state.temp_response setado: {temp_resp is not None}")
+                if temp_resp:
+                    print(f"✅ [STEP 0] Tamanho da resposta: {len(str(temp_resp))} chars")
+            except Exception as e:
+                print(f"❌ [STEP 0] Erro em _process_conversational_analytics(): {e}")
+                import traceback
+                print(traceback.format_exc())
+                raise
+            
             self._end_timing("processo_completo")
+            print(f"✅ [CONCLUÍDO] Pergunta processada via Conversational Analytics\n")
                 
         except Exception as e:
             print(f"🔥 HANDLER - ERRO CAPTURADO: {e}")
@@ -133,30 +128,83 @@ class MessageHandler:
         
         # Padrões que indicam Conversational Analytics para projeto glinhares
         ca_keywords = [
+            # Projeto específico
             'glinhares',
-            'veículo',
-            'veiculo',
-            'consórcio',
-            'consorcio',
-            'cota',
-            'plano',
-            'moto',
-            'carro',
-            'car',
-            'modelo',
-            'fandi',
-            'vendedor',
-            'loja',
-            'venda de',
-            'top',
-            'ranking'
+            
+            # Dados/Entidades do projeto
+            'veículo', 'veiculo', 'vehicles', 'cars', 'carros',
+            'consórcio', 'consorcio', 'consortium', 'consortium',
+            'cota', 'cotas',
+            'plano', 'planos', 'plan', 'plans',
+            'moto', 'motos', 'motorcycle', 'motorcycles',
+            'carro', 'carro', 'car',
+            'modelo', 'modelos', 'model',
+            'fandi', 'FANDI',
+            'vendedor', 'vendedores',
+            'loja', 'lojas',
+            'ceara', 'ceará', 'state', 'estado', 'região', 'regiao',
+            'qualidade',
+            
+            # Ações/Análises sobre dados
+            'venda', 'vendas', 'vend',
+            'vendido', 'vendidos',
+            'total',
+            'demonstr', # demonstre, demonstra, etc
+            'mostre', 'mostrar', 'mostrando',
+            'analise', 'análise', 'analyzer', 'analyzing',
+            'relat', # relatório, relatório
+            'dados', 'data',
+            'desempenho', 'performance',
+            'tendência', 'tendencia', 'trend',
+            'crescimento', 'growth',
+            'redução', 'reducao',
+            'aumento',
+            'diminuição', 'diminuicao',
+            'comparação', 'comparacao', 'compare', 'comparing',
+            'evolução', 'evolucao', 'evolution',
+            'histórico', 'historico', 'history',
+            'série temporal', 'serie temporal', 'time series',
+            'gráfico', 'grafico', 'chart', 'graph',
+            'visualização', 'visualizacao', 'visualization',
+            
+            # Métricas/Quantidades
+            'top', 'maiores', 'menores',
+            'ranking', 'rank',
+            'distribuição', 'distribuicao', 'distribution',
+            'quantidade', 'quantity',
+            'valor', 'values', 'amount',
+            'média', 'media', 'average',
+            'percentual', 'percentage', 'pct',
+            'segmentação', 'segmentacao',
+            'por região', 'por estado',
+            'mês a mês', 'mes a mes', 'monthly',
+            'ano a ano', 'ano a ano', 'yearly',
+            'entre', 'between'
         ]
         
-        return any(keyword in prompt_lower for keyword in ca_keywords)
+        result = any(keyword in prompt_lower for keyword in ca_keywords)
+        
+        # Debug
+        matched = [kw for kw in ca_keywords if kw in prompt_lower]
+        print(f"🔍 [CA_DETECT] Pergunta: {prompt[:50]}...")
+        print(f"🔍 [CA_DETECT] Detectado CA: {result}")
+        if matched:
+            print(f"🔍 [CA_DETECT] Keywords encontradas: {matched}")
+        
+        return result
     
-    def _process_conversational_analytics(self, typing_placeholder, prompt: str) -> None:
-        """Processa pergunta usando Conversational Analytics Handler."""
+    def _process_conversational_analytics(self, typing_placeholder, prompt: str) -> Tuple[str, Dict]:
+        """Processa pergunta usando Conversational Analytics Handler.
+        
+        Armazena resposta em st.session_state.temp_response e temp_tech_details.
+        NÃO adiciona ao histórico - deixa para main.py fazer isso.
+        """
         try:
+            print(f"\n{'='*80}")
+            print(f"🚀 [CA_PROCESS] INICIANDO PROCESSAMENTO CONVERSATIONAL ANALYTICS")
+            print(f"🚀 [CA_PROCESS] Pergunta: {prompt[:100]}...")
+            print(f"{'='*80}")
+            
             self._start_timing("processamento_ca", typing_placeholder)
             typing_placeholder.markdown(
                 "🔍 **Analisando com Conversational Analytics...**",
@@ -164,28 +212,43 @@ class MessageHandler:
             )
             
             # Inicializa e executa handler
+            print(f"🚀 [CA_PROCESS] Criando ConversationalAnalyticsHandler...")
             ca_handler = ConversationalAnalyticsHandler(user_id=self.user_id)
+            print(f"🚀 [CA_PROCESS] Chamando ca_handler.process()...")
             refined_response, tech_details = ca_handler.process(prompt)
+            print(f"✅ [CA_PROCESS] CA Handler retornou resposta com sucesso")
+            print(f"✅ [CA_PROCESS] Response length: {len(refined_response)} chars")
             
             self._end_timing("processamento_ca")
             
-            # Formata e exibe resposta
-            typing_placeholder.empty()
-            st.markdown(refined_response)
+            # Remove instruções técnicas do texto
+            content = slugfy_response(refined_response)
+            for marker in ["GRAPH-TYPE:", "EXPORT-INFO:", "dt:"]:
+                if marker in content:
+                    content = content.split(marker)[0].strip()
             
-            # Exibe dados técnicos se disponível
-            if tech_details and not tech_details.get("error"):
-                self._finalize_response(
-                    typing_placeholder=typing_placeholder,
-                    response_text=refined_response,
-                    tech_details=tech_details
-                )
+            # Exibe no placeholder
+            typing_placeholder.empty()
+            typing_placeholder.markdown(format_text_with_ia_highlighting(content))
+            
+            # Armazena resposta para que main.py adicione ao histórico
+            print(f"✅ [CA_PROCESS] Atribuindo temp_response com {len(content)} chars")
+            st.session_state.temp_response = content
+            print(f"✅ [CA_PROCESS] temp_response atribuído com sucesso")
+            print(f"✅ [CA_PROCESS] Atribuindo tech_details...")
+            st.session_state.temp_tech_details = tech_details if tech_details else {}
+            print(f"✅ [CA_PROCESS] temp_tech_details atribuído com sucesso")
+            print(f"{'='*80}\n")
         
         except Exception as e:
-            print(f"Erro Conversational Analytics: {e}")
+            print(f"❌ [CA_PROCESS] ERRO Conversational Analytics: {e}")
             import traceback
-            traceback.print_exc()
+            print(f"❌ [CA_PROCESS] Traceback:\n{traceback.format_exc()}")
             typing_placeholder.error(f"❌ Erro ao processar: {str(e)}")
+            st.session_state.temp_response = f"❌ Erro: {str(e)}"
+            st.session_state.temp_tech_details = {"error": True}
+            print(f"❌ [CA_PROCESS] Erro armazenado em session_state")
+            print(f"{'='*80}\n")
 
     def _check_reuse_opportunity(self, prompt: str) -> Tuple[bool, Dict]:
         """Etapa 1: Verificar se pode reutilizar dados anteriores - OTIMIZADO COM DETECÇÃO INTELIGENTE"""
@@ -352,12 +415,14 @@ class MessageHandler:
         return False
 
     def _process_reuse_flow(self, typing_placeholder, prompt: str, reuse_data: Dict) -> None:
-        """Etapa 2a: Processar reutilização de dados"""
+        """Etapa 2a: Processar reutilização de dados.
+        
+        Armazena resposta em st.session_state.temp_response e temp_tech_details.
+        """
         self.flow_path.append("processando_reuso")
         
         try:
             self._start_timing("exibindo_feedback_reuso", typing_placeholder)
-            # Remove a linha anterior que mostrava feedback estático
             self._end_timing("exibindo_feedback_reuso")
             
             # Prepara dados para reutilização
@@ -376,7 +441,7 @@ class MessageHandler:
             )
             self._end_timing("refinamento_gemini_reuso")
             
-            # Adiciona informações de reutilização e caminho de decisão
+            # Adiciona informações de reutilização
             self._start_timing("preparando_tech_details", typing_placeholder)
             if tech_details is None:
                 tech_details = {}
@@ -395,9 +460,15 @@ class MessageHandler:
             
             self.flow_path.append("finalizando_reuso")
             
-            # Finaliza e salva
+            # Exibe no placeholder e armazena
             self._start_timing("finalizacao_reuso", typing_placeholder)
-            self._finalize_response(typing_placeholder, refined_response, tech_details)
+            typing_placeholder.empty()
+            typing_placeholder.markdown(format_text_with_ia_highlighting(refined_response))
+            
+            # Armazena resposta para que main.py adicione ao histórico
+            st.session_state.temp_response = refined_response
+            st.session_state.temp_tech_details = tech_details
+            
             self._save_reuse_interaction(prompt, reused_params, reused_query, refined_response, tech_details, reuse_data["interaction"])
             self._end_timing("finalizacao_reuso")
             
@@ -806,21 +877,20 @@ class MessageHandler:
         st.rerun()
 
     def _finalize_response(self, typing_placeholder, response_text: str, tech_details: Dict = None) -> None:
-        """Finaliza resposta e atualiza interface"""
+        """Finaliza resposta e armazena para main.py adicionar ao histórico"""
         typing_placeholder.empty()
         # Remove instruções técnicas do texto antes de salvar
         content = slugfy_response(response_text)
         for marker in ["GRAPH-TYPE:", "EXPORT-INFO:", "dt:"]:
             if marker in content:
                 content = content.split(marker)[0].strip()
-        message_data = {
-            "role": "assistant",
-            "content": format_text_with_ia_highlighting(content)
-        }
-        if tech_details:
-            message_data["tech_details"] = tech_details
-        st.session_state.chat_history.append(message_data)
-        st.rerun()
+        
+        # Exibe no placeholder
+        typing_placeholder.markdown(format_text_with_ia_highlighting(content))
+        
+        # Armazena resposta para que main.py adicione ao histórico
+        st.session_state.temp_response = content
+        st.session_state.temp_tech_details = tech_details if tech_details else {}
 
     def _save_new_interaction(self, prompt: str, serializable_params: Dict, query: str, serializable_data: Any, refined_response: str, tech_details: Dict) -> None:
         """Salva nova interação no cache"""
@@ -927,7 +997,10 @@ class MessageHandler:
         st.rerun()
 
     def _handle_error(self, typing_placeholder, prompt: str, error_msg: str, tb: str) -> None:
-        """Tratamento centralizado de erros"""
+        """Tratamento centralizado de erros.
+        
+        Armazena erro em st.session_state.temp_response e temp_tech_details.
+        """
         self.flow_path.append("tratamento_erro")
         
         # Log no BigQuery e DuckDB
@@ -960,11 +1033,15 @@ class MessageHandler:
         )
         
         typing_placeholder.empty()
-        st.session_state.chat_history.append({
-            "role": "assistant", 
-            "content": format_text_with_ia_highlighting(STANDARD_ERROR_MESSAGE)
-        })
-        st.rerun()
+        typing_placeholder.markdown(format_text_with_ia_highlighting(STANDARD_ERROR_MESSAGE))
+        
+        # Armazena erro para que main.py adicione ao histórico
+        st.session_state.temp_response = STANDARD_ERROR_MESSAGE
+        st.session_state.temp_tech_details = {
+            "error": True,
+            "error_message": error_msg,
+            "response_type": "error"
+        }
 
     def _extract_response_text(self, response) -> str:
         """Extrai texto de forma segura da resposta do Gemini"""
