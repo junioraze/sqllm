@@ -1,3 +1,4 @@
+test_results
 *.json
 .ruff_cache
 # Ignore Python cache files
@@ -22,3 +23,16 @@ cache.db
 *.wal
 # Ignore SQL files      
 *.service
+
+# 🔐 USER-SPECIFIC CONFIGURATION (DO NOT COMMIT)
+# These files contain sensitive information or user-specific settings
+gl.json                          # Google Cloud credentials
+client_config.json              # Client/environment configuration
+credentials.json                # Authentication credentials
+payment_config.json             # Payment system configuration
+rate_limit_state.json           # Rate limit tracking
+cache.meta.json                 # Cache metadata
+sql_patterns_cache.*            # SQL patterns cache files
+ai_metrics.db                   # Metrics database
+users_new.db*                   # User database files
+.streamlit/secrets.toml         # Streamlit secrets

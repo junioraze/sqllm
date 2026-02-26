@@ -1,13 +1,11 @@
 # 🔐 Configurar Google Auth PRIMEIRO (antes de google.cloud)
-from config import google_auth
-
 from google.cloud import bigquery
-from config import PROJECT_ID, DATASET_ID
+from config.settings import PROJECT_ID, DATASET_ID
 import ast
 import re
 import sqlparse
 import pandas as pd
-from config import TABLES_CONFIG
+from config.settings import TABLES_CONFIG
 from database.validator import QueryValidator, validate_and_build_query
 
 # Função para remover comentários SQL
