@@ -4,9 +4,11 @@ from datetime import datetime
 import uuid
 import json
 import os
-from config.settings import DATASET_LOG_ID, CLIENTE_NAME, MAX_RATE_LIMIT
+from config.settings import DATASET_LOG_ID, CLIENTE_NAME, MAX_RATE_LIMIT, PROJECT_ID
 
-client = bigquery.Client()
+def get_bigquery_client():
+    """Cria um cliente BigQuery com o PROJECT_ID correto do config.settings"""
+    return bigquery.Client(project=PROJECT_ID)
 
 def log_interaction(
     user_input,
@@ -81,6 +83,8 @@ def log_interaction(
         "full_payload": full_payload,
     }
 
+    # Cria o cliente BigQuery dinamicamente para garantir PROJECT_ID correto
+    client = get_bigquery_client()
     errors = client.insert_rows_json(DATASET_LOG_ID, [row])
     if errors:
         print("Erro ao inserir log:", errors)

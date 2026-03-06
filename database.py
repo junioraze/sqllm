@@ -18,7 +18,7 @@ def remove_sql_comments(query: str) -> str:
     query = re.sub(r'--.*?(\n|$)', '', query)
     return query
 
-client = bigquery.Client()
+client = bigquery.Client(project=PROJECT_ID)
 query_validator = QueryValidator(max_retries=2)
 
 def sort_results_by_columns(results):

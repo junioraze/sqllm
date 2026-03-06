@@ -246,7 +246,6 @@ with st.container():
     # Exibe o histórico de chat
     from utils.helpers import show_aggrid_table
     for msg in st.session_state.chat_history:
-        tech = msg.get("tech_details")
         with st.container():
             # Exibe o texto limpo primeiro (sem instruções técnicas, sem gráfico embutido)
             content = msg["content"]
@@ -256,28 +255,72 @@ with st.container():
             display_message_with_spoiler(
                 msg["role"], content, None, False
             )
+            
+            # Extrai tech_details
+            tech = msg.get("tech_details")
+            
             # Exibe AgGrid logo após o texto, se houver dados válidos
             if tech and tech.get("aggrid_data"):
                 aggrid_data = tech["aggrid_data"]
+                
                 if isinstance(aggrid_data, list) and len(aggrid_data) > 0 and isinstance(aggrid_data[0], dict):
                     st.markdown("<div style='margin-top:0.5em; margin-bottom:0.5em;'></div>", unsafe_allow_html=True)
                     show_aggrid_table(aggrid_data, theme="balham", height=350, fit_columns=True)
+                else:
+                    if isinstance(aggrid_data, list):
+                        st.warning(f"⚠️ Dados vazios ou formato inválido: lista com {len(aggrid_data)} elementos")
+                    else:
+                        st.warning(f"⚠️ Dados vazios ou formato inválido: type={type(aggrid_data)}")
+            elif tech:
+                st.info("📊 Resposta recebida mas sem dados tabulares")
+                if tech.get("sql_query"):
+                    st.code(tech["sql_query"], language="sql")
             
             # Exibe gráfico após grid
             if tech and tech.get("chart_info") and tech["chart_info"].get("fig"):
                 fig = tech["chart_info"]["fig"]
                 st.markdown("<div style='margin-top:0.5em; margin-bottom:0.5em;'></div>", unsafe_allow_html=True)
-                # Garante que o gráfico ocupe todo o espaço horizontal do container
-                st.plotly_chart(
-                    fig,
-                    use_container_width=True,
-                    key=f"fig_{id(fig)}",
-                    config={
-                        'displayModeBar': False,
-                        'responsive': True,
-                        'staticPlot': False
-                    }
-                )
+                
+                # Suporta tanto Plotly quanto Altair
+                try:
+                    import altair as alt
+                    # Tenta renderizar como Altair primeiro
+                    if isinstance(fig, alt.Chart):
+                        st.altair_chart(fig, use_container_width=True, theme=None)
+                    elif isinstance(fig, dict):
+                        # Se for dict, tenta renderizar como Altair
+                        try:
+                            altair_fig = alt.Chart.from_dict(fig)
+                            st.altair_chart(altair_fig, use_container_width=True, theme=None)
+                        except:
+                            # Se não conseguir, tenta como Plotly
+                            import plotly.graph_objects as go
+                            plotly_fig = go.Figure(fig)
+                            st.plotly_chart(
+                                plotly_fig,
+                                use_container_width=True,
+                                key=f"fig_{id(fig)}",
+                                config={
+                                    'displayModeBar': False,
+                                    'responsive': True,
+                                    'staticPlot': False
+                                }
+                            )
+                    else:
+                        # Renderiza como Plotly
+                        st.plotly_chart(
+                            fig,
+                            use_container_width=True,
+                            key=f"fig_{id(fig)}",
+                            config={
+                                'displayModeBar': False,
+                                'responsive': True,
+                                'staticPlot': False
+                            }
+                        )
+                except Exception as e:
+                    print(f"⚠️ Erro ao renderizar gráfico: {e}")
+                    st.warning(f"Erro ao renderizar gráfico: {str(e)}")
             # Exibe detalhes técnicos por último, sempre após texto, grid e gráfico
             if tech and SHOW_TECHNICAL_SPOILER:
                 from utils.helpers import create_tech_details_spoiler

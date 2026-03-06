@@ -14,3 +14,4 @@ sentence-transformers
 numpy
 annoy
 sqlparse
+google-cloud-geminidataanalytics

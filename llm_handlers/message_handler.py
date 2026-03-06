@@ -28,6 +28,7 @@ from llm_handlers.prompt_rules import get_adaptation_prompt
 # Sistema RAG obrigatório
 from rag_system.business_metadata_rag import get_business_rag_instance
 from utils.metrics import ai_metrics
+# Conversational Analytics Handler
 from conversational_analytics_handler import ConversationalAnalyticsHandler
 
 
@@ -77,6 +78,8 @@ class MessageHandler:
         self.model = model
         self.rate_limiter = rate_limiter
         self.user_id = user_id
+        self.project_id = PROJECT_ID  # Para detecção de CA
+        self.dataset_id = DATASET_ID
         self.flow_path = []  # Para rastrear o caminho seguido
         self.timing_info = {}  # Para rastrear timing de cada etapa
         self.start_time = None
@@ -84,23 +87,22 @@ class MessageHandler:
     def process_message(self, prompt: str, typing_placeholder) -> None:
         """
         Processa uma mensagem seguindo o fluxo definido:
-        1. Verificar Conversational Analytics (Natura + insights)
-        2. Verificar reutilização
-        3. Se não reutilizar: converter para SQL
-        4. Executar query no DB
-        5. Processar resposta + gráficos/export
+        1️⃣ Verificar Conversational Analytics para perguntas sobre glinhares
+        2️⃣ Se CA: Detecta tabela → Processa → Retorna (summary, tech_details) com tabela + gráfico
+        3️⃣ Se não CA: Fluxo SQL tradicional (verificar reuso, build query, execute)
         """
         try:
             self.flow_path = ["início"]
             self._start_timing("processo_completo", typing_placeholder)
             
-            # Etapa 0: Verificar se deve usar Conversational Analytics
+            # Etapa 0: Verificar se deve usar Conversational Analytics para glinhares
             if self._should_use_conversational_analytics(prompt):
                 self.flow_path.append("conversational_analytics")
                 self._process_conversational_analytics(typing_placeholder, prompt)
                 self._end_timing("processo_completo")
-                return
+                return  # ✅ FIM DO FLUXO CA - NÃO CONTINUA PARA O ANTIGO
             
+            # Se não for CA, segue fluxo SQL tradicional
             # Etapa 1: Verificar oportunidade de reutilização
             self._start_timing("verificacao_reuso", typing_placeholder)
             should_reuse, reuse_data = self._check_reuse_opportunity(prompt)
@@ -128,10 +130,30 @@ class MessageHandler:
             self._handle_error(typing_placeholder, prompt, str(e), traceback.format_exc())
 
     def _should_use_conversational_analytics(self, prompt: str) -> bool:
-        """Detecta se deve usar Conversational Analytics (pergunta sobre glinhares/análises)."""
-        prompt_lower = prompt.lower()
+        """
+        Detecta se deve usar Conversational Analytics.
         
-        # Padrões que indicam Conversational Analytics para projeto glinhares
+        Regra: Se o projeto for um projeto CA (superacessovip, glinhares, etc),
+        TODAS as perguntas usam CA. Não usa fluxo SQL tradicional.
+        """
+        # Projetos que SEMPRE usam Conversational Analytics
+        ca_projects = [
+            'superacessovip',
+            'glinhares',
+            'dw_superacesso',
+            'dw-superacesso'
+        ]
+        
+        # Verifica se projeto atual é um projeto CA
+        project_lower = self.project_id.lower() if hasattr(self, 'project_id') else PROJECT_ID.lower()
+        is_ca_project = any(ca_proj in project_lower for ca_proj in ca_projects)
+        
+        # Se for projeto CA, SEMPRE usa CA (ignora fluxo SQL tradicional)
+        if is_ca_project:
+            return True
+        
+        # Se for outro projeto, usa keywords para detectar CA
+        prompt_lower = prompt.lower()
         ca_keywords = [
             'glinhares',
             'veículo',
@@ -155,37 +177,86 @@ class MessageHandler:
         return any(keyword in prompt_lower for keyword in ca_keywords)
     
     def _process_conversational_analytics(self, typing_placeholder, prompt: str) -> None:
-        """Processa pergunta usando Conversational Analytics Handler."""
+        """
+        Processa pergunta usando Conversational Analytics Handler.
+        
+        Fluxo:
+        1. Mostra indicador "Analisando..."
+        2. Chama ConversationalAnalyticsHandler.process(prompt)
+        3. Handler retorna: (summary: str, tech_details: Dict)
+           - summary: Texto da resposta com insights
+           - tech_details: Dict com:
+             * aggrid_data: Lista de dicts para tabela
+             * chart_info.fig: Figura Plotly em formato dict
+             * query: SQL executado
+             * data_source: Nome da tabela detectada
+        4. UI exibe: Texto → Tabela AgGrid → Gráfico Plotly
+        """
         try:
             self._start_timing("processamento_ca", typing_placeholder)
+            self.flow_path.append("processamento_ca")
+            
             typing_placeholder.markdown(
                 "🔍 **Analisando com Conversational Analytics...**",
                 unsafe_allow_html=True
             )
             
-            # Inicializa e executa handler
-            ca_handler = ConversationalAnalyticsHandler(user_id=self.user_id)
+            # Executa CA: pergunta → (summary, tech_details)
+            ca_handler = ConversationalAnalyticsHandler(
+                project_id=PROJECT_ID,
+                dataset_id=DATASET_ID,
+                user_id=self.user_id
+            )
             refined_response, tech_details = ca_handler.process(prompt)
             
             self._end_timing("processamento_ca")
             
-            # Formata e exibe resposta
-            typing_placeholder.empty()
-            st.markdown(refined_response)
+            # Log de sucesso
+            self._log_success(
+                prompt=prompt,
+                serializable_params={
+                    "type": "conversational_analytics",
+                    "agent_id": tech_details.get("agent_id"),
+                    "dataset": tech_details.get("dataset")
+                },
+                query=tech_details.get("sql_query", ""),
+                serializable_data=tech_details.get("aggrid_data", []),
+                refined_response=refined_response,
+                tech_details=tech_details
+            )
             
-            # Exibe dados técnicos se disponível
-            if tech_details and not tech_details.get("error"):
-                self._finalize_response(
-                    typing_placeholder=typing_placeholder,
-                    response_text=refined_response,
-                    tech_details=tech_details
+            # Salva interação
+            try:
+                save_interaction(
+                    user_id=self.user_id,
+                    question=prompt,
+                    function_params={"type": "conversational_analytics", "agent_id": tech_details.get("agent_id")},
+                    query_sql=tech_details.get("sql_query", ""),
+                    raw_data=tech_details.get("aggrid_data", []),
+                    raw_response=None,
+                    refined_response=refined_response,
+                    tech_details=tech_details,
+                    status="OK"
                 )
+            except Exception as e:
+                print(f"⚠️ Erro salvando interação CA: {e}")
+            
+            # Atualiza UI: limpa indicator
+            typing_placeholder.empty()
+            
+            # Finaliza a resposta com tabelas e gráficos
+            self._finalize_response(
+                typing_placeholder=typing_placeholder,
+                response_text=refined_response,
+                tech_details=tech_details
+            )
         
         except Exception as e:
-            print(f"Erro Conversational Analytics: {e}")
+            print(f"❌ Erro Conversational Analytics: {e}")
+            self.flow_path.append("erro_ca")
             import traceback
             traceback.print_exc()
-            typing_placeholder.error(f"❌ Erro ao processar: {str(e)}")
+            self._handle_error(typing_placeholder, prompt, f"Erro CA: {str(e)}", traceback.format_exc())
 
     def _check_reuse_opportunity(self, prompt: str) -> Tuple[bool, Dict]:
         """Etapa 1: Verificar se pode reutilizar dados anteriores - OTIMIZADO COM DETECÇÃO INTELIGENTE"""
@@ -808,17 +879,21 @@ class MessageHandler:
     def _finalize_response(self, typing_placeholder, response_text: str, tech_details: Dict = None) -> None:
         """Finaliza resposta e atualiza interface"""
         typing_placeholder.empty()
+        
         # Remove instruções técnicas do texto antes de salvar
         content = slugfy_response(response_text)
         for marker in ["GRAPH-TYPE:", "EXPORT-INFO:", "dt:"]:
             if marker in content:
                 content = content.split(marker)[0].strip()
+        
         message_data = {
             "role": "assistant",
             "content": format_text_with_ia_highlighting(content)
         }
+        
         if tech_details:
             message_data["tech_details"] = tech_details
+        
         st.session_state.chat_history.append(message_data)
         st.rerun()
 
