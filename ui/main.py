@@ -372,5 +372,54 @@ if prompt:
     # Processa a mensagem usando o handler limpo
     from llm_handlers.message_handler import MessageHandler
     handler = MessageHandler(st.session_state.model, rate_limiter, current_user['email'])
+    
+    # Inicializar resposta temporária no session_state 
+    st.session_state.temp_response = None
+    st.session_state.temp_tech_details = None
+    
+    print(f"\n{'='*80}")
+    print(f"📋 [MAIN] Antes de process_message: temp_response={st.session_state.get('temp_response')}")
+    print(f"{'='*80}")
+    
+    # Processa a mensagem
     handler.process_message(prompt, typing_placeholder)
+    
+    print(f"{'='*80}")
+    print(f"🔍 [MAIN] Depois de process_message:")
+    print(f"🔍 [MAIN] temp_response={st.session_state.get('temp_response') is not None}")
+    print(f"🔍 [MAIN] temp_tech_details={st.session_state.get('temp_tech_details') is not None}")
+    if st.session_state.get('temp_response'):
+        print(f"🔍 [MAIN] Response length: {len(str(st.session_state.get('temp_response')))}")
+    if st.session_state.get('temp_tech_details'):
+        tech = st.session_state.get('temp_tech_details', {})
+        print(f"🔍 [MAIN] Tech keys: {list(tech.keys())}")
+        print(f"🔍 [MAIN] Has aggrid_data: {tech.get('aggrid_data') is not None}")
+        print(f"🔍 [MAIN] Has chart_info: {tech.get('chart_info') is not None}")
+    print(f"{'='*80}")
+    
+    # Captura a resposta armazenada
+    if st.session_state.get("temp_response"):
+        response_content = st.session_state.temp_response
+        tech_details = st.session_state.get("temp_tech_details", {})
+        
+        print(f"✅ [MAIN] Capturando resposta e adicionando ao histórico")
+        
+        # Adiciona ao histórico UMA ÚNICA VEZ
+        message_data = {
+            "role": "assistant",
+            "content": response_content
+        }
+        if tech_details:
+            message_data["tech_details"] = tech_details
+        st.session_state.chat_history.append(message_data)
+        print(f"✅ [MAIN] Resposta adicionada ao histórico - Total mensagens: {len(st.session_state.chat_history)}")
+        
+        # Limpa variáveis temporárias
+        st.session_state.temp_response = None
+        st.session_state.temp_tech_details = None
+        
+        # Re-renderiza para mostrar a resposta imediatamente
+        st.rerun()
+    else:
+        print(f"❌ [MAIN] ERRO: temp_response estava vazio após process_message!")
 
