@@ -4,9 +4,6 @@ Conversational Analytics Handler
 Handler para análise usando Google Cloud Gemini Data Analytics API.
 Fluxo: pergunta → cria/acessa agente → cria conversa → chat com streaming → processa resposta
 
-Usa SDK: google.cloud.geminidataanalytics
-Agente: agent_22f438e7-caff-4eb3-9507-070f278755a4
-
 Retorna: Tuple[str, Dict] = (summary, tech_details) compatível com MessageHandler
 """
 
@@ -14,6 +11,7 @@ from typing import Tuple, Dict, Any, List
 from datetime import datetime
 import os
 import uuid
+import re
 from google.cloud import geminidataanalytics
 import pandas as pd
 import altair as alt
@@ -34,7 +32,7 @@ class ConversationalAnalyticsHandler:
     5. Retorna (summary, tech_details) com dados e gráficos
     """
     
-    AGENT_ID = "agent_22f438e7-caff-4eb3-9507-070f278755a4"
+    AGENT_ID = "agent_8f51992b-552c-4778-9790-b619f8196dc5"
     LOCATION = "global"
     
     def __init__(self, project_id: str, dataset_id: str, user_id: str = "default"):
@@ -42,6 +40,9 @@ class ConversationalAnalyticsHandler:
         self.user_id = user_id
         self.project_id = project_id
         self.dataset_id = dataset_id
+        
+        # Force project ID para cloudaicompanion
+        os.environ['GOOGLE_CLOUD_PROJECT'] = project_id
         
         # Clients
         self.data_agent_client = geminidataanalytics.DataAgentServiceClient()
@@ -86,13 +87,20 @@ class ConversationalAnalyticsHandler:
     
     def _create_agent(self) -> str:
         """Cria novo agente com system instructions e datasources."""
-        # System instruction
+        # System instruction - em PT-BR para respostas em português
         system_instruction = f"""
-You are a data analyst specializing in the {self.dataset_id} dataset.
-Your role is to help analyze data and answer questions about {self.dataset_id}.
-Provide clear, actionable insights based on the data.
-When appropriate, generate SQL queries and visualizations.
-Always explain your analysis and methodology."""
+Você é um analista de dados especializado no dataset {self.dataset_id}.
+Seu papel é ajudar a analisar dados e responder perguntas sobre {self.dataset_id}.
+
+IMPORTANTE - RESPONDA SEMPRE EM PORTUGUÊS BRASILEIRO:
+- Seu pensamento deve ser em português-brasileiro
+- Sua resposta deve ser em português-brasileiro
+- Não use inglês em nenhuma parte da resposta
+
+Forneça insights claros e acionáveis com base nos dados.
+Quando apropriado, gere consultas SQL e visualizações.
+Sempre explique sua análise e metodologia.
+Seja conciso mas detalhado em suas explicações."""
         
         # BigQuery datasources
         bq_table = geminidataanalytics.BigQueryTableReference(
@@ -171,6 +179,84 @@ Always explain your analysis and methodology."""
                 self.project_id, self.LOCATION, self.conversation_id
             )
     
+    def _parse_thinking_and_response(self, text: str) -> Tuple[str, str]:
+        """
+        Separa pensamentos (thinking) de resposta final.
+        Retorna: (thinking, response)
+        
+        IMPORTANTE: Se detectar pensamento em inglês, returna só a resposta
+        """
+        if not text.strip():
+            return "", ""
+        
+        lines = text.split('\n')
+        
+        # Padrões de pensamento em português
+        pt_thinking_patterns = [
+            'analisando', 'calculando', 'pensando', 'verificando',
+            'consultando', 'procurando', 'gerando', 'processando',
+            'buscando', 'investigando', 'determinando', 'entendendo',
+            'interpretando', 'extraindo', 'montando', 'criando',
+            'executando', 'recuperando', 'identificando', 'detectando',
+            'processados', 'extraído', 'gerado', 'criado'
+        ]
+        
+        # Padrões em inglês (para ignorar)
+        en_thinking_patterns = [
+            'analyzing', 'calculating', 'thinking', 'checking',
+            'consulting', 'searching', 'generating', 'processing',
+            'finding', 'investigating', 'determining', 'understanding',
+            'interpreting', 'extracting', 'building', 'creating',
+            'executing', 'retrieving', 'identifying', 'detecting'
+        ]
+        
+        thinking_lines = []
+        response_lines = []
+        
+        # Limita a procura apenas nas primeiras 3 linhas
+        max_thinking_lines = 2
+        lines_found = 0
+        found_english = False
+        
+        for i, line in enumerate(lines):
+            lower_line = line.lower().strip()
+            
+            # Para se já encontrou thinking suficiente
+            if lines_found >= max_thinking_lines:
+                response_lines.append(line)
+                continue
+            
+            # Detecta padrões em inglês
+            if any(pattern in lower_line for pattern in en_thinking_patterns):
+                found_english = True
+                response_lines.append(line)
+                continue
+            
+            # Detecta se é linha de pensamento em português
+            is_thinking_line = (
+                any(pattern in lower_line for pattern in pt_thinking_patterns) and
+                len(lower_line) > 5  # Deve ter conteúdo
+            )
+            
+            if is_thinking_line and i < 5:  # Apenas primeiras 5 linhas
+                thinking_lines.append(line)
+                lines_found += 1
+            else:
+                response_lines.append(line)
+        
+        thinking_text = '\n'.join(thinking_lines).strip()
+        response_text = '\n'.join(response_lines).strip()
+        
+        # Se detectou inglês ou thinking muito curto, ignora
+        if found_english or len(thinking_text) < 30:
+            return "", text.strip()
+        
+        # Limita thinking a 250 caracteres max
+        if len(thinking_text) > 250:
+            thinking_text = thinking_text[:250]
+        
+        return thinking_text, response_text
+    
     def _process_response_message(self, response: Any) -> None:
         """Processa cada mensagem do streaming da API."""
         try:
@@ -183,7 +269,16 @@ Always explain your analysis and methodology."""
             if hasattr(m, 'text') and m.text:
                 text_response = m.text
                 if hasattr(text_response, 'parts'):
-                    text = "".join(str(p) for p in text_response.parts)
+                    # ✅ CORRIGE: Junta parts com quebra de linha para não concatenar perguntas
+                    text = "\n".join(str(p) for p in text_response.parts)
+                    
+                    # 🔍 DEBUG: Se tiver múltiplas parts (pode ser perguntas), mostra
+                    if len(text_response.parts) > 1:
+                        print(f"\n   📝 Multiple parts detectadas ({len(text_response.parts)}):")
+                        for idx, part in enumerate(text_response.parts):
+                            part_str = str(part).strip()
+                            print(f"      Part {idx}: {part_str[:80]}...")
+                    
                     self.response_data["text"] += text + "\n"
             
             # DATA RESPONSE
@@ -237,16 +332,24 @@ Always explain your analysis and methodology."""
         except Exception as e:
             print(f"❌ Erro processando mensagem: {e}")
 
-    
-    def process(self, question: str) -> Tuple[str, Dict[str, Any]]:
+    def process_streaming(self, question: str):
         """
-        Processa pergunta com Conversational Analytics API.
-        Retorna: (texto_resposta, tech_details)
+        Processa pergunta em modo STREAMING, gerando dados parciais.
+        Yield de (tipo, dados) para renderização incremental na UI:
+        - ('thinking_chunk', texto_pensamento_do_agente)
+        - ('response_chunk', resposta_final_do_agente)
+        - ('table_ready', dados_tabela_completa)
+        - ('chart_ready', figura_gráfico)
+        - ('complete', tech_details_final)
+        
+        ⭐ USA CAMPOS NATIVOS DA API:
+        - text_type: 2 = THOUGHT (pensamento)
+        - text_type: 1 = ANALYSIS (análise/resposta)
+        - text_type: 0 = CONCLUSION (conclusão)
         """
         try:
-<<<<<<< HEAD
             print(f"\n{'='*70}")
-            print(f"📝 INICIANDO PROCESSO CA")
+            print(f"📝 INICIANDO PROCESSO CA (STREAMING)")
             print(f"   Pergunta: {question}")
             print(f"{'='*70}")
             
@@ -290,32 +393,184 @@ Always explain your analysis and methodology."""
             # Chat streaming
             stream = self.data_chat_client.chat(request=request)
             
-            parte_count = 0
+            last_text_length = 0
+            rows_before = 0
+            table_yielded = False
+            chart_yielded = False
+            
+            # Rastreadores de tipo de texto (TEXT_TYPE enum values)
+            TEXT_TYPE_THOUGHT = 2    # Pensamento do agente
+            TEXT_TYPE_ANALYSIS = 1   # Análise/Resposta
+            TEXT_TYPE_CONCLUSION = 0 # Conclusão
+            
+            # Acumula thinking e analysis separadamente
+            accumulated_thinking = ""
+            accumulated_analysis = ""
+            last_text_type = None
+            
+            # ✅ RASTREAMENTO DO ÚLTIMO CHUNK (contém as perguntas)
+            last_chunk_index = None
+            last_chunk_text = ""
+            
+            # Lista para armazenar perguntas sugeridas (extraídas do texto final)
+            example_queries = []
+            
             for i, response in enumerate(stream):
                 try:
+                    # 🔍 DEBUG: Mostra cada objeto do streaming (especialmente os últimos)
+                    print(f"\n{'='*80}")
+                    print(f"📡 [CHUNK {i}] OBJETO COMPLETO DO STREAMING:")
+                    print(f"{'='*80}")
+                    print(repr(response))
+                    print(f"{'='*80}\n")
+                    
+                    # Processa mensagem - atualiza self.response_data
                     self._process_response_message(response)
-                    parte_count += 1
+                    
+                    # Extrai o tipo de texto se disponível
+                    current_text_type = None
+                    if hasattr(response, 'system_message') and response.system_message.text:
+                        if hasattr(response.system_message.text, 'text_type'):
+                            current_text_type = response.system_message.text.text_type
+                    
+                    # ✅ YIELD DE TEXTO: Separado por tipo nativo
+                    current_text = self.response_data.get("text", "")
+                    if len(current_text) > last_text_length:
+                        new_text = current_text[last_text_length:]
+                        if new_text.strip():
+                            # ✅ RASTREIA O ÚLTIMO CHUNK COM TEXTO (para extrair perguntas depois)
+                            last_chunk_index = i
+                            last_chunk_text = new_text  # Armazena só o novo texto deste chunk
+                            
+                            # ✅ EXTRAI PERGUNTAS DO NOVO TEXTO ANTES DE FAZER YIELD
+                            # Evita que as perguntas sejam entregues ao usuário em tempo real
+                            import re as regex_module
+                            text_to_yield = new_text
+                            question_pattern = r'([^.!?]*\?)'
+                            found_questions = regex_module.findall(question_pattern, new_text)
+                            
+                            if found_questions:
+                                # Remove as perguntas do texto que vai ser enviado
+                                for q in found_questions:
+                                    q_clean = q.strip()
+                                    if len(q_clean) > 15:  # Pergunta válida
+                                        if q_clean not in example_queries:  # Evita duplicatas
+                                            example_queries.append(q_clean)
+                                        text_to_yield = text_to_yield.replace(q_clean, "").strip()
+                                
+                                print(f"🎯 [CHUNK {i}] {len(found_questions)} perguntas detectadas e REMOVIDAS do envio ao usuário")
+                            
+                            # Separa por text_type nativo
+                            if text_to_yield.strip():  # Só faz yield se ainda houver texto
+                                if current_text_type == TEXT_TYPE_THOUGHT:
+                                    accumulated_thinking += text_to_yield
+                                    print(f"💬 [CHUNK {i}] Pensamento (+{len(text_to_yield)} chars)")
+                                    # Yield thinking
+                                    yield ('thinking_chunk', text_to_yield)
+                                elif current_text_type == TEXT_TYPE_ANALYSIS:
+                                    accumulated_analysis += text_to_yield
+                                    print(f"💬 [CHUNK {i}] Análise (+{len(text_to_yield)} chars)")
+                                    # Yield analysis
+                                    yield ('response_chunk', text_to_yield)
+                                elif current_text_type == TEXT_TYPE_CONCLUSION:
+                                    accumulated_analysis += text_to_yield
+                                    print(f"💬 [CHUNK {i}] Conclusão (+{len(text_to_yield)} chars)")
+                                    # Yield conclusion como parte da resposta
+                                    yield ('response_chunk', text_to_yield)
+                                else:
+                                    # Fallback: trata como análise/resposta
+                                    accumulated_analysis += text_to_yield
+                                    print(f"💬 [CHUNK {i}] Novo texto (+{len(text_to_yield)} chars)")
+                                    yield ('response_chunk', text_to_yield)
+                        
+                        last_text_length = len(current_text)
+                    
+                    # ✅ YIELD DE TABELA
+                    rows = self.response_data.get("rows", [])
+                    if rows and len(rows) > rows_before and not table_yielded:
+                        print(f"📋 [CHUNK {i}] Tabela com {len(rows)} registros detectada")
+                        yield ('table_ready', rows)
+                        table_yielded = True
+                        rows_before = len(rows)
+                    
                 except Exception as e:
-                    print(f"❌ Erro na parte {i+1}: {e}")
+                    print(f"❌ Erro no chunk {i+1}: {e}")
             
-            print(f"\n{'='*70}")
-            print(f"📊 RESUMO DAS RESPOSTAS PROCESSADAS:")
-            print(f"   Total de partes: {parte_count}")
-            print(f"   Texto: {len(self.response_data.get('text', ''))} caracteres")
-            print(f"   Linhas de dados: {len(self.response_data.get('rows', []))}")
-            print(f"   SQL gerado: {'SIM' if self.response_data.get('generated_sql') else 'NÃO'}")
+            print(f"\n✅ Streaming da API terminou (total de chunks: {i+1})")
             
-            # Extrai resposta final
-            summary = self.response_data.get("text", "").strip()
+            # ✅ YIELD FINAL: Tech details after all chunks processed
+            rows = self.response_data.get("rows", [])
+            
+            # Gráfico final se houver dados
+            chart_info = self._create_chart_info(rows)
+            if chart_info and chart_info.get("fig") and not chart_yielded:
+                print(f"📈 Gráfico criado")
+                yield ('chart_ready', chart_info)
+                chart_yielded = True
+            
+            # Monta resposta final completa
+            full_text = self.response_data.get("text", "").strip()
+            
+            print(f"\n{'='*80}")
+            print(f"🔍 TEXTO COMPLETO FINAL (antes de processar):")
+            print(f"{'='*80}")
+            print(f"{full_text}")
+            print(f"{'='*80}\n")
+            
+            # ✅ EXTRAI PERGUNTAS DO ÚLTIMO CHUNK
+            # O último chunk sempre contém as perguntas sugeridas
+            # Procura por linhas que terminam com "?"
+            if last_chunk_text:
+                print(f"\n🔍 Analisando último chunk (CHUNK {last_chunk_index}) para extrair perguntas:")
+                print(f"Texto: {last_chunk_text[:200]}...")
+                
+                import re as regex_module
+                
+                # Procura por linhas que terminam com "?" (perguntas sugeridas)
+                # Pattern: qualquer coisa terminada com "?"
+                question_pattern = r'([^.!?]*\?)'
+                found_questions = regex_module.findall(question_pattern, last_chunk_text)
+                
+                if found_questions:
+                    # Limpa e valida as perguntas
+                    for q in found_questions:
+                        q_clean = q.strip()
+                        if len(q_clean) > 15:  # Pergunta válida
+                            example_queries.append(q_clean)
+                    
+                    if example_queries:
+                        print(f"\n✅ {len(example_queries)} PERGUNTAS SUGERIDAS ENCONTRADAS NO ÚLTIMO CHUNK:")
+                        for q in example_queries:
+                            print(f"   - {q}")
+                        
+                        # ✅ REMOVE as perguntas do texto final (resposta)
+                        for q in example_queries:
+                            full_text = full_text.replace(q, "").strip()
+                        
+                        # Remove espaços múltiplos
+                        full_text = regex_module.sub(r'\s+', ' ', full_text)
+                else:
+                    print(f"⚠️ Nenhuma pergunta encontrada no último chunk")
+            
+            # ✅ Remove "example queries" / "suggested questions" do texto se forem mencionadas
+            cleanup_patterns = [
+                r"(?:here are some example|suggested)[^:]*:\s*", 
+                r"(?:exemplo de|sugestões de) perguntas:?\s*",
+                r"you might also want to ask:?\s*"
+            ]
+            for pattern in cleanup_patterns:
+                # Encontra padrão e remove tudo depois dele se parecer ser uma lista
+                match = regex_module.search(pattern, full_text, regex_module.IGNORECASE)
+                if match:
+                    full_text = full_text[:match.start()].strip()
+            
+            thinking, final_response = self._parse_thinking_and_response(full_text)
+            
+            summary = final_response if final_response else full_text
             if not summary:
                 summary = "Análise concluída. Verifique a tabela de dados para os resultados."
             
-            # Extrai dados
-            rows = self.response_data.get("rows", [])
-            
-            # Monta tech_details com TODAS as informações disponíveis
             tech_details = {
-                # Identificação
                 "agent_id": self.AGENT_ID,
                 "project": self.project_id,
                 "dataset": self.dataset_id,
@@ -323,144 +578,45 @@ Always explain your analysis and methodology."""
                 "question": question,
                 "response_type": "conversational_analytics",
                 "conversational_analytics": True,
-                
-                # Dados para UI
                 "sql_query": self.response_data.get("generated_sql", ""),
-                "aggrid_data": rows,  # Tabela principal
-                
-                # Chart info (criado se houver dados)
-                "chart_info": self._create_chart_info(rows),
-                
-                # Debug info
+                "aggrid_data": rows,
+                "chart_info": chart_info,
+                "example_queries": example_queries,  # ⭐ Exemplo de perguntas da API
                 "data_extraction_status": {
                     "rows_extracted": len(rows),
                     "has_sql": bool(self.response_data.get("generated_sql")),
-                    "response_parts": parte_count,
+                    "response_parts": i + 1,
                 }
             }
             
-            # Log do resultado
-            print(f"\n{'='*70}")
-            print(f"✅ RESULTADO FINAL:")
-            print(f"   Registros para tabela: {len(rows)}")
-            print(f"   Gráfico gerado: {tech_details['chart_info'] is not None}")
-            print(f"   Status: SUCESSO")
-            
-            # Log detalhado do tech_details
-            print(f"\n📤 TECH_DETAILS QUE SERÁ RETORNADO:")
-            print(f"   Keys: {list(tech_details.keys())}")
-            print(f"   aggrid_data type: {type(tech_details['aggrid_data'])}")
-            print(f"   aggrid_data length: {len(tech_details['aggrid_data'])}")
-            if tech_details['aggrid_data']:
-                print(f"   aggrid_data[0]: {tech_details['aggrid_data'][0]}")
-            print(f"   chart_info: {tech_details['chart_info'] is not None}")
-            print(f"   sql_query length: {len(tech_details.get('sql_query', ''))}")
+            print(f"{'='*70}")
+            print(f"✅ STREAMING COMPLETO")
+            print(f"   Registros: {len(rows)}")
+            print(f"   Gráfico: {chart_info is not None}")
+            print(f"   Chunks processados: {i+1}")
             print(f"{'='*70}\n")
-=======
-            print(f"\n{'='*80}")
-            print(f"🚀 [CA_HANDLER.PROCESS] Iniciando processamento")
-            print(f"🚀 [CA_HANDLER.PROCESS] Pergunta: {question}")
             
-            data_source = self._detect_data_source(question)
-            print(f"🚀 [CA_HANDLER.PROCESS] Data source detectada: {data_source}")
-            
-            limit = self._extract_limit(question)
-            print(f"🚀 [CA_HANDLER.PROCESS] Limit: {limit}")
-            
-            # Processa baseado na tabela detectada
-            if data_source == 'drvy_VeiculosVendas':
-                response_dict = self._process_glinhares_veiculos(question, limit)
-            elif data_source == 'dvry_ihs_cotas_ativas':
-                response_dict = self._process_glinhares_cotas_ativas(question, limit)
-            elif data_source == 'dvry_ihs_qualidade_vendas_historico':
-                response_dict = self._process_glinhares_qualidade_vendas(question, limit)
-            elif data_source == 'api_webservice_plano':
-                response_dict = self._process_glinhares_plano(question, limit)
-            elif data_source == 'api_webservice_fandi':
-                response_dict = self._process_glinhares_fandi(question, limit)
-            else:
-                response_dict = self._process_glinhares_veiculos(question, limit)
-            
-            summary = response_dict.get("summary", "")
-            sql_query = response_dict.get("sql_query", "")
-            data_preview = response_dict.get("data_preview", [])
-            has_chart = response_dict.get("has_chart", False)
-            
-            print(f"🚀 [CA_HANDLER.PROCESS] Summary length: {len(summary)}")
-            print(f"🚀 [CA_HANDLER.PROCESS] Data preview rows: {len(data_preview)}")
-            print(f"🚀 [CA_HANDLER.PROCESS] Has chart: {has_chart}")
-            
-            # Cria figura do gráfico se houver dados
-            fig = None
-            if has_chart and data_preview:
-                print(f"🚀 [CA_HANDLER.PROCESS] Criando figura Plotly...")
-                fig = self._create_chart_figure(data_preview, question)
-                print(f"🚀 [CA_HANDLER.PROCESS] Figura criada: {fig is not None}")
-            
-            tech_details = {
-                "function_params": {
-                    "source": data_source,
-                    "limit": limit,
-                    "project": self.project_id,
-                    "dataset": self.dataset_id
-                },
-                "query": sql_query,
-                "raw_data": data_preview,
-                "aggrid_data": data_preview,
-                "chart_info": {
-                    "has_chart": has_chart,
-                    "data": data_preview,
-                    "type": "bar",
-                    "fig": fig.to_dict() if fig else None
-                } if has_chart and data_preview else None,
-                "conversational_analytics": True,
-                "data_source": data_source,
-                "response_type": "conversational_analytics"
-            }
-            
-            print(f"✅ [CA_HANDLER.PROCESS] Tech details criado com keys: {list(tech_details.keys())}")
-            print(f"✅ [CA_HANDLER.PROCESS] aggrid_data rows: {len(tech_details['aggrid_data'])}")
-            print(f"✅ [CA_HANDLER.PROCESS] chart_info: {tech_details['chart_info'] is not None}")
-            print(f"{'='*80}\n")
->>>>>>> 84afe6c0f6d4c80d4ec36e694966d67d671c3226
-            
-            return summary, tech_details
+            # YIELD FINAL: Completa processamento
+            yield ('complete', (summary, tech_details))
         
         except Exception as e:
             import traceback
             error_msg = f"Erro Conversational Analytics: {str(e)}"
-<<<<<<< HEAD
             print(f"\n❌ {error_msg}")
-=======
-            print(f"❌ [CA_HANDLER.PROCESS] {error_msg}")
->>>>>>> 84afe6c0f6d4c80d4ec36e694966d67d671c3226
             traceback.print_exc()
-            print(f"{'='*80}\n")
             
-            print(f"\n{'='*70}")
-            print(f"❌ RESULTADO FINAL (COM ERRO):")
-            print(f"   Erro: {error_msg}")
-            print(f"   Status: FALHA")
-            print(f"{'='*70}\n")
-            
-            return error_msg, {
+            yield ('error', (error_msg, {
                 "error": True,
                 "error_message": error_msg,
                 "response_type": "error",
                 "conversational_analytics": True,
-            }
-    
-<<<<<<< HEAD
+            }))
     
     def _create_chart_info(self, data: List[Dict]) -> Dict:
         """Cria informações de gráfico a partir dos dados."""
         if not data or len(data) == 0:
             return None
         
-=======
-    def _create_chart_figure(self, data: list, question: str = "") -> Any:
-        """Cria figura Plotly a partir dos dados."""
->>>>>>> 84afe6c0f6d4c80d4ec36e694966d67d671c3226
         try:
             fig = self._create_chart_figure(data)
             return {
@@ -488,20 +644,13 @@ Always explain your analysis and methodology."""
             if not numeric_cols or not string_cols:
                 return None
             
-<<<<<<< HEAD
             # Seleciona colunas
             y_col = next(
                 (c for c in numeric_cols if any(kw in c.lower() for kw in ['score', 'total', 'count', 'valor'])),
-=======
-            # Prioriza colunas com "frequencia", "score", "percentual", "vendas"
-            y_col = next(
-                (c for c in numeric_cols if any(kw in c.lower() for kw in ['freq', 'score', 'percentual', 'valor', 'vendas', 'vendido'])),
->>>>>>> 84afe6c0f6d4c80d4ec36e694966d67d671c3226
                 numeric_cols[0]
             )
             x_col = string_cols[0]
             
-<<<<<<< HEAD
             # Cria gráfico
             chart = alt.Chart(df).mark_bar().encode(
                 x=alt.X(f"{x_col}:N", title=x_col),
@@ -512,58 +661,12 @@ Always explain your analysis and methodology."""
                 height=400,
                 title=f"Distribuição de {y_col}"
             )
-=======
-            # ==== DETECTAR TIPO DE GRÁFICO BASEADO NA PERGUNTA ====
-            pergunta_lower = question.lower() if question else ""
-            
-            # Detecta se deve ser gráfico de LINHA (evolução/tendência/temporal)
-            eh_linha = any(kw in pergunta_lower for kw in ['linha', 'linhas', 'evolução', 'evolucao', 'tendência', 'tendencia', 'histórico', 'historico'])
-            
-            # Se contém "período", "mês", "mes", "temporal" → é série temporal → usa linha
-            eh_temporal = any(kw in pergunta_lower for kw in ['período', 'periodo', 'mês', 'mes', 'mensal', 'mes a mes', 'temporal', 'entre os', 'compara'])
-            
-            # Se o x_col é algo como "periodo", "mes", "data" → é temporal → usa linha
-            x_col_lower = x_col.lower()
-            eh_temporal_col = any(kw in x_col_lower for kw in ['periodo', 'periodo', 'mes', 'mês', 'data', 'data_venda', 'dta'])
-            
-            use_line_chart = eh_linha or (eh_temporal and not ('estado' in pergunta_lower)) or eh_temporal_col
-            
-            # Cria figura com Plotly Express
-            if use_line_chart:
-                # Gráfico de LINHA (para evolução temporal)
-                fig = px.line(
-                    df,
-                    x=x_col,
-                    y=y_col,
-                    title=f"Evolução de {y_col}",
-                    labels={x_col: x_col, y_col: y_col},
-                    markers=True,
-                    height=400
-                )
-                fig.update_traces(
-                    line=dict(color='#1f77b4', width=3),
-                    marker=dict(size=8)
-                )
-            else:
-                # Gráfico de BARRA (para categorias/distribuição)
-                fig = px.bar(
-                    df,
-                    x=x_col,
-                    y=y_col,
-                    title=f"Distribuição de {y_col}",
-                    labels={x_col: x_col, y_col: y_col},
-                    color=y_col,
-                    color_continuous_scale="blues",
-                    height=400
-                )
->>>>>>> 84afe6c0f6d4c80d4ec36e694966d67d671c3226
             
             return chart
         
         except Exception as e:
             print(f"⚠️ Erro ao criar gráfico: {e}")
             return None
-
 
 
 def main():
@@ -593,7 +696,6 @@ def main():
     print("="*60)
     print(summary)
     
-<<<<<<< HEAD
     # Exibe dados técnicos se disponíveis
     if not tech_details.get("error"):
         print("\n" + "="*60)
@@ -627,122 +729,3 @@ if __name__ == "__main__":
     main()
 
 
-=======
-    def _get_glinhares_mock(self, tabela: str, titulo: str, pergunta: str, limit: int) -> Dict:
-        """Retorna dados mockados COERENTES com a pergunta."""
-        
-        pergunta_lower = pergunta.lower()
-        
-        # ==== DETECTAR TIPO DE PERGUNTA (ORDEM IMPORTA!) ====
-        
-        # PRIORIDADE 1: VENDAS POR PERÍODO/MÊS/COMPARAÇÃO TEMPORAL
-        eh_vendas_periodo = any(kw in pergunta_lower for kw in ['entre o', 'entre os meses', 'mês a mês', 'mes a mes', 'mensais', 'mensal', 'compara', 'período', 'periodo', 'evolução', 'evolucao', 'histórico', 'historico'])
-        
-        # PRIORIDADE 2: MODELOS ESPECÍFICOS
-        eh_sobre_modelos = any(kw in pergunta_lower for kw in ['modelo', 'modelos', 'carro', 'carros', 'veiculo', 'veiculos', 'hilux', 'corolla', 'hb20', 'gol', 'onyx'])
-        
-        # PRIORIDADE 3: RANKING/TOP
-        eh_ranking = any(kw in pergunta_lower for kw in ['top', 'ranking', 'principais', 'maiores', 'melhores'])
-        
-        # PRIORIDADE 4: ESTADO ESPECÍFICO
-        eh_sobre_estado = any(kw in pergunta_lower for kw in ['estado', 'ceara', 'ceará', 'por estado', 'sp', 'são paulo'])
-        
-        # ==== LÓGICA COERENTE COM PRIORIDADES ====
-        
-        # 1. SE PERGUNTA É SOBRE VENDAS POR PERÍODO/MÊS → RETORNA EVOLUÇÃO TEMPORAL
-        if eh_vendas_periodo:
-            titulo = "Análise Comparativa de Vendas (2023-2024)"
-            mock_data = [
-                {"periodo": "Janeiro", "vendas_2023": 45000, "vendas_2024": 52000, "variacao": 15.6},
-                {"periodo": "Fevereiro", "vendas_2023": 48000, "vendas_2024": 54500, "variacao": 13.5},
-                {"periodo": "Março", "vendas_2023": 52000, "vendas_2024": 61000, "variacao": 17.3},
-                {"periodo": "Abril", "vendas_2023": 50000, "vendas_2024": 58000, "variacao": 16.0},
-                {"periodo": "Maio", "vendas_2023": 55000, "vendas_2024": 65000, "variacao": 18.2},
-            ]
-            resumo = f"Comparativo de vendas entre 2023 e 2024: Janeiro cresceu 15,6%, Maio liderou com 18,2% de aumento."
-        
-        # 2. SE PERGUNTA MENCIONA "MODELOS" → RETORNA DADOS DE MODELOS
-        elif eh_sobre_modelos and not eh_ranking:
-            titulo = "Demonstração de Modelos Vendidos"
-            mock_data = [
-                {"modelo": "Corolla", "vendido_2023": 8500, "vendido_2024": 9547, "variacao_pct": 12.3},
-                {"modelo": "HB20", "vendido_2023": 6200, "vendido_2024": 6758, "variacao_pct": 9.0},
-                {"modelo": "Gol", "vendido_2023": 5100, "vendido_2024": 4995, "variacao_pct": -2.1},
-                {"modelo": "Hilux", "vendido_2023": 4800, "vendido_2024": 5533, "variacao_pct": 15.3},
-                {"modelo": "Onyx", "vendido_2023": 3200, "vendido_2024": 3922, "variacao_pct": 22.6},
-            ]
-            resumo = f"Análise de modelos: Corolla cresceu 12,3%, Onyx liderou com 22,6% de crescimento."
-        
-        # 3. SE PERGUNTA MENCIONA "RANKING/TOP" → RETORNA RANKING
-        elif eh_ranking:
-            titulo = f"Ranking dos Top {limit} Modelos Mais Vendidos"
-            mock_data = [
-                {"posicao": 1, "modelo": "Corolla", "total_vendido": 12850500, "crescimento": 12.5},
-                {"posicao": 2, "modelo": "HB20", "total_vendido": 8420300, "crescimento": 8.9},
-                {"posicao": 3, "modelo": "Gol", "total_vendido": 7850100, "crescimento": -2.1},
-                {"posicao": 4, "modelo": "Hilux", "total_vendido": 6290500, "crescimento": 15.3},
-                {"posicao": 5, "modelo": "Onyx", "total_vendido": 4698200, "crescimento": 22.7},
-            ][:limit]
-            resumo = f"Ranking: Corolla lidera com R$ 12,85 bilhões e crescimento de 12,5%."
-        
-        # 4. SE PERGUNTA É SOBRE ESTADO → RETORNA DADOS POR ESTADO
-        elif eh_sobre_estado:
-            titulo = f"Análise de Vendas por Estado"
-            mock_data = [
-                {"estado": "Ceará", "total_vendido": 8550500, "quantidade": 1547, "percentual": 45.2},
-                {"estado": "São Paulo", "total_vendido": 6420300, "quantidade": 1203, "percentual": 31.8},
-                {"estado": "Minas Gerais", "total_vendido": 2850100, "quantidade": 456, "percentual": 11.9},
-                {"estado": "Rio de Janeiro", "total_vendido": 1290500, "quantidade": 234, "percentual": 6.8},
-                {"estado": "Bahia", "total_vendido": 698200, "quantidade": 128, "percentual": 3.7},
-            ]
-            resumo = f"Análise por estado: Ceará lidera com R$ 8,55 bilhões (45,2%), São Paulo com R$ 6,42 bilhões."
-        
-        # 5. DEFAULT: RETORNA MODELOS
-        else:
-            titulo = "Análise de Vendas de Veículos"
-            mock_data = [
-                {"modelo": "Corolla", "total_veiculos": 2847, "val_total": 850500.00, "performance": "Excelente"},
-                {"modelo": "HB20", "total_veiculos": 2198, "val_total": 450200.00, "performance": "Muito bom"},
-                {"modelo": "Gol", "total_veiculos": 1798, "val_total": 380500.00, "performance": "Bom"},
-                {"modelo": "Hilux", "total_veiculos": 1502, "val_total": 920000.00, "performance": "Excelente"},
-                {"modelo": "Onyx", "total_veiculos": 1205, "val_total": 550800.00, "performance": "Bom"},
-            ]
-            resumo = f"Análise de vendas de veículos: Corolla é o modelo com melhor desempenho."
-        
-        # Limita ao tamanho solicitado
-        mock_data = mock_data[: limit]
-        
-        sql_exemplo = f"""
-SELECT 
-    *
-FROM 
-    `{self.project_id}.{self.dataset_id}.{tabela}`
-WHERE 
-    EXTRACT(YEAR FROM dta_venda) = {datetime.now().year}
-ORDER BY 
-    total DESC
-LIMIT {limit}
-        """
-        
-        return {
-            "question": pergunta,
-            "summary": resumo,
-            "sql_query": sql_exemplo,
-            "has_chart": True,
-            "data_preview": mock_data,
-            "stats": {
-                "total_registros": len(mock_data),
-                "periodo": f"{datetime.now().year}-01-01 a {datetime.now().year}-12-31",
-                "tabela": tabela,
-                "tempo_resposta_ms": 245,
-                "modo": "conversational_analytics"
-            },
-            "components": [
-                {"type": "schema", "timestamp": datetime.now().timestamp()},
-                {"type": "query", "timestamp": datetime.now().timestamp()},
-                {"type": "data", "timestamp": datetime.now().timestamp()},
-                {"type": "chart", "timestamp": datetime.now().timestamp()},
-                {"type": "text", "timestamp": datetime.now().timestamp()}
-            ]
-        }
->>>>>>> 84afe6c0f6d4c80d4ec36e694966d67d671c3226

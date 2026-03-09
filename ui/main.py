@@ -232,6 +232,10 @@ with st.container():
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
+    # ✅ Inicializa lista de perguntas sugeridas
+    if "example_queries_display" not in st.session_state:
+        st.session_state.example_queries_display = []
+
     # Inicializa variáveis de sessão para armazenar os dados (isolamento multi-usuário)
     if "current_interaction" not in st.session_state:
         st.session_state.current_interaction = {
@@ -329,8 +333,33 @@ with st.container():
                     tech_content = create_tech_details_spoiler(tech)
                     st.markdown(tech_content, unsafe_allow_html=True)
 
+# ✅ RENDERIZA BOTÕES DE PERGUNTAS SUGERIDAS (após histórico, antes do input)
+if st.session_state.get("example_queries_display"):
+    queries_to_display = st.session_state.get("example_queries_display", [])
+    if queries_to_display and len(queries_to_display) > 0:
+        st.markdown("---")
+        st.markdown("**💡 Perguntas Sugeridas:**")
+        
+        # Cria colunas para os botões
+        cols = st.columns(min(len(queries_to_display), 3))
+        
+        for idx, query in enumerate(queries_to_display[:3]):
+            with cols[idx % 3]:
+                # Limpa a query para ser um texto válido
+                query_text = str(query).strip()
+                if st.button(query_text, key=f"suggested_{idx}_{hash(query_text) % 1000000}"):
+                    # Armazena a pergunta sugerida
+                    st.session_state.suggested_query = query_text
+                    # ✅ LIMPA O DISPLAY PARA NÃO REAPARECER
+                    st.session_state.example_queries_display = []
+                    st.rerun()
+
 # Container fixo para o input (fora do content-container)
 prompt = st.chat_input(format_text_with_ia_highlighting("Faça sua pergunta..."), key="mobile_input")
+
+# ⭐ Verifica se há uma pergunta sugerida clicada
+if not prompt and st.session_state.get("suggested_query"):
+    prompt = st.session_state.pop("suggested_query")
 
 # Captura novo input
 if prompt:
@@ -418,8 +447,8 @@ if prompt:
         st.session_state.temp_response = None
         st.session_state.temp_tech_details = None
         
-        # Re-renderiza para mostrar a resposta imediatamente
-        st.rerun()
+        # NÃO faz rerun - deixa a resposta renderizada nos placeholders!
+        # Será adicionada ao histórico na próxima interação do usuário
     else:
         print(f"❌ [MAIN] ERRO: temp_response estava vazio após process_message!")
 

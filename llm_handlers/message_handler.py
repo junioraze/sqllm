@@ -86,22 +86,15 @@ class MessageHandler:
         
     def process_message(self, prompt: str, typing_placeholder) -> None:
         """
-<<<<<<< HEAD
         Processa uma mensagem seguindo o fluxo definido:
         1️⃣ Verificar Conversational Analytics para perguntas sobre glinhares
         2️⃣ Se CA: Detecta tabela → Processa → Retorna (summary, tech_details) com tabela + gráfico
         3️⃣ Se não CA: Fluxo SQL tradicional (verificar reuso, build query, execute)
-=======
-        Processa uma mensagem SEMPRE via Conversational Analytics.
-        Fluxo único: prompt → CA API → graph + table
-        Armazena resposta em st.session_state.temp_response e temp_tech_details.
->>>>>>> 84afe6c0f6d4c80d4ec36e694966d67d671c3226
         """
         try:
             self.flow_path = ["início", "conversational_analytics"]
             self._start_timing("processo_completo", typing_placeholder)
             
-<<<<<<< HEAD
             # Etapa 0: Verificar se deve usar Conversational Analytics para glinhares
             if self._should_use_conversational_analytics(prompt):
                 self.flow_path.append("conversational_analytics")
@@ -126,31 +119,8 @@ class MessageHandler:
                 self._start_timing("processamento_nova_consulta", typing_placeholder)
                 self._process_new_query_flow(typing_placeholder, prompt)
                 self._end_timing("processamento_nova_consulta")
-=======
-            print(f"\n{'='*80}")
-            print(f"🔄 [MESSAGE_HANDLER] Processando pergunta: {prompt}")
-            print(f"{'='*80}")
-            print(f"📋 [STEP 0] CA PADRÃO - Processando toda pergunta via Conversational Analytics")
-            
-            try:
-                print(f"🚀 [STEP 0] Chamando _process_conversational_analytics()...")
-                self._process_conversational_analytics(typing_placeholder, prompt)
-                print(f"✅ [STEP 0] _process_conversational_analytics() completou")
->>>>>>> 84afe6c0f6d4c80d4ec36e694966d67d671c3226
-                
-                # Verifica se resposta foi armazenada
-                temp_resp = st.session_state.get('temp_response')
-                print(f"✅ [STEP 0] st.session_state.temp_response setado: {temp_resp is not None}")
-                if temp_resp:
-                    print(f"✅ [STEP 0] Tamanho da resposta: {len(str(temp_resp))} chars")
-            except Exception as e:
-                print(f"❌ [STEP 0] Erro em _process_conversational_analytics(): {e}")
-                import traceback
-                print(traceback.format_exc())
-                raise
             
             self._end_timing("processo_completo")
-            print(f"✅ [CONCLUÍDO] Pergunta processada via Conversational Analytics\n")
                 
         except Exception as e:
             print(f"🔥 HANDLER - ERRO CAPTURADO: {e}")
@@ -171,7 +141,8 @@ class MessageHandler:
             'superacessovip',
             'glinhares',
             'dw_superacesso',
-            'dw-superacesso'
+            'dw-superacesso',
+            'bigquery-for-ml'
         ]
         
         # Verifica se projeto atual é um projeto CA
@@ -250,140 +221,182 @@ class MessageHandler:
         
         return result
     
-<<<<<<< HEAD
     def _process_conversational_analytics(self, typing_placeholder, prompt: str) -> None:
         """
-        Processa pergunta usando Conversational Analytics Handler.
+        Processa pergunta usando Conversational Analytics Handler COM STREAMING.
         
-        Fluxo:
-        1. Mostra indicador "Analisando..."
-        2. Chama ConversationalAnalyticsHandler.process(prompt)
-        3. Handler retorna: (summary: str, tech_details: Dict)
-           - summary: Texto da resposta com insights
-           - tech_details: Dict com:
-             * aggrid_data: Lista de dicts para tabela
-             * chart_info.fig: Figura Plotly em formato dict
-             * query: SQL executado
-             * data_source: Nome da tabela detectada
-        4. UI exibe: Texto → Tabela AgGrid → Gráfico Plotly
-=======
-    def _process_conversational_analytics(self, typing_placeholder, prompt: str) -> Tuple[str, Dict]:
-        """Processa pergunta usando Conversational Analytics Handler.
+        Renderiza PROGRESSIVAMENTE conforme chunks chegam:
+        - thinking_chunk: pensamento do agente (se houver)
+        - response_chunk: análise e resposta
+        - table_ready: dados em tabela
+        - chart_ready: visualização
         
-        Armazena resposta em st.session_state.temp_response e temp_tech_details.
-        NÃO adiciona ao histórico - deixa para main.py fazer isso.
->>>>>>> 84afe6c0f6d4c80d4ec36e694966d67d671c3226
+        ⭐ Usa campos nativos da API (text_type) para separação
         """
         try:
+            self.flow_path.append("conversational_analytics_streaming")
+            
             print(f"\n{'='*80}")
-            print(f"🚀 [CA_PROCESS] INICIANDO PROCESSAMENTO CONVERSATIONAL ANALYTICS")
-            print(f"🚀 [CA_PROCESS] Pergunta: {prompt[:100]}...")
-            print(f"{'='*80}")
+            print(f"🎬 [CA_STREAM] INICIANDO CA COM STREAMING")
+            print(f"🎬 [CA_STREAM] Pergunta: {prompt[:100]}...")
+            print(f"{'='*80}\n")
             
-            self._start_timing("processamento_ca", typing_placeholder)
-            self.flow_path.append("processamento_ca")
-            
-            typing_placeholder.markdown(
-                "🔍 **Analisando com Conversational Analytics...**",
-                unsafe_allow_html=True
-            )
-            
-<<<<<<< HEAD
-            # Executa CA: pergunta → (summary, tech_details)
-            ca_handler = ConversationalAnalyticsHandler(
+            # Inicializa handler
+            handler = ConversationalAnalyticsHandler(
                 project_id=PROJECT_ID,
                 dataset_id=DATASET_ID,
                 user_id=self.user_id
             )
-=======
-            # Inicializa e executa handler
-            print(f"🚀 [CA_PROCESS] Criando ConversationalAnalyticsHandler...")
-            ca_handler = ConversationalAnalyticsHandler(user_id=self.user_id)
-            print(f"🚀 [CA_PROCESS] Chamando ca_handler.process()...")
->>>>>>> 84afe6c0f6d4c80d4ec36e694966d67d671c3226
-            refined_response, tech_details = ca_handler.process(prompt)
-            print(f"✅ [CA_PROCESS] CA Handler retornou resposta com sucesso")
-            print(f"✅ [CA_PROCESS] Response length: {len(refined_response)} chars")
             
-            self._end_timing("processamento_ca")
+            # Cria placeholders para renderizar incrementalmente
+            thinking_placeholder = st.empty()
+            response_placeholder = st.empty()
+            table_placeholder = st.empty()
+            chart_placeholder = st.empty()
             
-<<<<<<< HEAD
-            # Log de sucesso
-            self._log_success(
-                prompt=prompt,
-                serializable_params={
-                    "type": "conversational_analytics",
-                    "agent_id": tech_details.get("agent_id"),
-                    "dataset": tech_details.get("dataset")
-                },
-                query=tech_details.get("sql_query", ""),
-                serializable_data=tech_details.get("aggrid_data", []),
-                refined_response=refined_response,
-                tech_details=tech_details
-            )
+            # Estado para acumular resposta
+            accumulated_thinking = ""
+            accumulated_response = ""
+            table_rendered = False
+            chart_rendered = False
+            final_summary = ""
+            final_tech_details = None
+            chunk_count = 0
+            thinking_shown = False
             
-            # Salva interação
-            try:
-                save_interaction(
-                    user_id=self.user_id,
-                    question=prompt,
-                    function_params={"type": "conversational_analytics", "agent_id": tech_details.get("agent_id")},
-                    query_sql=tech_details.get("sql_query", ""),
-                    raw_data=tech_details.get("aggrid_data", []),
-                    raw_response=None,
-                    refined_response=refined_response,
-                    tech_details=tech_details,
-                    status="OK"
-                )
-            except Exception as e:
-                print(f"⚠️ Erro salvando interação CA: {e}")
+            print("📡 Iniciando consumo do stream de CA...\n")
             
-            # Atualiza UI: limpa indicator
-            typing_placeholder.empty()
+            # Consome o generator - cada evento é processado IMEDIATAMENTE
+            for event_type, data in handler.process_streaming(prompt):
+                chunk_count += 1
+                print(f"🎯 [EVENT {chunk_count}] {event_type}")
+                
+                # ⭐ PENSAMENTO: Renderiza quando chegar
+                if event_type == 'thinking_chunk':
+                    accumulated_thinking += data
+                    print(f"   🧠 Pensamento acumulado: {len(accumulated_thinking)} chars")
+                    
+                    # Renderiza pensamento em placeholder separado
+                    if not thinking_shown:
+                        with thinking_placeholder.container():
+                            st.markdown(f"**💭 Pensamento do Agente:**\n\n{accumulated_thinking}")
+                        thinking_shown = True
+                    else:
+                        with thinking_placeholder.container():
+                            st.markdown(f"**💭 Pensamento do Agente:**\n\n{accumulated_thinking}")
+                
+                # ⭐ RESPOSTA: Acumula e renderiza
+                elif event_type == 'response_chunk':
+                    accumulated_response += data
+                    print(f"   💬 Resposta acumulada: {len(accumulated_response)} chars")
+                    
+                    # Renderiza resposta progressiva
+                    with response_placeholder.container():
+                        st.markdown(accumulated_response)
+                
+                # ⭐ TABELA: Renderiza quando dados completos chegam
+                elif event_type == 'table_ready':
+                    if not table_rendered and data and len(data) > 0:
+                        print(f"   📋 Tabela com {len(data)} registros")
+                        
+                        with table_placeholder.container():
+                            st.markdown("---")
+                            from utils.helpers import show_aggrid_table
+                            st.write("### 📊 Dados Extraídos")
+                            show_aggrid_table(data, theme="balham", height=350, fit_columns=True)
+                        table_rendered = True
+                
+                # ⭐ GRÁFICO: Renderiza quando pronto
+                elif event_type == 'chart_ready':
+                    if not chart_rendered and data:
+                        print(f"   📈 Gráfico pronto")
+                        fig = data.get("fig")
+                        if fig:
+                            try:
+                                import altair as alt
+                                with chart_placeholder.container():
+                                    st.markdown("---")
+                                    if isinstance(fig, alt.Chart):
+                                        st.altair_chart(fig, use_container_width=True, theme=None)
+                                    else:
+                                        st.plotly_chart(fig, use_container_width=True)
+                                chart_rendered = True
+                            except Exception as e:
+                                print(f"⚠️ Erro renderizando gráfico: {e}")
+                
+                # ⭐ COMPLETO: Finaliza
+                elif event_type == 'complete':
+                    final_summary, final_tech_details = data
+                    print(f"\n✅ Stream completo!")
+                    print(f"{'='*80}\n")
+                    
+                    # LIMPA O INDICADOR DE PROCESSAMENTO
+                    typing_placeholder.empty()
+                    
+                    # 💡 Armazena exemplo de perguntas sugeridas em session_state
+                    example_queries = final_tech_details.get("example_queries", [])
+                    if example_queries and len(example_queries) > 0:
+                        # ✅ ARMAZENA PARA SER RENDERIZADO DEPOIS NA MAIN.PY
+                        st.session_state.example_queries_display = example_queries
+                    
+                    # Log de sucesso
+                    self._log_success(
+                        prompt=prompt,
+                        serializable_params={
+                            "type": "conversational_analytics",
+                            "agent_id": final_tech_details.get("agent_id"),
+                            "dataset": final_tech_details.get("dataset")
+                        },
+                        query=final_tech_details.get("sql_query", ""),
+                        serializable_data=final_tech_details.get("aggrid_data", []),
+                        refined_response=accumulated_response or final_summary,
+                        tech_details=final_tech_details
+                    )
+                    
+                    # Salva interação
+                    try:
+                        save_interaction(
+                            user_id=self.user_id,
+                            question=prompt,
+                            function_params={"type": "conversational_analytics"},
+                            query_sql=final_tech_details.get("sql_query", ""),
+                            raw_data=final_tech_details.get("aggrid_data", []),
+                            raw_response=None,
+                            refined_response=accumulated_response or final_summary,
+                            tech_details=final_tech_details,
+                            status="OK"
+                        )
+                    except Exception as e:
+                        print(f"⚠️ Erro salvando interação CA: {e}")
+                    
+                    # ✅ ADICIONA AO HISTÓRICO DO CHAT PARA PERSISTIR
+                    message_data = {
+                        "role": "assistant",
+                        "content": accumulated_response or final_summary
+                    }
+                    if final_tech_details:
+                        message_data["tech_details"] = final_tech_details
+                    
+                    st.session_state.chat_history.append(message_data)
+                    
+                    # ⭐ RERUN PARA RENDERIZAR O HISTÓRICO
+                    st.rerun()
+                    
+                    # Armazena resultado final em session_state para main.py
+                    st.session_state.temp_response = accumulated_response or final_summary
+                    st.session_state.temp_tech_details = final_tech_details
+                
+                # ERRO
+                elif event_type == 'error':
+                    error_msg, tech_details = data
+                    st.error(f"❌ {error_msg}")
+                    self._handle_error(typing_placeholder, prompt, error_msg, "")
             
-            # Finaliza a resposta com tabelas e gráficos
-            self._finalize_response(
-                typing_placeholder=typing_placeholder,
-                response_text=refined_response,
-                tech_details=tech_details
-            )
-        
         except Exception as e:
             print(f"❌ Erro Conversational Analytics: {e}")
-            self.flow_path.append("erro_ca")
             import traceback
             traceback.print_exc()
             self._handle_error(typing_placeholder, prompt, f"Erro CA: {str(e)}", traceback.format_exc())
-=======
-            # Remove instruções técnicas do texto
-            content = slugfy_response(refined_response)
-            for marker in ["GRAPH-TYPE:", "EXPORT-INFO:", "dt:"]:
-                if marker in content:
-                    content = content.split(marker)[0].strip()
-            
-            # Exibe no placeholder
-            typing_placeholder.empty()
-            typing_placeholder.markdown(format_text_with_ia_highlighting(content))
-            
-            # Armazena resposta para que main.py adicione ao histórico
-            print(f"✅ [CA_PROCESS] Atribuindo temp_response com {len(content)} chars")
-            st.session_state.temp_response = content
-            print(f"✅ [CA_PROCESS] temp_response atribuído com sucesso")
-            print(f"✅ [CA_PROCESS] Atribuindo tech_details...")
-            st.session_state.temp_tech_details = tech_details if tech_details else {}
-            print(f"✅ [CA_PROCESS] temp_tech_details atribuído com sucesso")
-            print(f"{'='*80}\n")
-        
-        except Exception as e:
-            print(f"❌ [CA_PROCESS] ERRO Conversational Analytics: {e}")
-            import traceback
-            print(f"❌ [CA_PROCESS] Traceback:\n{traceback.format_exc()}")
-            typing_placeholder.error(f"❌ Erro ao processar: {str(e)}")
-            st.session_state.temp_response = f"❌ Erro: {str(e)}"
-            st.session_state.temp_tech_details = {"error": True}
-            print(f"❌ [CA_PROCESS] Erro armazenado em session_state")
-            print(f"{'='*80}\n")
->>>>>>> 84afe6c0f6d4c80d4ec36e694966d67d671c3226
 
     def _check_reuse_opportunity(self, prompt: str) -> Tuple[bool, Dict]:
         """Etapa 1: Verificar se pode reutilizar dados anteriores - OTIMIZADO COM DETECÇÃO INTELIGENTE"""
@@ -1021,7 +1034,6 @@ class MessageHandler:
             if marker in content:
                 content = content.split(marker)[0].strip()
         
-<<<<<<< HEAD
         message_data = {
             "role": "assistant",
             "content": format_text_with_ia_highlighting(content)
@@ -1032,14 +1044,6 @@ class MessageHandler:
         
         st.session_state.chat_history.append(message_data)
         st.rerun()
-=======
-        # Exibe no placeholder
-        typing_placeholder.markdown(format_text_with_ia_highlighting(content))
-        
-        # Armazena resposta para que main.py adicione ao histórico
-        st.session_state.temp_response = content
-        st.session_state.temp_tech_details = tech_details if tech_details else {}
->>>>>>> 84afe6c0f6d4c80d4ec36e694966d67d671c3226
 
     def _save_new_interaction(self, prompt: str, serializable_params: Dict, query: str, serializable_data: Any, refined_response: str, tech_details: Dict) -> None:
         """Salva nova interação no cache"""
